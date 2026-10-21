@@ -41,4 +41,4 @@ The same day as the appointment there is also a "great to meet you" text. It mus
 Count weekdays only for pace math. For the 48-hour and 7-day touches, use calendar time from the appointment, and send only between 8am and 8pm in the customer's time zone (quo-bridge enforces this).
 
 ## Output
-For each customer due today: name, Prospect ID, which touch, one line of context from their note, and the draft (skill `zingas-voice`). Drafts go to the approvals queue, never straight to the customer.
+For each customer due today: name, Prospect ID, which touch, one line of context from their note, and the draft (skill `zingas-voice`). Label each draft `followup`. Drafts go to the approvals queue. Once follow-ups have earned auto-send, quo-bridge may send them by itself after a 5-minute Stop countdown.

@@ -3,11 +3,13 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from send_gate import (
+    AUTO_SEND_DELAY,
     AUTO_SEND_UNLOCK_STREAK,
     AutoSendStats,
     OutgoingText,
     decide,
     money_terms,
+    needs_gerrit,
     waiting_status,
 )
 
@@ -28,8 +30,9 @@ def earned(category):
 
 
 def text(body="Running about 10 minutes behind, see you soon!", category="on_my_way",
-         tz="America/Indiana/Indianapolis", prospect="a0X123", dnc=False, approved=False):
-    return OutgoingText(body, category, tz, prospect, dnc, approved)
+         tz="America/Indiana/Indianapolis", prospect="a0X123", dnc=False, approved=False,
+         reply_to=""):
+    return OutgoingText(body, category, tz, prospect, dnc, approved, reply_to)
 
 
 class NeverRules(unittest.TestCase):
@@ -75,9 +78,26 @@ class QuietHours(unittest.TestCase):
 
 
 class AutoSend(unittest.TestCase):
-    def test_earned_on_my_way_sends_by_itself(self):
+    def test_earned_on_my_way_counts_down_then_sends(self):
         d = decide(text("Running about 10 minutes behind, see you soon."), at(10), earned("on_my_way"))
-        self.assertEqual(d.action, "send", d.reasons)
+        self.assertEqual(d.action, "countdown", d.reasons)
+        self.assertFalse(d.may_send_now)
+        self.assertEqual(d.send_after, at(10) + AUTO_SEND_DELAY)
+        self.assertEqual(AUTO_SEND_DELAY, timedelta(minutes=5))
+
+    def test_new_kinds_can_earn_auto_send(self):
+        for category, body in [
+            ("simple_reply", "Yes, the living room shades are the cordless ones."),
+            ("scheduling_handoff", "No problem, our office will call you today to move your time."),
+            ("followup", "Hi Sarah, any questions on the quote?"),
+        ]:
+            with self.subTest(category=category):
+                d = decide(text(body, category), at(10), earned(category))
+                self.assertEqual(d.action, "countdown", d.reasons)
+
+    def test_countdown_ending_after_8pm_needs_approval(self):
+        d = decide(text(), at(19, 57), earned("on_my_way"))
+        self.assertEqual(d.action, "needs_approval")
 
     def test_not_yet_earned_needs_approval(self):
         stats = AutoSendStats("on_my_way")
@@ -85,9 +105,29 @@ class AutoSend(unittest.TestCase):
             stats.record_approval(edited=False)
         self.assertEqual(decide(text(), at(10), stats).action, "needs_approval")
 
-    def test_followups_always_need_approval(self):
-        d = decide(text("Hi Sarah, checking in on the quote.", "followup"), at(10), earned("followup"))
-        self.assertEqual(d.action, "needs_approval")
+    def test_other_kinds_always_need_approval(self):
+        for category in ["reply", "new_lead", "complaint"]:
+            with self.subTest(category=category):
+                d = decide(text("Hi Sarah, thanks for the note.", category), at(10), earned(category))
+                self.assertEqual(d.action, "needs_approval")
+
+    def test_customer_message_can_force_approval(self):
+        for asked in [
+            "Is this a real person?",
+            "Am I texting with a bot?",
+            "are you AI lol",
+            "We want to cancel.",
+            "Honestly pretty disappointed with the install.",
+            "What's the total with the motor?",
+            "Can you do $500 off?",
+        ]:
+            with self.subTest(asked=asked):
+                d = decide(text("Got it, thanks!", "simple_reply", reply_to=asked), at(10), earned("simple_reply"))
+                self.assertEqual(d.action, "needs_approval")
+
+    def test_approved_reply_to_a_human_check_still_sends(self):
+        d = decide(text("Yes, this is Gerrit!", "reply", approved=True, reply_to="Is this a real person?"), at(10))
+        self.assertTrue(d.may_send_now)
 
     def test_stats_for_other_category_do_not_count(self):
         d = decide(text(category="acknowledgment"), at(10), earned("on_my_way"))
@@ -146,6 +186,18 @@ class MoneyWords(unittest.TestCase):
         ]:
             with self.subTest(body=body):
                 self.assertEqual(money_terms(body), [])
+
+
+class CustomerMessage(unittest.TestCase):
+    def test_everyday_messages_are_fine(self):
+        for body in [
+            "Thursday works, thanks!",
+            "Can the shades go in the bedroom too?",
+            "Sounds good, see you then.",
+            "My husband wants to see the colors again.",
+        ]:
+            with self.subTest(body=body):
+                self.assertEqual(needs_gerrit(body), [])
 
 
 class Escalation(unittest.TestCase):

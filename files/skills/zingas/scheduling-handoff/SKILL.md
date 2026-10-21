@@ -15,7 +15,7 @@ The call center owns scheduling. You can read Gerrit's calendar. You never chang
 ## When a customer asks to move, cancel or book
 Example: "Can we do Thursday instead?"
 
-Make **two drafts**, both sent to the approvals queue together:
+Make **two drafts**, both sent to the approvals queue together. Label the customer reply `scheduling_handoff`: once that kind has earned auto-send, it may go by itself after a 5-minute Stop countdown. The call-center request always waits for Gerrit; mark it ⚠️ so it is seen right away. If the customer says "cancel" or sounds upset, quo-bridge sends both to Gerrit anyway.
 
 1. **To the customer** (skill `zingas-voice`):
    > Hi Sarah, no problem. I'll have our scheduling team reach out to get you moved to Thursday. Thanks! Gerrit

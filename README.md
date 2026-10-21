@@ -19,7 +19,10 @@ The full plan is in `docs/PLAN.md`. What Gerrit has to sign up for is in
   Only Gerrit's Telegram account can press them.
 - **quo-bridge:** the only way a text reaches a customer. It checks every
   message in code before sending (`quo-bridge/send_gate.py`):
-  - approved by Gerrit, or a type that has earned auto-send
+  - approved by Gerrit, or a type that has earned auto-send (then it waits 5
+    minutes with a Stop button)
+  - money, complaints, cancellations or "is this a real person?" in the
+    customer's message always go to Gerrit
   - between 8am and 8pm in the customer's time zone
   - not on the do-not-contact list
   - no prices, discounts or dollar amounts in anything that sends by itself

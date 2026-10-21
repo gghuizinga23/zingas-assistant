@@ -32,7 +32,7 @@ It starts with Gerrit, then rolls out to 5 reps, then 15 to 20. It gets built st
 | System of record | **Salesforce.** Gerrit gets a write-scoped Connected App approved (Phase 0). The assistant writes notes, follow-up date and spouse name after Gerrit approves. Results stay in RemodelerGo. **Write access is on hold (Gerrit, 2026-10-20):** until then Val keeps these in the vault and lists them in the evening brief for Gerrit to paste |
 | Scheduling | The call center / office owns it. The assistant tells the customer the office will reach out, and sends the office a scheduling request. Calendar stays read-only |
 | Confirmations | Corporate already sends them, so **the assistant never sends appointment confirmations** |
-| Auto-send (after trust) | "On my way / running late" and quick acknowledgments only |
+| Auto-send (after trust) | "On my way / running late", quick acknowledgments, simple replies (facts from the quote or notes, no prices), scheduling hand-offs and follow-up check-ins (expanded 2026-10-20). Each kind earns it separately: 20 approvals in a row, no edits. Every auto-send waits 5 minutes with a Stop button in Telegram. Money, complaints, cancellations and "is this a real person?" always go to Gerrit |
 | Alerts | Telegram alerts immediately. If a customer draft sits for **10 minutes** during business hours, the Quo number texts Gerrit's personal cell. After 2 hours it shows as "missed" in the next brief |
 | Recorder | **Plaud** (NotePin S or Note Pro, Unlimited plan; official MCP/CLI to read transcripts). Rollout: Plaud Team, or Siro if its quote is reasonable. Fieldy and Rilla ruled out (chosen 2026-10-20) |
 | Persona | **Val** (short for Valance), the same name for every rep. Her emoji is 🪟. A calm right-hand, a woman: short and organized, a little humor and Indiana flavor, emojis only as markers. Nudges once, shares ideas often, drafts whatever Gerrit asks (still behind the approval tap), quiet after 8pm and on weekends except emergencies. Customers never see Val. Details in `files/SOUL.md` (chosen 2026-10-20) |
@@ -54,7 +54,8 @@ healthchecks.io ◄── ping every 10 min└───────────�
   - Real customer data never goes in git.
 - **New skills** under `files/skills/zingas/`: `voice`, `email-triage`, `followup-cadence`, `briefs`, `customer-memory`, `quo-texting`, `estimator-followups`, `truck-debrief`, `scheduling-handoff`.
 - **`quo-bridge/`** is modeled on Nick's `agentphone_bridge.py` (HMAC check, dedupe, ordering). It points at Quo's API and is the **only path to customers**. It enforces in code:
-  - approval required unless that category has earned auto-send
+  - approval required unless that category has earned auto-send, and then a 5-minute Stop countdown
+  - the customer's own message is checked too: money, complaints, cancellations or "is this a real person?" always go to Gerrit
   - 8am–8pm in the customer's time zone
   - do-not-contact list
   - money check: no "$", prices, "%", "percent off", "discount" or spelled-out amounts in any auto-sent message
@@ -170,6 +171,8 @@ These are estimates; check current prices in Phase 0. One-time costs: a Plaud de
   - A DNC customer gets nothing.
   - A draft with "$", "10% off" or "two hundred dollars" never auto-sends.
   - No confirmation is ever sent.
+  - "Is this a real person?" from a customer always goes to Gerrit, even for a kind that has earned auto-send.
+  - Pressing Stop during the 5-minute countdown means the text never sends.
 - **Triage test:** a newsletter and a vendor promo produce no draft.
 - **Identity test:** a text from an unknown number creates a stub, asks "new lead?", and runs no cadence.
 - **Salesforce test (once write access is on):** one approved debrief writes the note, follow-up date and spouse name to the right Prospect, and the write is logged.

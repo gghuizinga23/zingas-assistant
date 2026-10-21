@@ -11,11 +11,22 @@ Plain-English summary of the rules, in the order they are checked:
   3. Nothing sends outside 8am-8pm in the customer's time zone. An approved
      text waits until 8am instead.
   4. A text Gerrit approved sends.
-  5. A text Gerrit did not approve sends by itself only when ALL of these hold:
-       - it is an "on my way / running late" or a quick acknowledgment,
-       - that type has earned auto-send (20 approvals in a row, no edits),
+  5. A text Gerrit did not approve may go by itself only when ALL of these hold:
+       - it is one of the auto-send kinds: on my way / running late, a quick
+         acknowledgment, a simple reply, a scheduling hand-off, or a follow-up
+         check-in,
+       - that kind has earned auto-send (20 approvals in a row, no edits),
        - the customer is matched to a Salesforce Prospect,
-       - it is short, and it mentions no money at all.
+       - it is short, and it mentions no money at all,
+       - the customer's message it answers does not mention money, a
+         complaint or a cancellation, and does not ask if they're talking
+         to a real person (those always go to Gerrit),
+       - it is inside 8am-8pm for the customer both now and when the
+         countdown ends.
+     Even then it does not send at once: it waits AUTO_SEND_DELAY (5 minutes)
+     while Gerrit sees it in Telegram with a Stop button. quo-bridge runs
+     decide() again when the countdown ends, and sends only if it still says
+     so and nobody pressed Stop.
      Anything else waits for Gerrit.
 """
 
@@ -32,10 +43,16 @@ from zoneinfo import ZoneInfo
 SEND_WINDOW_START = time(8, 0)   # customer's local time
 SEND_WINDOW_END = time(20, 0)    # no sends at or after 8pm
 
-AUTO_SEND_CATEGORIES = frozenset({"on_my_way", "acknowledgment"})
+AUTO_SEND_CATEGORIES = frozenset({
+    "on_my_way", "acknowledgment",           # since day one
+    "simple_reply",                          # answers checked against the quote or notes
+    "scheduling_handoff",                    # "our office will call you to move it"
+    "followup",                              # the 48-hour and 7-day check-ins
+})
 NEVER_SEND_CATEGORIES = frozenset({"confirmation"})
 AUTO_SEND_UNLOCK_STREAK = 20     # approvals in a row with no edits
 AUTO_SEND_MAX_CHARS = 320        # auto-sent texts are short by nature
+AUTO_SEND_DELAY = timedelta(minutes=5)   # Gerrit's window to press Stop
 
 ESCALATE_AFTER = timedelta(minutes=10)
 MISSED_AFTER = timedelta(hours=2)
@@ -66,6 +83,7 @@ _MONEY_PATTERNS = [
     r"\bprice[sd]?\b|\bpricing\b|\bcosts?\b|\bcheaper\b|\bdeal\b|\bsavings?\b",
     r"\bpromo(tion)?s?\b|\bsale\b|\bfinanc(e|ing)\b|\bmonthly\b|\bpayments?\b",
     r"\bdeposit\b|\binterest\b|\bapr\b|\bbalance\b|\binvoice\b",
+    r"\btotals?\b|\bhow\s+much\b|\bexpensive\b|\bafford\w*|\bbudget\b",
 ]
 _MONEY_RE = re.compile("|".join(_MONEY_PATTERNS), re.IGNORECASE)
 
@@ -73,6 +91,39 @@ _MONEY_RE = re.compile("|".join(_MONEY_PATTERNS), re.IGNORECASE)
 def money_terms(text: str) -> List[str]:
     """Every money-looking piece of the text (empty list means none found)."""
     return [m.group(0) for m in _MONEY_RE.finditer(text)]
+
+
+# --- What the customer wrote ------------------------------------------------
+# When the customer's own message touches any of these, the reply always goes
+# to Gerrit, however well that kind of reply has been doing.
+
+_HUMAN_CHECK_RE = re.compile(
+    r"\b(real|actual|live)\s+(person|human)\b"
+    r"|\bare\s+you\s+(a\s+|an\s+)?(bot|robot|human|person|ai|real)\b"
+    r"|\b(is\s+this|am\s+i\s+(talking|texting)\s+(to|with))\s+(a\s+|an\s+)?(bot|robot|ai|automated|computer|machine|person|human)\b"
+    r"|\bchat\s*gpt\b|\bautomated\s+(text|message|reply)\b",
+    re.IGNORECASE,
+)
+_UPSET_RE = re.compile(
+    r"\bcancel\w*|\brefund\w*|\bcomplain\w*|\bupset\b|\bangry\b|\bfurious\b|\bdisappoint\w*"
+    r"|\bunhappy\b|\bfrustrat\w*|\bterrible\b|\bawful\b|\bunacceptable\b|\bscam\b|\blawyer\b|\battorney\b"
+    r"|\bbbb\b|\bbad\s+review\b|\bnever\s+(showed|came)\b|\bno[\s-]show\b|\bstop\s+(texting|messaging|contacting)\b",
+    re.IGNORECASE,
+)
+
+
+def needs_gerrit(customer_message: str) -> List[str]:
+    """Reasons the customer's message must be answered by Gerrit
+    (empty list means none)."""
+    reasons: List[str] = []
+    if _HUMAN_CHECK_RE.search(customer_message):
+        reasons.append("The customer asked if they're talking to a real person. Val never claims to be human.")
+    if _UPSET_RE.search(customer_message):
+        reasons.append("The customer sounds upset or mentions cancelling.")
+    found = money_terms(customer_message)
+    if found:
+        reasons.append("The customer asked about money (" + ", ".join(sorted(set(found), key=str.lower)) + ").")
+    return reasons
 
 
 # --- Inputs and outputs -----------------------------------------------------
@@ -111,13 +162,14 @@ class OutgoingText:
     prospect_id: Optional[str]       # Salesforce Prospect ID, None if unmatched
     do_not_contact: bool = False
     approved_by_gerrit: bool = False
+    in_reply_to: str = ""            # the customer's message this answers, if any
 
 
 @dataclass
 class Decision:
-    action: str                      # "send", "hold", "needs_approval" or "block"
+    action: str                      # "send", "countdown", "hold", "needs_approval" or "block"
     reasons: List[str] = field(default_factory=list)
-    send_after: Optional[datetime] = None   # set when action == "hold"
+    send_after: Optional[datetime] = None   # set when action is "hold" or "countdown"
 
     @property
     def may_send_now(self) -> bool:
@@ -175,17 +227,26 @@ def decide(msg: OutgoingText, now: datetime,
                        f"({AUTO_SEND_UNLOCK_STREAK} approvals in a row with no edits).")
     if not msg.prospect_id:
         reasons.append("The customer is not matched to a Salesforce Prospect.")
+    reasons.extend(needs_gerrit(msg.in_reply_to))
     if len(msg.text) > AUTO_SEND_MAX_CHARS:
         reasons.append(f"Too long to send by itself ({len(msg.text)} characters).")
     found = money_terms(msg.text)
     if found:
         reasons.append("Mentions money (" + ", ".join(sorted(set(found), key=str.lower)) + ").")
+    countdown_ends = local_now + AUTO_SEND_DELAY
     if not in_window:
         reasons.append("Outside 8am-8pm for the customer.")
+    elif not SEND_WINDOW_START <= countdown_ends.time() < SEND_WINDOW_END:
+        reasons.append("The 5-minute countdown would end after 8pm for the customer.")
 
     if reasons:
         return Decision("needs_approval", reasons)
-    return Decision("send", [f"Auto-send: '{msg.category}' has earned it and passed every check."])
+    return Decision(
+        "countdown",
+        [f"Auto-send: '{msg.category}' has earned it and passed every check. "
+         f"It sends in {int(AUTO_SEND_DELAY.total_seconds() // 60)} minutes unless Gerrit presses Stop."],
+        send_after=countdown_ends,
+    )
 
 
 # --- Waiting drafts ---------------------------------------------------------
