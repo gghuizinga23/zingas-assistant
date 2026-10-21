@@ -10,7 +10,7 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
 
 ## Start today (these take days or weeks)
 
-### 1. Quo business number and texting registration
+### 1. Quo business number and texting registration ⏳ (2026-10-21: all done, waiting on Quo's approval)
 - **Why:** customers will text this number. The assistant reads and drafts for it.
 - **Do:**
   1. Sign up at quo.com with your zingashome.com email. Make it a company
@@ -31,7 +31,7 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
   and lists them in your evening brief, ready for you to paste into Salesforce.
 - When you're ready, I'll give you the exact request to send IT.
 
-### 3. Appointment recorder: Plaud
+### 3. Appointment recorder: Plaud ⏳ (2026-10-21: device and Unlimited plan bought, waiting on delivery)
 - **Buy one:** Plaud NotePin S (clip-on, about $179) or Plaud Note Pro (better
   in noisy homes, about $189). Buy from plaud.ai.
 - **Plan:** Unlimited (about $240 a year). The free minutes run out in the
@@ -91,8 +91,22 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
     1Password, in the **Zingas Bridge** vault, never in a chat.
 
 ### 6. Orgo (the always-on cloud computer)
-- Sign up at orgo.ai. Pick the **Hacker** plan.
-- **Cost:** $29 a month.
+- **Why:** Val lives here, so she keeps working when your laptop is closed.
+- **Plan:** **Starter**, billed **Monthly**: $29 a month (1 computer, 8 GB memory).
+  Switch to yearly ($290) once Val has proven herself.
+- **Do** (on your laptop, about 10 minutes):
+  1. Go to orgo.ai → **Get started**. Sign up with your zingashome.com email.
+  2. Choose the **Starter** plan, **Monthly**, and pay.
+  3. In the dashboard, click **Launch computer** (or **New computer**, bottom left).
+  4. Pick the ready-made **Hermes Agent** computer, not plain Linux or Windows.
+  5. Name it **Val**.
+  6. Wait until it shows as running. Then stop there.
+- **Don't, for now:**
+  - Don't add any keys under Settings → Secrets.
+  - Don't run any setup inside the computer or connect Telegram. We do that
+    together next, with your files.
+  - Never click **Stop** on the computer. Stopped means Val is off.
+- **Done when:** a computer named Val shows as running in your Orgo dashboard.
 
 ### 7. AI model account
 - Sign up at portal.nousresearch.com (the default in Nick's setup). It is a

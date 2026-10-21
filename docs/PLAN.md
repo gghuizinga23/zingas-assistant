@@ -21,7 +21,7 @@ It starts with Gerrit, then rolls out to 5 reps, then 15 to 20. It gets built st
 ## Decisions
 | Topic | Decision |
 |---|---|
-| Framework / host | Follow Nick: Hermes on an Orgo cloud computer, forked from his template |
+| Framework / host | Follow Nick: Hermes on an Orgo cloud computer. Orgo **Starter** plan ($29/month, 1 computer) using Orgo's ready-made Hermes Agent computer, with our files added on top. Building our own template needs Orgo's Scale plan ($332/month), so that waits for the team rollout (checked 2026-10-21) |
 | AI model | Run a blind voice bake-off (GPT vs Grok vs Claude); the winner is the default. **Use API keys, never a consumer ChatGPT login.** Set the monthly spend cap on that API account |
 | Gerrit ↔ assistant | Telegram bot with Approve / Edit / Skip buttons and voice notes |
 | Customer texting | A **new Quo business number**, in a Zinga's company Quo workspace so it scales to reps. New customers get this number |
