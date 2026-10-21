@@ -67,8 +67,8 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
   walk you through it then.
 - **Done when:** both vaults and both notes exist.
 
-### 5. Telegram
-- **Now** (about 5 minutes, on the iPhone you carry every day):
+### 5. Telegram (first part ✅ done 2026-10-21: app, account, privacy, two-step password)
+- **Now** ✅ (about 5 minutes, on the iPhone you carry every day):
   1. App Store → search **Telegram Messenger** (by Telegram FZ-LLC) → Get. Free.
   2. Open it → **Start Messaging**.
   3. Phone number: your **personal cell, the number of this iPhone**. Not the new
