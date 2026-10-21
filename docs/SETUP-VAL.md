@@ -53,6 +53,13 @@ a new session or reach any other tool.
 | G4 | Safety tests with Val's limited key: sending an email to you, deleting one, and making a new session must all be refused. If any works, we stop and use a helper on Vercel instead | Me | 10 min |
 | G5 | Turn it on for Val. Test: ask her on Telegram for your newest email and a draft reply. The draft shows in Gmail Drafts; nothing is sent | Gerrit | 3 min |
 
+**G2 status 2026-10-21: Google said "This app is blocked".** zingashome.com's Google admin doesn't
+trust Composio's app yet. Delisa fixes it in the Google Admin console: **Security → Access and data
+control → API controls → Manage third-party app access → Add app → OAuth App Name or Client ID**,
+search **Composio**, pick it, choose Gerrit's account (or the whole company), set it to **Trusted**,
+and save. It can take a few minutes to start working. Then run `files/gmail-setup.sh` again; it
+reuses what it already made.
+
 **G1: making the "Val limited" key** (Composio's "Create API key" window has a Read column and a
 Write column, and **Read All** is ticked at the start):
 1. Name: **Val limited**.
