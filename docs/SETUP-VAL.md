@@ -105,14 +105,28 @@ could do is put a draft in front of you.
 | Q1 | Move Vercel to **Pro** ($20 a month). The free plan is for personal use and only runs timed jobs once a day; the helper needs one every minute. Vercel → your team (top left) → **Settings → Billing → Upgrade to Pro**. This also covers the Estimator, which is a business tool on the free plan today | Gerrit | 5 min |
 | Q2 | In Quo: (a) **Settings → Billing**: add API texting credits ($20 to start; about 1 cent a text). (b) **Workspace Settings → API → Generate API key**, name it `zingas-bridge`. Save it in 1Password, **Zingas Bridge** vault, note **Bridge Secrets**, field **QUO_API_KEY**. Never in chat | Gerrit | 10 min |
 | Q3 | Make the **approvals bot** in Telegram: open **@BotFather** → `/newbot` → name **Val Approvals** → a username ending in `bot`. Save its token in **Bridge Secrets** as **APPROVALS_BOT_TOKEN**. Then open the new bot and press **Start** | Gerrit | 5 min |
-| Q4 | Build quo-bridge (details below) and test it with fake texts on this laptop | Me | 1 to 2 days |
+| Q4 | ✅ **Done 2026-10-21.** quo-bridge and Val's pickup program are built. 109 tests pass with fake texts | Me | done |
 | Q5 | Run a hidden box and paste the two keys. It puts them in Vercel's locked settings (never on Val's computer, and not saved on this laptop), connects Quo's "new text" alert to the helper, and gives Val her drafts-only code | Gerrit pastes, I do the rest | 10 min |
-| Q6 | Safety tests: Val's code can't send; a fake "text from Quo" is refused; a 9pm send waits until 8am; money words never send alone; a customer who texts STOP is never texted again | Me | 15 min |
+| Q6 | Safety tests: Val's code can't send; a fake "text from Quo" is refused; a 9pm send waits until 8am; money words never send alone; a customer who texts STOP is never texted again. (2 of the 10 live checks already pass on Val's computer: her drafting run reaches only a to-do tool, and an order hidden in a customer text only changes the draft) | Me | 15 min |
 | Q7 | Real test: text the Quo number from your cell. Val's draft shows in **Val Approvals**. Tap **Approve**; the reply reaches your cell | Gerrit | 5 min |
+
+**Q5 step by step (about 15 minutes, at your laptop):**
+1. **Vercel token (for this run only):** open https://vercel.com/account/tokens. Name `quo-setup`.
+   Scope: your **Pro team** → **All Projects**. Expiration: **1 day**. **Create**, then copy it.
+2. **Supabase token (for this run only):** open https://supabase.com/dashboard/account/tokens →
+   **Generate new token**, name `quo-setup`, copy it.
+3. Tell me "ready". I open a hidden box. You paste, one at a time: the Quo key, the bot token
+   (both from 1Password, Zingas Bridge → Bridge Secrets), the Vercel token, the Supabase token.
+   Then type your cell number. Nothing shows while you paste, and nothing is saved on the laptop.
+4. If it asks, open **Val Approvals** in Telegram and send it the word `hi`.
+5. The box does the rest (about 5 minutes): a new free Supabase project, quo-bridge online on
+   Vercel, Quo's new-text alert and the bot connected, the locks checked from outside, and Val's
+   pickup program started. A "Val Approvals is connected" message lands in Telegram.
+6. Delete both tokens (same two pages). They're not needed again.
 
 **What quo-bridge does** (Q4):
 - **New customer text:** Quo tells the helper; the helper checks it really came from Quo and saves it.
-  A small program on Val's computer (no AI, no keys) asks the helper every 30 seconds for new texts
+  A small program on Val's computer (no AI, no keys) asks the helper every 20 seconds for new texts
   and hands them to Val. Val's computer stays closed to the internet.
 - **Val's draft** goes to the helper with her drafts-only code, then shows in **Val Approvals** with
   **Approve / Edit / Skip**. Only your Telegram account can press them.

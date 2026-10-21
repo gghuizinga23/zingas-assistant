@@ -47,6 +47,7 @@ HERMES_HOME = os.environ.get("HERMES_HOME", "/root/.hermes")
 STATE = os.path.join(HERMES_HOME, "quo-pickup-state.json")
 SKILL = os.path.join(HERMES_HOME, "skills/zingas/quo-texting/SKILL.md")
 OP_ENV = os.path.join(HERMES_HOME, ".op.env")
+BRIDGE_ENV = os.path.join(HERMES_HOME, "quo-bridge.env")   # written by the Q5 setup, mode 600
 OP_ITEM = "op://Zingas Assistant/Assistant Secrets/"
 EVERY = 20                 # seconds between looks
 MAX_TRIES = 3              # Val gets 3 tries per text, then Gerrit is told
@@ -67,10 +68,17 @@ def pretty(phone: str) -> str:
 # ---------------------------------------------------------------- settings
 
 def read_secret(name: str) -> str:
-    """From the environment (tests), else 1Password's Zingas Assistant vault.
-    Never printed."""
+    """From the environment (tests), then quo-bridge.env, then 1Password's
+    Zingas Assistant vault. Never printed."""
     if os.environ.get(name):
         return os.environ[name]
+    try:
+        with open(BRIDGE_ENV) as fh:
+            for line in fh:
+                if line.startswith(name + "="):
+                    return line.split("=", 1)[1].strip()
+    except OSError:
+        pass
     token = ""
     try:
         with open(OP_ENV) as fh:
@@ -363,7 +371,7 @@ class Pickup:
 def _client() -> BridgeClient:
     url, token = read_secret("QUO_BRIDGE_URL"), read_secret("VAL_DRAFT_TOKEN")
     if not url or not token:
-        sys.exit("QUO_BRIDGE_URL and VAL_DRAFT_TOKEN aren't in 1Password yet (Zingas Assistant vault).")
+        sys.exit("QUO_BRIDGE_URL and VAL_DRAFT_TOKEN aren't set up yet (Quo part Q5).")
     return BridgeClient(url, token)
 
 

@@ -161,10 +161,13 @@ class SupabaseStore:
     def _call(self, method: str, path: str, body=None, prefer: str = "") -> list:
         headers = {
             "apikey": self.key,
-            "Authorization": "Bearer " + self.key,
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
+        if not self.key.startswith("sb_"):
+            # Older service_role keys are JWTs and go in both headers. Newer
+            # sb_secret_ keys go only in apikey; Supabase rejects them as a Bearer.
+            headers["Authorization"] = "Bearer " + self.key
         if prefer:
             headers["Prefer"] = prefer
         data = json.dumps(body).encode() if body is not None else None

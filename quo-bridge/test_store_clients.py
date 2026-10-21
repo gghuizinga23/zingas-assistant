@@ -105,6 +105,13 @@ class SupabaseStoreTests(unittest.TestCase):
     def setUp(self):
         self.s = store.SupabaseStore("https://abc.supabase.co/", "service-key")
 
+    def test_new_style_secret_key_is_not_sent_as_bearer(self):
+        net = FakeNet(b"[]")
+        with mock.patch("urllib.request.urlopen", net):
+            store.SupabaseStore("https://abc.supabase.co", "sb_secret_x").is_dnc("+1")
+        self.assertEqual(net.requests[0]["headers"]["apikey"], "sb_secret_x")
+        self.assertNotIn("authorization", net.requests[0]["headers"])
+
     def test_headers_and_insert_ignores_duplicates(self):
         net = FakeNet(b'[{"id":"AC1"}]', b"[]")
         with mock.patch("urllib.request.urlopen", net):

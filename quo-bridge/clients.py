@@ -113,6 +113,9 @@ class QuoClient:
     def list_webhooks(self) -> List[dict]:
         return list(self._call("GET", "/webhooks").get("data") or [])
 
+    def delete_webhook(self, webhook_id: str) -> None:
+        self._call("DELETE", "/v1/webhooks/" + webhook_id, versioned=False)
+
     def create_webhook(self, url: str, number_id: str) -> dict:
         return self._call("POST", "/webhooks", {
             "url": url, "events": ["message.received"], "resourceIds": [number_id],
