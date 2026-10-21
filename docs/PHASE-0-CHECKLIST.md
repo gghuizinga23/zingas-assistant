@@ -108,15 +108,27 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
   - Never click **Stop** on the computer. Stopped means Val is off.
 - **Done when:** a computer named Val shows as running in your Orgo dashboard.
 
-### 7. AI model account
-- Sign up at portal.nousresearch.com (the default in Nick's setup). It is a
-  pay-as-you-go API account, not a chat subscription. Add $20 of credit and
-  turn off auto top-up, so it can never spend more than you put in.
-- During setup on the cloud computer, you sign in once with a code.
-- **Do not** connect a ChatGPT sign-in. That breaks ChatGPT's rules for an
-  always-on agent.
-- (Later, for the voice bake-off, we may add OpenAI, xAI (Grok) or Anthropic keys
-  the same way.)
+### 7. AI account: Nous Portal (chosen 2026-10-21)
+- **Why:** this is Val's brain, the part that thinks and writes her drafts. One
+  sign-in covers Claude, ChatGPT and Grok, so we can run the voice test easily.
+- **Plan:** **Plus**, $20 a month (includes $22 of use). If a month runs short,
+  we look at it together before you buy more.
+- **Do** (on your laptop, about 10 minutes):
+  1. Go to portal.nousresearch.com → **Create Account**. Use your zingashome.com
+     email. Save the login in 1Password, in your own main vault.
+  2. Subscribe to **Plus** ($20 a month).
+  3. **Must do:** Account Settings → Privacy Settings → turn on **Privacy Mode**.
+     Then Nous doesn't keep what Val sends it. Do this before Val reads anything.
+- **Don't:**
+  - Don't buy extra top-ups or turn on any automatic refill.
+  - Don't connect a ChatGPT account, even though the portal offers it. That
+    breaks ChatGPT's rules for an always-on helper.
+  - Don't download Hermes Desktop or run anything. Val's computer signs in to
+    Nous later, with me. There's no key to copy.
+- **Good to know:** with Privacy Mode on, Nous keeps nothing, but the AI company
+  behind the brand Val uses (Anthropic, OpenAI or xAI) still gets the message
+  and follows its own rules.
+- **Done when:** Plus is active and Privacy Mode is on.
 
 ### 8. Composio (connects your Gmail and Calendar)
 - Sign up at composio.dev. Connect your **zingashome.com Gmail** and **Google

@@ -1,16 +1,16 @@
 # Zinga's Assistant: always-on AI admin assistant (plan, v2)
 
 ## Context
-Gerrit runs 9 to 15 in-home appointments a week for Zinga's (window coverings and outdoor living, 5 markets, franchising). Admin work (email, texts, follow-ups, quotes) eats time that could go to more appointments. He wants an assistant that:
-- is always on, even when his laptop is off
-- reads work email and texts and drafts every reply in his voice
-- learns how he talks
+Gerrit runs 9 to 15 in-home appointments a week for Zinga's (window coverings and outdoor living, 5 markets, franchising). Admin work (email, texts, follow-ups, quotes) eats time that could go to more appointments. Gerrit wants an assistant that:
+- is always on, even when Gerrit's laptop is off
+- reads work email and texts and drafts every reply in Gerrit's voice
+- learns how Gerrit talks
 - can be texted all day
 
-It starts with Gerrit, then rolls out to 5 reps, then 15 to 20. It gets built standalone first and folded into the Sales Dashboard later. Gerrit doesn't write code, so every setup step he has to do himself is listed in plain words.
+It starts with Gerrit, then rolls out to 5 reps, then 15 to 20. It gets built standalone first and folded into the Sales Dashboard later. Gerrit doesn't write code, so every setup step Gerrit has to do is listed in plain words.
 
 **What already exists:**
-- **`~/Desktop/Zinga Follow-Up` already does part of this.** It reads iMessage, tracks promises, reads Salesforce CSVs, and drafts in his voice using the rules in `zingas-followup-system-spec.md` §3 and `DAILY-BRIEF-RUNBOOK.md`. It only runs while his Mac is on. **This plan grows it into the assistant.**
+- **`~/Desktop/Zinga Follow-Up` already does part of this.** It reads iMessage, tracks promises, reads Salesforce CSVs, and drafts in Gerrit's voice using the rules in `zingas-followup-system-spec.md` §3 and `DAILY-BRIEF-RUNBOOK.md`. It only runs while Gerrit's Mac is on. **This plan grows it into the assistant.**
 - **Sales Dashboard:** Next.js 16, Supabase, Google sign-in, Vercel. Salesforce access is read-only. The Inbox and Briefing patterns already exist.
 - **Estimator (`estimator-legal/`):** Next.js 16, Prisma on Neon.
   - Gerrit builds every quote **in the home on the iPad** with it.
@@ -22,10 +22,10 @@ It starts with Gerrit, then rolls out to 5 reps, then 15 to 20. It gets built st
 | Topic | Decision |
 |---|---|
 | Framework / host | Follow Nick: Hermes on an Orgo cloud computer. Orgo **Starter** plan ($29/month, 1 computer) using Orgo's ready-made Hermes Agent computer, with our files added on top. Building our own template needs Orgo's Scale plan ($332/month), so that waits for the team rollout (checked 2026-10-21) |
-| AI model | Run a blind voice bake-off (GPT vs Grok vs Claude); the winner is the default. **Use API keys, never a consumer ChatGPT login.** Set the monthly spend cap on that API account |
+| AI model | **Nous Portal, Plus plan** ($20/month, $22 of use; Gerrit chose it 2026-10-21 over direct Anthropic or OpenAI accounts, after seeing the privacy trade-off). **Privacy Mode on** before Val reads anything. One sign-in covers Claude, GPT and Grok for the blind voice bake-off; the winner is the default. No auto top-ups. **Never connect a consumer ChatGPT login** |
 | Gerrit ↔ assistant | Telegram bot with Approve / Edit / Skip buttons and voice notes |
 | Customer texting | A **new Quo business number**, in a Zinga's company Quo workspace so it scales to reps. New customers get this number |
-| Personal cell | **Stays personal. It is not ported and not read live.** Gerrit answers those texts himself during the overlap months. One exception: a one-time read of past **customer** texts on his Mac, to learn his voice. Then the iMessage reader is retired |
+| Personal cell | **Stays personal. It is not ported and not read live.** Gerrit answers those texts directly during the overlap months. One exception: a one-time read of past **customer** texts on Gerrit's Mac, to learn Gerrit's voice. Then the iMessage reader is retired |
 | Email | zingashome.com Gmail through Composio. Drafts also land in Gmail Drafts |
 | Scope | Work only |
 | Quotes | Built in the home on the iPad, as today. The assistant **reads** proposals so its follow-ups are right; it never creates or prices one |
@@ -114,12 +114,12 @@ healthchecks.io ◄── ping every 10 min└───────────�
    - A one-time pull of 12 months of sent Gmail.
    - A one-time Mac read of past customer iMessage threads, using the prototype's `imessage.py` and only contacts that match Salesforce.
    - `sent-messages.log`.
-   - From these, build `VOICE.md`: start from spec §3, then add his phrases and how he handles price, spouse and competitor questions.
+   - From these, build `VOICE.md`: start from spec §3, then add Gerrit's phrases and how Gerrit handles price, spouse and competitor questions.
 2. **Examples:** each draft pulls the 3–5 most similar past replies as examples.
 3. **Learn from edits:**
    - Every edit-before-approve saves a (draft, final) pair.
    - A weekly job proposes `VOICE.md` updates in Telegram, and Gerrit taps to accept.
-   - He can also just text the rules.
+   - Gerrit can also just text the rules.
 4. **Score:** track the percent of drafts sent unedited, per category. Auto-send unlocks after 20 approvals in a row with no edits, and turns itself off after any edit.
 
 ## Things I'd change from Nick's setup
@@ -142,7 +142,7 @@ healthchecks.io ◄── ping every 10 min└───────────�
 ## Build phases
 | # | Phase | Gerrit's to-dos (no code) | Done when |
 |---|---|---|---|
-| 0 | Accounts, approvals, safety net | Sign up: Orgo, model API, Telegram, Composio (allow it in the Workspace admin), Quo company workspace + new number (**start 10DLC on day 1**), 1Password, healthchecks.io, backup storage, Plaud. (Salesforce write access: on hold.) Get the call center's contact for scheduling requests | Gerrit texts the bot while his laptop is closed. A missed ping texts his cell |
+| 0 | Accounts, approvals, safety net | Sign up: Orgo, model API, Telegram, Composio (allow it in the Workspace admin), Quo company workspace + new number (**start 10DLC on day 1**), 1Password, healthchecks.io, backup storage, Plaud. (Salesforce write access: on hold.) Get the call center's contact for scheduling requests | Gerrit texts the bot while the laptop is closed. A missed ping texts Gerrit's cell |
 | 1 | Email: triage filter, drafts in Telegram and Gmail Drafts, voice bootstrap, identity resolver | Review 20 drafts | Unedited % measured; no drafts for newsletters |
 | 1.5 | Estimator read access + event webhooks | None | A proposal view or question produces a correct draft in Telegram |
 | 2 | Morning and evening briefs | None | Both briefs arrive for a week straight |
@@ -165,7 +165,7 @@ These are estimates; check current prices in Phase 0. One-time costs: a Plaud de
 ## Verification
 - **Laptop-off test:** shut the Mac. An email and a text to the Quo number each produce a Telegram draft within 2 minutes.
 - **Watchdog test:** stop the gateway. Gerrit's cell gets a healthchecks.io text within 20 minutes. Then restore the vault from last night's backup onto a fresh VM.
-- **Escalation test:** leave a customer draft for 10 minutes. The Quo text reaches his cell. After 2 hours it shows as "missed" in the brief.
+- **Escalation test:** leave a customer draft for 10 minutes. The Quo text reaches Gerrit's cell. After 2 hours it shows as "missed" in the brief.
 - **Gate tests:**
   - At 9pm customer time, the draft is held.
   - A DNC customer gets nothing.
