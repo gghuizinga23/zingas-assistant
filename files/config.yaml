@@ -1,0 +1,163 @@
+# Zinga's Assistant: Hermes config, adapted from Nick's Stack (MIT).
+#
+# What changed from Nick's config, and why:
+#   - approvals ON and hooks never auto-accepted. Nothing reaches a customer on
+#     the model's say-so; the send gate lives in quo-bridge, in code.
+#   - Only the tools this job needs. No payment card, no X/vidiq/ideabrowser,
+#     no AgentMail/AgentPhone (customer texts go through Quo via quo-bridge).
+#   - Only two chat surfaces: the terminal and Telegram.
+#   - The model is Nous Portal pay-as-you-go credits. Never a ChatGPT login
+#     (openai-codex): an always-on agent on a consumer login breaks its terms.
+#   - Secrets come from the 1Password vault "Zingas Assistant".
+model:
+  default: openai/gpt-5.5
+  provider: nous
+  base_url: https://inference-api.nousresearch.com/v1
+# Voice bake-off: OpenRouter gives GPT, Grok and Claude behind one key with one
+# spending limit. Set OPENROUTER_API_KEY, then try each model on the same 20
+# real situations before choosing the default.
+agent:
+  max_turns: 40
+  verify_on_stop: false
+  verbose: false
+  reasoning_effort: medium
+terminal:
+  backend: local
+  cwd: .
+  timeout: 180
+  home_mode: auto
+browser:
+  inactivity_timeout: 120
+tool_loop_guardrails:
+  warnings_enabled: true
+  hard_stop_enabled: true
+  warn_after:
+    exact_failure: 2
+    same_tool_failure: 3
+    idempotent_no_progress: 2
+  hard_stop_after:
+    exact_failure: 5
+    same_tool_failure: 8
+    idempotent_no_progress: 5
+compression:
+  enabled: true
+  threshold: 0.5
+  target_ratio: 0.2
+  protect_last_n: 20
+  protect_first_n: 3
+prompt_caching:
+  cache_ttl: 5m
+display:
+  compact: false
+  busy_input_mode: interrupt
+  show_reasoning: false
+  streaming: true
+  tool_progress: all
+  long_running_notifications: true
+stt:
+  # Telegram voice notes (truck debriefs) are transcribed.
+  enabled: true
+  local:
+    model: base
+  openai:
+    model: whisper-1
+memory:
+  memory_enabled: true
+  user_profile_enabled: true
+  memory_char_limit: 2200
+  user_char_limit: 1375
+  provider: ''
+  nudge_interval: 10
+  flush_min_turns: 6
+skills:
+  creation_nudge_interval: 15
+approvals:
+  mode: true
+  mcp_reload_confirm: true
+  destructive_slash_confirm: true
+hooks_auto_accept: false
+code_execution:
+  timeout: 300
+  max_tool_calls: 50
+updates:
+  pre_update_backup: true
+  backup_keep: 5
+  non_interactive_local_changes: stash
+secrets:
+  onepassword:
+    # Ships disabled, as in Nick's Stack: an enabled map with no token stalls
+    # every start. Onboarding flips it on once ~/.hermes/.op.env has the token.
+    enabled: false
+    env:
+      TELEGRAM_BOT_TOKEN: op://Zingas Assistant/Assistant Secrets/TELEGRAM_BOT_TOKEN
+      COMPOSIO_CONSUMER_KEY: op://Zingas Assistant/Assistant Secrets/COMPOSIO_CONSUMER_KEY
+      OPENROUTER_API_KEY: op://Zingas Assistant/Assistant Secrets/OPENROUTER_API_KEY
+      XAI_API_KEY: op://Zingas Assistant/Assistant Secrets/XAI_API_KEY
+      OPENAI_API_KEY: op://Zingas Assistant/Assistant Secrets/OPENAI_API_KEY
+      SUPABASE_URL: op://Zingas Assistant/Assistant Secrets/SUPABASE_URL
+      SUPABASE_SERVICE_ROLE_KEY: op://Zingas Assistant/Assistant Secrets/SUPABASE_SERVICE_ROLE_KEY
+      SF_LOGIN_URL: op://Zingas Assistant/Assistant Secrets/SF_LOGIN_URL
+      SF_CLIENT_ID: op://Zingas Assistant/Assistant Secrets/SF_CLIENT_ID
+      SF_CLIENT_SECRET: op://Zingas Assistant/Assistant Secrets/SF_CLIENT_SECRET
+      ESTIMATOR_URL: op://Zingas Assistant/Assistant Secrets/ESTIMATOR_URL
+      ESTIMATOR_SERVICE_TOKEN: op://Zingas Assistant/Assistant Secrets/ESTIMATOR_SERVICE_TOKEN
+      HEALTHCHECKS_PING_URL: op://Zingas Assistant/Assistant Secrets/HEALTHCHECKS_PING_URL
+    binary_path: /usr/bin/op
+_config_version: 33
+session_reset:
+  mode: both
+  idle_minutes: 1440
+  at_hour: 4
+group_sessions_per_user: true
+# No tool here can text a customer. Customer texts leave only through
+# quo-bridge, after Gerrit taps Approve in the approvals bot.
+platform_toolsets:
+  cli:
+    - browser
+    - clarify
+    - cronjob
+    - file
+    - memory
+    - session_search
+    - skills
+    - terminal
+    - todo
+    - vision
+    - web
+  telegram:
+    - clarify
+    - cronjob
+    - file
+    - memory
+    - session_search
+    - skills
+    - terminal
+    - todo
+    - vision
+    - web
+plugins:
+  enabled:
+    - anthropic-provider
+    - openai
+    - openrouter
+    - openrouter-provider
+    - xai
+    - xai-provider
+    - web-xai
+mcp_servers:
+  # Composio holds the Google sign-in. Its MCP server must be set up with
+  # ONLY these Gmail and Calendar actions: read mail, search mail, create
+  # draft, read calendar. No "send email" and no calendar writes. Gerrit sends
+  # every email himself from Gmail.
+  composio:
+    url: https://connect.composio.dev/mcp
+    enabled: true
+    headers:
+      x-consumer-api-key: ${COMPOSIO_CONSUMER_KEY}
+  obsidian-vault:
+    command: npx
+    args:
+      - -y
+      - '@modelcontextprotocol/server-filesystem'
+      - /root/Documents/ZingasVault
+    enabled: true

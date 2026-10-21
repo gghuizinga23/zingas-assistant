@@ -1,0 +1,33 @@
+---
+name: scheduling-handoff
+description: When a customer wants to move or book an appointment, draft a reply and a request to the call center. Never change the calendar.
+version: 0.1.0
+author: Zinga's Assistant
+metadata:
+  hermes:
+    tags: [Zingas, Scheduling, Call center]
+---
+
+# Scheduling handoff
+
+The call center owns scheduling. You can read Gerrit's calendar. You never change it.
+
+## When a customer asks to move, cancel or book
+Example: "Can we do Thursday instead?"
+
+Make **two drafts**, both sent to the approvals queue together:
+
+1. **To the customer** (skill `zingas-voice`):
+   > Hi Sarah, no problem. I'll have our scheduling team reach out to get you moved to Thursday. Thanks! Gerrit
+
+   Do not promise a time. Do not say it is confirmed.
+
+2. **To the call center** (contact saved in 1Password as the scheduling contact):
+   - Customer name and Salesforce Prospect ID
+   - Current appointment date and time (from the calendar or Salesforce)
+   - What the customer asked for, in their words
+   - Best way to reach them
+
+## Never
+- Never send an appointment confirmation. Corporate already sends them.
+- Never edit, move or delete a calendar event.

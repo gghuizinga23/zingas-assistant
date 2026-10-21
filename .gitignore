@@ -1,0 +1,25 @@
+# Allowlist: this folder also holds real customer data from the prototype
+# (Salesforce exports, sent texts, Google tokens, drafts with names).
+# Ignore everything, then let in only the assistant's own files.
+/*
+!/.gitignore
+!/README.md
+!/docs/
+!/files/
+!/quo-bridge/
+!/THIRD_PARTY_NOTICES.md
+
+# Never commit secrets or customer data, even inside allowed folders.
+.env
+*.env
+!files/hermes.env
+*.log
+*.csv
+*.xlsx
+token.json
+credentials.json
+state.json
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
