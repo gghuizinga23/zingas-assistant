@@ -52,3 +52,9 @@ os.makedirs("/root/Documents/ZingasVault", exist_ok=True)
 shutil.copy2(f"{SRC}/op-enable.py", "/usr/local/bin/zingas-assistant-op-enable")
 os.chmod("/usr/local/bin/zingas-assistant-op-enable", 0o755)
 print("vault dir and op-enable helper in place")
+
+if os.path.exists(f"{SRC}/heartbeat.sh"):
+    shutil.copy2(f"{SRC}/heartbeat.sh", "/usr/local/bin/zingas-assistant-heartbeat")
+    os.chmod("/usr/local/bin/zingas-assistant-heartbeat", 0o755)
+    shutil.copy2(f"{SRC}/heartbeat.supervisor.conf", "/etc/supervisor/conf.d/zingas-heartbeat.conf")
+    print("heartbeat installed (run: supervisorctl reread && supervisorctl update)")

@@ -9,7 +9,7 @@ One part at a time. Gerrit says "done" after each; I do the rest.
 | 3 ✅ | Sign Val in to Nous Portal (her brain): open a link, enter a code | Gerrit | 3 min |
 | 4 ✅ | Connect Val's Telegram chat | Gerrit | 5 min |
 | 5 ✅ (Assistant code) | Read-only 1Password "service account" for the **Zingas Assistant** vault only. Paste its code into the hidden box (`files/save-op-token.sh`), never into chat. The **Zingas Bridge** one waits until mail-bridge is set up, so no unused code sits on Val's computer | Gerrit | 10 min |
-| 6 | Turn on the healthchecks.io check-ins | Me, with Gerrit's link | 3 min |
+| 6 ✅ | Turn on the healthchecks.io check-ins | Me, with Gerrit's link | 3 min |
 | 7 | Test: close the laptop and text Val | Gerrit | 2 min |
 
 **Done 2026-10-21:** Orgo helper installed in ~/.orgo-cli (signed in as gghuizinga23@gmail.com).
@@ -26,6 +26,10 @@ The 1Password list no longer names the Telegram or AI keys (Orgo holds the Teleg
 1Password: Val's read-only code (service account "Val", saved in Gerrit's own main vault) is on her
 computer in ~/.hermes/.op.env (root only). It opens only Zingas Assistant. Val's 1Password list stays
 off until the first key is in the note (part 6), so an empty note can't stall her.
+healthchecks.io: check "Val" (every 10 min, 10 min grace). Its link is HEALTHCHECKS_PING_URL in
+Assistant Secrets, now the only field Val's 1Password list reads (add the rest as their keys arrive).
+`files/heartbeat.sh` runs under supervisord as `zingas-heartbeat`: pings while the gateway runs, reports
+a failure if it stops. First check-in 2026-10-21 13:54 UTC.
 
 **Later (not today):** connect Gmail and Calendar through mail-bridge; the
 approvals chat and customer texting once Quo is approved; Plaud once it arrives.

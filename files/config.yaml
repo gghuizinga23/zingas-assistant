@@ -89,14 +89,12 @@ secrets:
     enabled: false
     # Telegram's bot token stays where Orgo put it (~/.hermes/.env). The AI
     # needs no key: Val signs in to Nous Portal instead.
+    # Only fields that already exist in the note. A missing field makes every
+    # start retry 1Password, so add each line when its key goes into the note:
+    #   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ESTIMATOR_URL,
+    #   ESTIMATOR_SERVICE_TOKEN, SF_LOGIN_URL, SF_CLIENT_ID, SF_CLIENT_SECRET
+    #   (each as op://Zingas Assistant/Assistant Secrets/<NAME>)
     env:
-      SUPABASE_URL: op://Zingas Assistant/Assistant Secrets/SUPABASE_URL
-      SUPABASE_SERVICE_ROLE_KEY: op://Zingas Assistant/Assistant Secrets/SUPABASE_SERVICE_ROLE_KEY
-      SF_LOGIN_URL: op://Zingas Assistant/Assistant Secrets/SF_LOGIN_URL
-      SF_CLIENT_ID: op://Zingas Assistant/Assistant Secrets/SF_CLIENT_ID
-      SF_CLIENT_SECRET: op://Zingas Assistant/Assistant Secrets/SF_CLIENT_SECRET
-      ESTIMATOR_URL: op://Zingas Assistant/Assistant Secrets/ESTIMATOR_URL
-      ESTIMATOR_SERVICE_TOKEN: op://Zingas Assistant/Assistant Secrets/ESTIMATOR_SERVICE_TOKEN
       HEALTHCHECKS_PING_URL: op://Zingas Assistant/Assistant Secrets/HEALTHCHECKS_PING_URL
     binary_path: /usr/bin/op
 _config_version: 33
