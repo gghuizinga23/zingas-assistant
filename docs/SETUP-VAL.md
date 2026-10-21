@@ -12,6 +12,9 @@ One part at a time. Gerrit says "done" after each; I do the rest.
 | 6 ✅ | Turn on the healthchecks.io check-ins | Me, with Gerrit's link | 3 min |
 | 7 ✅ | Test: close the laptop and text Val | Gerrit | 2 min |
 
+**Status 2026-10-21: Val's setup is done.** All 7 parts work. The one piece left is the Zingas Bridge
+code (part 5), which belongs with the mail-bridge step, not this setup.
+
 **Done 2026-10-21:** Orgo helper installed in ~/.orgo-cli (signed in as gghuizinga23@gmail.com).
 Val's files merged into the Orgo Hermes template with `files/install-on-orgo.py` (it keeps the template's
 own config and adds ours on top). The old settings are backed up on Val's computer in
