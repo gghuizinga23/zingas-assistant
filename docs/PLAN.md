@@ -123,6 +123,7 @@ healthchecks.io ◄── ping every 10 min└───────────�
 
 ## Things I'd change from Nick's setup
 - Approvals **on**, with the send gate in code.
+- Two 1Password vaults, each read by its own read-only service account: `Zingas Assistant` for the agent's keys and `Zingas Bridge` for quo-bridge's keys. The agent's service account can't read the bridge vault.
 - Telegram and Quo allowlists. Customer messages and transcripts are treated as data, never instructions.
 - Drop AgentCard, the unneeded MCPs and YOLO mode.
 - Use a named Cloudflare tunnel.

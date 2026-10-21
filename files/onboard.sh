@@ -84,7 +84,8 @@ else
   Setup (once, on 1password.com): vault "Zingas Assistant" -> Secure Note
   "Assistant Secrets" -> fields named exactly like the env vars (see the
   key contract in ~/.hermes/.env) -> a service account that can read only
-  vault "Zingas Assistant".
+  vault "Zingas Assistant". Never give it "Zingas Bridge": that vault is for
+  quo-bridge alone.
 OPINTRO
   printf '  Paste your service-account token (ops_…) or press Enter to skip: '
   read -r OPTOK

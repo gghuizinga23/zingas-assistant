@@ -52,10 +52,20 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
 ## Then (each takes about 15 minutes)
 
 ### 4. 1Password
-- Make a vault named exactly **Zingas Assistant** (no apostrophe). In it, make one
-  Secure Note named **Assistant Secrets**. Every key below goes in that note as a
-  field. The field names are listed in `files/hermes.env`.
-- **Cost:** about $3–5 a month if you don't have 1Password already.
+- **Why:** every password and key lives here, never in a chat or a text.
+- **Do:**
+  1. Sign up at 1password.com if you don't have it (Individual is about $3 a month).
+  2. Make a vault named exactly **Zingas Assistant** (no apostrophe). In it, make
+     one Secure Note named **Assistant Secrets**. Keys Val uses go here.
+  3. Make a second vault named exactly **Zingas Bridge**. In it, make one Secure
+     Note named **Bridge Secrets**. The keys that text customers go here, so Val
+     can never send a text without your tap.
+  4. Leave both notes empty for now. Each time a sign-up gives you a key, I'll tell
+     you the exact field name to add.
+- **Later (when we set up the cloud computer):** you'll make two read-only
+  "service accounts", one per vault, in 1password.com under **Developer**. I'll
+  walk you through it then.
+- **Done when:** both vaults and both notes exist.
 
 ### 5. Telegram
 - Install Telegram on your iPhone and make an account. That's all for now. The
