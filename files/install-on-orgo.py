@@ -58,3 +58,9 @@ if os.path.exists(f"{SRC}/heartbeat.sh"):
     os.chmod("/usr/local/bin/zingas-assistant-heartbeat", 0o755)
     shutil.copy2(f"{SRC}/heartbeat.supervisor.conf", "/etc/supervisor/conf.d/zingas-heartbeat.conf")
     print("heartbeat installed (run: supervisorctl reread && supervisorctl update)")
+
+if os.path.exists(f"{SRC}/quo_pickup.py"):
+    shutil.copy2(f"{SRC}/quo_pickup.py", "/usr/local/bin/zingas-quo")
+    os.chmod("/usr/local/bin/zingas-quo", 0o755)
+    shutil.copy2(f"{SRC}/quo-pickup.supervisor.conf", "/etc/supervisor/conf.d/zingas-quo-pickup.conf")
+    print("quo pickup installed (starts after: supervisorctl reread && supervisorctl update)")

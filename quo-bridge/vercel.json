@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "app.py": {
+      "excludeFiles": "{**/test_*.py,schema.sql,README.md}"
+    }
+  },
+  "crons": [
+    { "path": "/api/tick", "schedule": "* * * * *" }
+  ]
+}

@@ -1,0 +1,6 @@
+[project]
+name = "quo-bridge"
+version = "0.1.0"
+description = "The only way Val's texts reach Zinga's customers: Gerrit taps Approve first."
+requires-python = ">=3.12"
+dependencies = []
