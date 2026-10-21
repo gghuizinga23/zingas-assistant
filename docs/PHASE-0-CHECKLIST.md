@@ -153,7 +153,7 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
 - **Done when:** you can sign in to the Composio dashboard and you know who your
   Google Workspace admin is.
 
-### 9. healthchecks.io (warns you if Val stops)
+### 9. healthchecks.io (warns you if Val stops) ✅ (done 2026-10-21: free plan, Email and Telegram warnings connected)
 - **Why:** Val checks in with healthchecks.io every 10 minutes. If she goes
   quiet, healthchecks.io warns you. It's a separate company, so the warning
   still comes even if Val's computer is completely down.
