@@ -10,12 +10,11 @@
 #     (openai-codex): an always-on agent on a consumer login breaks its terms.
 #   - Secrets come from the 1Password vault "Zingas Assistant".
 model:
-  default: openai/gpt-5.5
+  default: anthropic/claude-sonnet-5.5
   provider: nous
   base_url: https://inference-api.nousresearch.com/v1
-# Voice bake-off: OpenRouter gives GPT, Grok and Claude behind one key with one
-# spending limit. Set OPENROUTER_API_KEY, then try each model on the same 20
-# real situations before choosing the default.
+# Voice bake-off: the Nous sign-in already covers Claude, GPT and Grok, so no
+# extra keys. Try each on the same 20 real situations before choosing the default.
 agent:
   max_turns: 40
   verify_on_stop: false
@@ -88,11 +87,9 @@ secrets:
     # Ships disabled, as in Nick's Stack: an enabled map with no token stalls
     # every start. Onboarding flips it on once ~/.hermes/.op.env has the token.
     enabled: false
+    # Telegram's bot token stays where Orgo put it (~/.hermes/.env). The AI
+    # needs no key: Val signs in to Nous Portal instead.
     env:
-      TELEGRAM_BOT_TOKEN: op://Zingas Assistant/Assistant Secrets/TELEGRAM_BOT_TOKEN
-      OPENROUTER_API_KEY: op://Zingas Assistant/Assistant Secrets/OPENROUTER_API_KEY
-      XAI_API_KEY: op://Zingas Assistant/Assistant Secrets/XAI_API_KEY
-      OPENAI_API_KEY: op://Zingas Assistant/Assistant Secrets/OPENAI_API_KEY
       SUPABASE_URL: op://Zingas Assistant/Assistant Secrets/SUPABASE_URL
       SUPABASE_SERVICE_ROLE_KEY: op://Zingas Assistant/Assistant Secrets/SUPABASE_SERVICE_ROLE_KEY
       SF_LOGIN_URL: op://Zingas Assistant/Assistant Secrets/SF_LOGIN_URL

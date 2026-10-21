@@ -8,7 +8,7 @@ One part at a time. Gerrit says "done" after each; I do the rest.
 | 2 ✅ | Copy Val's rules, personality and skills onto her computer (backing up what's there first) | Me | 5 min |
 | 3 ✅ | Sign Val in to Nous Portal (her brain): open a link, enter a code | Gerrit | 3 min |
 | 4 ✅ | Connect Val's Telegram chat | Gerrit | 5 min |
-| 5 | Two read-only 1Password "service accounts", one per vault; paste each into Val's computer, never into chat | Gerrit | 10 min |
+| 5 | Read-only 1Password "service account" for the **Zingas Assistant** vault only. Paste its code into the hidden box (`files/save-op-token.sh`), never into chat. The **Zingas Bridge** one waits until mail-bridge is set up, so no unused code sits on Val's computer | Gerrit | 10 min |
 | 6 | Turn on the healthchecks.io check-ins | Me, with Gerrit's link | 3 min |
 | 7 | Test: close the laptop and text Val | Gerrit | 2 min |
 
@@ -21,6 +21,8 @@ before (Claude Sonnet 5.5, `anthropic/claude-sonnet-5.5`), instead of Orgo's bui
 The settings before this switch are in /root/.hermes/backups/config.before-nous.yaml. Test reply: "ok".
 Telegram: Gerrit connected the bot chat on Orgo's site and sees it on the iPhone. Only 1 person is
 allowed to talk to Val (home chat 8703312605). The laptop-off test (part 7) is the first real message.
+1Password's tool (`op` 2.41.0) is installed on Val's computer from 1Password's own download site.
+The 1Password list no longer names the Telegram or AI keys (Orgo holds the Telegram one; Nous needs none).
 
 **Later (not today):** connect Gmail and Calendar through mail-bridge; the
 approvals chat and customer texting once Quo is approved; Plaud once it arrives.
