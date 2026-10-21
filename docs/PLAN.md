@@ -143,7 +143,7 @@ healthchecks.io ◄── ping every 10 min└───────────�
 | 1.5 | Estimator read access + event webhooks | None | A proposal view or question produces a correct draft in Telegram |
 | 2 | Morning and evening briefs | None | Both briefs arrive for a week straight |
 | 3 | Quo texting: bridge, cadence, quiet hours, DNC, money check, 10-minute escalation, scheduling handoff | Put the new number on cards and proposals | Texts in and out with the gate enforced |
-| 4 | Truck debrief + Salesforce write + Plaud memory (consent line in the pitch; Florida requires every party's consent) | Approve the first 10 Salesforce writes | A follow-up uses a recording detail; the note shows in Salesforce |
+| 4 | Truck debrief + Salesforce write + Plaud memory (consent already collected up front at every appointment, as with Rilla) | Approve the first 10 Salesforce writes | A follow-up uses a recording detail; the note shows in Salesforce |
 | 5 | Team rollout 1 → 5 → 15: one Orgo computer per rep from the template, per-rep voice, Quo numbers, a manager view | Pick the first 4 reps | 5 reps live |
 | 6 | Dashboard merge: an "Assistant" tab inside `PageShell` using `src/components/ui.tsx` | None | It appears in the dashboard |
 

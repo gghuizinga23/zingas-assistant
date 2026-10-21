@@ -47,10 +47,8 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
 - **One setting to turn on** in the Plaud phone app: automatic transcripts
   (Plaud calls it "AutoFlow"). Otherwise nothing gets written down.
 - **Don't connect it to anything yet.** I'll walk you through that later.
-- **Ask your manager now:** what consent line to say at the start of each
-  appointment. Example: "I use a note-taker so I don't miss anything. OK?"
-  Florida needs everyone's OK to record, so get the company's answer before
-  the team uses it.
+- **Consent:** already covered. Customers agree to be recorded at the start of
+  every appointment (the same as with Rilla).
 - **Done when:** the device is charged, the plan is on, and a test recording
   shows a transcript in the app.
 
