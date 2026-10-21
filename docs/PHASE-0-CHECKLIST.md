@@ -51,7 +51,7 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
 
 ## Then (each takes about 15 minutes)
 
-### 4. 1Password
+### 4. 1Password ✅ (done 2026-10-21: account and both vaults)
 - **Why:** every password and key lives here, never in a chat or a text.
 - **Do:**
   1. Sign up at 1password.com if you don't have it (Individual is about $3 a month).
