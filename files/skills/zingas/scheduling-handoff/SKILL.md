@@ -22,11 +22,13 @@ Make **two drafts**, both sent to the approvals queue together. Label the custom
 
    Do not promise a time. Do not say it is confirmed.
 
-2. **To the call center** (contact saved in 1Password as the scheduling contact):
+2. **To the call center** (the contact is `SCHEDULING_CONTACT`, from 1Password). If it is an email, make it a Gmail draft for Gerrit to send. If it is a phone number, show Gerrit the request ready to copy. Never send it yourself.
    - Customer name and Salesforce Prospect ID
    - Current appointment date and time (from the calendar or Salesforce)
    - What the customer asked for, in their words
    - Best way to reach them
+
+If `SCHEDULING_CONTACT` is empty, still draft the request and tell Gerrit the contact is missing.
 
 ## Never
 - Never send an appointment confirmation. Corporate already sends them.

@@ -178,9 +178,26 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
   - Don't pay for a plan.
 - **Done when:** Email and Telegram both show under Integrations.
 
-### 10. Call center contact
-- Find out the best email or number to send "customer wants to move their
-  appointment" requests to. Write it in 1Password as a note.
+### 10. Call center contact (where "move my appointment" requests go)
+- **Why:** when a customer asks to move a visit, Val writes two drafts: a reply
+  to the customer, and a request to the call center. She needs to know where
+  that request goes. You still send it yourself.
+- **Do** (about 10 minutes):
+  1. Ask your manager or the call center this question: "When a customer wants
+     to move their appointment, where should I send it? Email or phone?"
+  2. Also ask:
+     - Is there one person, or a shared inbox?
+     - What hours do they answer?
+     - What do they need in the request? (Val will already include the
+       customer's name, Salesforce Prospect ID, current appointment time, what
+       the customer asked for, and the best way to reach them.)
+  3. Open 1Password → vault **Zingas Assistant** → note **Assistant Secrets** →
+     **Edit** → **+ add more** → **Text**.
+  4. Name the field exactly **SCHEDULING_CONTACT**. In the value, put the email
+     address (best) or the phone number. → **Save**.
+- **Tell me in chat:** email or phone, their hours, and anything extra they
+  need. Not the address or number itself; that stays in 1Password.
+- **Done when:** SCHEDULING_CONTACT is saved and you've told me the rest.
 
 ---
 
