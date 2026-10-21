@@ -108,7 +108,7 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
   - Never click **Stop** on the computer. Stopped means Val is off.
 - **Done when:** a computer named Val shows as running in your Orgo dashboard.
 
-### 7. AI account: Nous Portal (chosen 2026-10-21)
+### 7. AI account: Nous Portal ✅ (done 2026-10-21: Plus plan, Privacy Mode on)
 - **Why:** this is Val's brain, the part that thinks and writes her drafts. One
   sign-in covers Claude, ChatGPT and Grok, so we can run the voice test easily.
 - **Plan:** **Plus**, $20 a month (includes $22 of use). If a month runs short,
