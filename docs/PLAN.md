@@ -107,7 +107,7 @@ healthchecks.io ◄── ping every 10 min└───────────�
 - Both wait for Gerrit's tap.
 
 **Watchdog and backups**
-- The gateway and each brief cron ping healthchecks.io every 10 minutes. healthchecks.io itself texts Gerrit's cell when a ping is missed, so the alert works even if the VM is dead.
+- The gateway and each brief cron ping healthchecks.io every 10 minutes. When a ping is missed, healthchecks.io itself warns Gerrit by Telegram (its own @HealthchecksBot, not Val's bot) and email, so the alert works even if the VM is dead. Free Hobbyist plan; real phone texts need its $20/month Business plan, only if Telegram isn't enough (checked 2026-10-21).
 - A nightly backup copies the vault, `MEMORY.md`, `VOICE.md`, skills and config to object storage. Orgo is not the backup.
 
 **Learning Gerrit's voice**
@@ -143,7 +143,7 @@ healthchecks.io ◄── ping every 10 min└───────────�
 ## Build phases
 | # | Phase | Gerrit's to-dos (no code) | Done when |
 |---|---|---|---|
-| 0 | Accounts, approvals, safety net | Sign up: Orgo, model API, Telegram, Composio (allow it in the Workspace admin), Quo company workspace + new number (**start 10DLC on day 1**), 1Password, healthchecks.io, backup storage, Plaud. (Salesforce write access: on hold.) Get the call center's contact for scheduling requests | Gerrit texts the bot while the laptop is closed. A missed ping texts Gerrit's cell |
+| 0 | Accounts, approvals, safety net | Sign up: Orgo, model API, Telegram, Composio (allow it in the Workspace admin), Quo company workspace + new number (**start 10DLC on day 1**), 1Password, healthchecks.io, backup storage, Plaud. (Salesforce write access: on hold.) Get the call center's contact for scheduling requests | Gerrit texts the bot while the laptop is closed. A missed ping warns Gerrit by Telegram and email |
 | 1 | Email: triage filter, drafts in Telegram and Gmail Drafts, voice bootstrap, identity resolver | Review 20 drafts | Unedited % measured; no drafts for newsletters |
 | 1.5 | Estimator read access + event webhooks | None | A proposal view or question produces a correct draft in Telegram |
 | 2 | Morning and evening briefs | None | Both briefs arrive for a week straight |
@@ -165,7 +165,7 @@ These are estimates; check current prices in Phase 0. One-time costs: a Plaud de
 
 ## Verification
 - **Laptop-off test:** shut the Mac. An email and a text to the Quo number each produce a Telegram draft within 2 minutes.
-- **Watchdog test:** stop the gateway. Gerrit's cell gets a healthchecks.io text within 20 minutes. Then restore the vault from last night's backup onto a fresh VM.
+- **Watchdog test:** stop the gateway. Gerrit gets a healthchecks.io Telegram message and email within 20 minutes. Then restore the vault from last night's backup onto a fresh VM.
 - **Escalation test:** leave a customer draft for 10 minutes. The Quo text reaches Gerrit's cell. After 2 hours it shows as "missed" in the brief.
 - **Gate tests:**
   - At 9pm customer time, the draft is held.

@@ -153,9 +153,30 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
 - **Done when:** you can sign in to the Composio dashboard and you know who your
   Google Workspace admin is.
 
-### 9. healthchecks.io (texts you if the assistant stops)
-- Sign up at healthchecks.io. Add your cell number for text alerts.
-- **Cost:** free, or about $5 a month for more text alerts.
+### 9. healthchecks.io (warns you if Val stops)
+- **Why:** Val checks in with healthchecks.io every 10 minutes. If she goes
+  quiet, healthchecks.io warns you. It's a separate company, so the warning
+  still comes even if Val's computer is completely down.
+- **Plan:** **Hobbyist**, free. The free plan can't send phone texts, so the
+  warning comes as a **Telegram message** (from healthchecks.io's own bot, not
+  Val's) plus an **email**. Real phone texts need the $20-a-month plan. Skip
+  that unless Telegram warnings turn out not to be enough.
+- **Do now** (about 5 minutes, laptop and iPhone):
+  1. On your laptop, go to healthchecks.io → **Sign Up**.
+  2. Type your zingashome.com email → **Email Me a Link**. Open the email and
+     click the link. There's no password to save.
+  3. If it asks you to name the project, call it **Val**.
+  4. On your iPhone, open Telegram → search **@HealthchecksBot** (the one with
+     the healthchecks.io logo) → **Start**.
+  5. The bot sends you a link. Tap it, choose the **Val** project, and tap
+     **Connect Telegram**.
+  6. On your laptop, click **Integrations** at the top. Check that **Email**
+     and **Telegram** are both listed.
+- **Don't, for now:**
+  - Don't change or delete any check you see. I set up Val's check-ins later,
+    on her computer.
+  - Don't pay for a plan.
+- **Done when:** Email and Telegram both show under Integrations.
 
 ### 10. Call center contact
 - Find out the best email or number to send "customer wants to move their

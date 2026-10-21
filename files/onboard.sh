@@ -111,8 +111,8 @@ cat <<'NEXT'
       mail-bridge only. Val gets read, search, draft and read-calendar. Never send.
   • quo-bridge (customer texts): its keys go in its OWN env file, never in
       ~/.hermes/.env, so the agent cannot text a customer by itself.
-  • healthchecks.io: HEALTHCHECKS_PING_URL in 1Password. A missed ping texts
-      Gerrit's cell.
+  • healthchecks.io: HEALTHCHECKS_PING_URL in 1Password. A missed ping warns
+      Gerrit by Telegram (@HealthchecksBot) and email.
 NEXT
 hr
 
