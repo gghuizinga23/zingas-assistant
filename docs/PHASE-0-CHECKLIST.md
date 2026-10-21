@@ -90,7 +90,7 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
     second bot by messaging @BotFather in Telegram. Save the code it gives you in
     1Password, in the **Zingas Bridge** vault, never in a chat.
 
-### 6. Orgo (the always-on cloud computer)
+### 6. Orgo (the always-on cloud computer) ✅ (done 2026-10-21: Starter plan, monthly; computer "Val" running)
 - **Why:** Val lives here, so she keeps working when your laptop is closed.
 - **Plan:** **Starter**, billed **Monthly**: $29 a month (1 computer, 8 GB memory).
   Switch to yearly ($290) once Val has proven herself.
