@@ -1,7 +1,7 @@
 # Phase 0: your checklist
 
 These are the sign-ups and approvals only you can do. No code. Do them in this
-order. The first two take the longest, so start them today.
+order. Steps 1 and 3 take the longest, so start them today.
 
 **One rule for every step:** never paste a password or key into a chat or a
 text. Put it in 1Password (step 4). The assistant reads it from there.
@@ -25,19 +25,11 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
 - **Time:** registration approval can take days to a few weeks.
 - **Done when:** Quo shows the registration as approved.
 
-### 2. Salesforce write access
-- **Why:** so the assistant can save your notes, follow-up date and spouse name
-  into Salesforce after you approve them. No double entry.
-- **Do:** send this to IT or corporate:
-  > "Please create a Salesforce Connected App for Zinga's Assistant, using the
-  > Client Credentials flow. It needs read access to Appointments, Prospects and
-  > Sales, and write access only to follow-up notes, the follow-up (revisit) date
-  > and the Prospect's second-homeowner name. Please send the client ID and secret
-  > through 1Password, not email."
-- The Estimator already asked IT for a similar write login
-  (`docs/IT-credentials-checklist.md` in the Estimator). Ask IT if one login
-  can do both.
-- **Done when:** IT shares the login in 1Password.
+### 2. Salesforce notes: ON HOLD
+- **Don't ask IT yet.** You chose to wait on Val saving notes into Salesforce.
+- **Until then:** Val keeps your notes, follow-up dates and spouse names herself
+  and lists them in your evening brief, ready for you to paste into Salesforce.
+- When you're ready, I'll give you the exact request to send IT.
 
 ### 3. Appointment recorder: Plaud
 - **Buy one:** Plaud NotePin S (clip-on, about $179) or Plaud Note Pro (better
@@ -46,7 +38,10 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
   first week.
 - **One setting to turn on** in the Plaud phone app: automatic transcripts
   (Plaud calls it "AutoFlow"). Otherwise nothing gets written down.
-- **Don't connect it to anything yet.** I'll walk you through that later.
+- **Optional:** in the app's custom words list, add product names you say a
+  lot (for example PowerView, Silhouette, pergola) so transcripts spell them right.
+- **Don't connect it to anything yet.** Later you'll sign in to Plaud once and
+  click "Authorize" so Val can read your transcripts. No password or key to copy.
 - **Consent:** already covered. Customers agree to be recorded at the start of
   every appointment (the same as with Rilla).
 - **Done when:** the device is charged, the plan is on, and a test recording
