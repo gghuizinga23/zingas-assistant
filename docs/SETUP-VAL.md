@@ -62,6 +62,7 @@ when an app the admin hasn't trusted asks for a restricted service like Gmail. D
 3. Click **Change access**. Choose only Gerrit's org unit, or leave the top level for everyone.
 4. Pick **Trusted** → **Next** → **Change access**.
 Then run `files/gmail-setup.sh` again; it reuses what it already made.
+**Gmail is paused** until Delisa says it's done. Next: G2+G3 again, then G4 and G5.
 
 **G1: making the "Val limited" key** (Composio's "Create API key" window has a Read column and a
 Write column, and **Read All** is ticked at the start):
