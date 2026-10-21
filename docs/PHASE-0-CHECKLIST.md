@@ -39,12 +39,20 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
   can do both.
 - **Done when:** IT shares the login in 1Password.
 
-### 3. Appointment recorder: ON HOLD
-- **Don't order anything yet.** We're comparing Fieldy with other recorders first.
-- **You can still ask your manager now:** what consent line to say at the start
-  of each appointment. Example: "Mind if I record so I don't miss any details?"
-  Florida needs everyone's OK to record, so get the company's answer before the
-  team uses it.
+### 3. Appointment recorder: Plaud
+- **Buy one:** Plaud NotePin S (clip-on, about $179) or Plaud Note Pro (better
+  in noisy homes, about $189). Buy from plaud.ai.
+- **Plan:** Unlimited (about $240 a year). The free minutes run out in the
+  first week.
+- **One setting to turn on** in the Plaud phone app: automatic transcripts
+  (Plaud calls it "AutoFlow"). Otherwise nothing gets written down.
+- **Don't connect it to anything yet.** I'll walk you through that later.
+- **Ask your manager now:** what consent line to say at the start of each
+  appointment. Example: "I use a note-taker so I don't miss anything. OK?"
+  Florida needs everyone's OK to record, so get the company's answer before
+  the team uses it.
+- **Done when:** the device is charged, the plan is on, and a test recording
+  shows a transcript in the app.
 
 ---
 

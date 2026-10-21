@@ -34,7 +34,7 @@ It starts with Gerrit, then rolls out to 5 reps, then 15 to 20. It gets built st
 | Confirmations | Corporate already sends them, so **the assistant never sends appointment confirmations** |
 | Auto-send (after trust) | "On my way / running late" and quick acknowledgments only |
 | Alerts | Telegram alerts immediately. If a customer draft sits for **10 minutes** during business hours, the Quo number texts Gerrit's personal cell. After 2 hours it shows as "missed" in the next brief |
-| Recorder | Pilot **Fieldy** (webhooks). Fallback: Plaud. Revisit Rilla at 15+ reps |
+| Recorder | **Plaud** (NotePin S or Note Pro, Unlimited plan; official MCP/CLI to read transcripts). Rollout: Plaud Team, or Siro if its quote is reasonable. Fieldy and Rilla ruled out (chosen 2026-10-20) |
 
 ## Architecture
 ```
@@ -42,7 +42,7 @@ Gerrit's phone ──Telegram──┐
 Customers ──Quo number──webhook──┐   ┌──────────── Orgo cloud computer (always on) ────────────┐
 zingashome Gmail ──Composio──────┼──►│ Hermes gateway (supervisord)                           │
 Google Calendar (read) ──────────┤   │  SOUL.md (Zinga's persona) + VOICE.md (Gerrit's voice)  │
-Fieldy recorder ──webhook────────┤   │  skills: triage, drafting, cadence, briefs, memory      │
+Plaud recorder ──MCP/CLI─────────┤   │  skills: triage, drafting, cadence, briefs, memory      │
 Estimator ──events in / reads────┘   │  quo-bridge (send gate, quiet hours, DNC, escalation)   │
 Salesforce (read + approved write) ◄►│  identity resolver → customer memory (Supabase)        │
 healthchecks.io ◄── ping every 10 min└───────────────── nightly backup ──► object storage ───┘
@@ -138,12 +138,12 @@ healthchecks.io ◄── ping every 10 min└───────────�
 ## Build phases
 | # | Phase | Gerrit's to-dos (no code) | Done when |
 |---|---|---|---|
-| 0 | Accounts, approvals, safety net | Sign up: Orgo, model API, Telegram, Composio (allow it in the Workspace admin), Quo company workspace + new number (**start 10DLC on day 1**), 1Password, healthchecks.io, backup storage, Fieldy. **Get the Salesforce write Connected App approved.** Get the call center's contact for scheduling requests | Gerrit texts the bot while his laptop is closed. A missed ping texts his cell |
+| 0 | Accounts, approvals, safety net | Sign up: Orgo, model API, Telegram, Composio (allow it in the Workspace admin), Quo company workspace + new number (**start 10DLC on day 1**), 1Password, healthchecks.io, backup storage, Plaud. **Get the Salesforce write Connected App approved.** Get the call center's contact for scheduling requests | Gerrit texts the bot while his laptop is closed. A missed ping texts his cell |
 | 1 | Email: triage filter, drafts in Telegram and Gmail Drafts, voice bootstrap, identity resolver | Review 20 drafts | Unedited % measured; no drafts for newsletters |
 | 1.5 | Estimator read access + event webhooks | None | A proposal view or question produces a correct draft in Telegram |
 | 2 | Morning and evening briefs | None | Both briefs arrive for a week straight |
 | 3 | Quo texting: bridge, cadence, quiet hours, DNC, money check, 10-minute escalation, scheduling handoff | Put the new number on cards and proposals | Texts in and out with the gate enforced |
-| 4 | Truck debrief + Salesforce write + Fieldy memory (consent line in the pitch; Florida requires every party's consent) | Approve the first 10 Salesforce writes | A follow-up uses a recording detail; the note shows in Salesforce |
+| 4 | Truck debrief + Salesforce write + Plaud memory (consent line in the pitch; Florida requires every party's consent) | Approve the first 10 Salesforce writes | A follow-up uses a recording detail; the note shows in Salesforce |
 | 5 | Team rollout 1 → 5 → 15: one Orgo computer per rep from the template, per-rep voice, Quo numbers, a manager view | Pick the first 4 reps | 5 reps live |
 | 6 | Dashboard merge: an "Assistant" tab inside `PageShell` using `src/components/ui.tsx` | None | It appears in the dashboard |
 
@@ -153,10 +153,10 @@ healthchecks.io ◄── ping every 10 min└───────────�
 | Orgo | $29 | ~$128 | $399 |
 | AI model (API) | ~$30–60 | ~$150 | ~$450 |
 | Quo + texts | ~$30 | ~$145 | ~$435 |
-| Composio, Fieldy, healthchecks, backups | ~$20–40 | ~$100 | ~$250 |
+| Composio, Plaud, healthchecks, backups | ~$20–40 | ~$100 | ~$250 |
 | **Total** | **~$110–160** | **~$520** | **~$1,500 (~$100/rep)** |
 
-These are estimates; check current prices in Phase 0. One-time costs: a Fieldy device per rep, and about $20 for 10DLC registration.
+These are estimates; check current prices in Phase 0. One-time costs: a Plaud device per rep (about $179–189), and about $20 for 10DLC registration.
 
 ## Verification
 - **Laptop-off test:** shut the Mac. An email and a text to the Quo number each produce a Telegram draft within 2 minutes.
