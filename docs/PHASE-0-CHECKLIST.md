@@ -1,7 +1,7 @@
 # Phase 0: your checklist
 
 These are the sign-ups and approvals only you can do. No code. Do them in this
-order. The first three take the longest, so start them today.
+order. The first two take the longest, so start them today.
 
 **One rule for every step:** never paste a password or key into a chat or a
 text. Put it in 1Password (step 4). The assistant reads it from there.
@@ -39,15 +39,12 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
   can do both.
 - **Done when:** IT shares the login in 1Password.
 
-### 3. Order a Fieldy recorder
-- **Why:** it records the appointment so follow-ups can mention real details
-  ("fellow Hoosier fan").
-- **Do:** order one at fieldy.ai. Check the current price and plan; the plan
-  must include webhooks.
-- **Also ask your manager:** what consent line to say at the start of each
-  appointment. Example: "Mind if I record so I don't miss any details?" Florida
-  needs everyone's OK to record, so get the company's answer before the team
-  uses it.
+### 3. Appointment recorder: ON HOLD
+- **Don't order anything yet.** We're comparing Fieldy with other recorders first.
+- **You can still ask your manager now:** what consent line to say at the start
+  of each appointment. Example: "Mind if I record so I don't miss any details?"
+  Florida needs everyone's OK to record, so get the company's answer before the
+  team uses it.
 
 ---
 
