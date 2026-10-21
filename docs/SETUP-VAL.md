@@ -35,7 +35,25 @@ Assistant Secrets, now the only field Val's 1Password list reads (add the rest a
 a failure if it stops. First check-in 2026-10-21 13:54 UTC.
 Laptop-off test passed 2026-10-21: Gerrit closed the laptop, texted Val on Telegram, and she answered.
 
-**Still to do for part 5:** the second read-only code, for Zingas Bridge, when mail-bridge (Gmail) is set up.
+**Still to do for part 5:** the second read-only code, for Zingas Bridge. Gmail no longer needs it
+(see below), so it waits for Quo texting.
+
+## Gmail and Calendar (next, chosen 2026-10-21)
+
+Val reads, searches and drafts email, and reads your calendar. She can **never** send, forward or
+delete. **Why it's built this way:** Val can read every file on her computer, so the Composio key must
+never go there. Composio itself locks a link to the 4 allowed jobs. Val gets only that link.
+
+| # | Part | Who | Time |
+|---|---|---|---|
+| G1 | In Composio: turn off **Require API Key for MCP** (Project Settings). Save the Composio API key in 1Password: **Zingas Bridge** vault, note **Bridge Secrets**, field **COMPOSIO_API_KEY**. Never in chat | Gerrit | 5 min |
+| G2 | Connect your zingashome.com Gmail and Calendar to Composio: open the link I give you and sign in to Google. If Google blocks it, Delisa allows Composio in Google Admin | Gerrit (Delisa if blocked) | 5 min |
+| G3 | Paste the Composio key into a hidden box on this laptop. It makes the locked link and sends it straight to Val's computer. The key is not saved anywhere | Gerrit pastes, I do the rest | 5 min |
+| G4 | Safety test: through the link, I try to send an email to you, and to delete one. Both must be refused. If not, we stop and use a helper on Vercel instead | Me | 5 min |
+| G5 | Turn it on for Val. Test: ask her on Telegram for your newest email and a draft reply. The draft shows in Gmail Drafts; nothing is sent | Gerrit | 3 min |
+
+**Note for Quo later:** Quo's keys have the same problem (Val can read files on her computer).
+Solve it the same way, or with a helper off her computer, before customer texting starts.
 
 **Later (not today):** connect Gmail and Calendar through mail-bridge; the
 approvals chat and customer texting (Quo approved 2026-10-21, ready to build); Plaud once it arrives.
