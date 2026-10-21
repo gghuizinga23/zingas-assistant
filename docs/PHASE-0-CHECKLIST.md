@@ -130,7 +130,7 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
   and follows its own rules.
 - **Done when:** Plus is active and Privacy Mode is on.
 
-### 8. Composio (lets Val read your work email and calendar)
+### 8. Composio (lets Val read your work email and calendar) ✅ (done 2026-10-21: signed up, free Hobby plan; Google Workspace admin: Delisa)
 - **Why:** Composio holds the Google sign-in so Val can read mail, search it,
   write drafts and read your calendar.
 - **Safety:** Composio can also send, forward and delete email. So we set it up
@@ -143,8 +143,8 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
   2. Click **Sign up**, then **Continue with email**. Use your zingashome.com email.
   3. Save the login in 1Password, in your own main vault.
   4. Stay on the free Hobby plan.
-  5. Find out who runs Google Workspace for zingashome.com (ask the office or IT).
-     If Google blocks Composio later, that person allows it in the Admin console
+  5. Find out who runs Google Workspace for zingashome.com. ✅ It's **Delisa**
+     (IT). If Google blocks Composio later, Delisa allows it in the Admin console
      (Security → API controls).
 - **Don't, for now:**
   - Don't connect Gmail or Calendar.
