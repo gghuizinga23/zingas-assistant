@@ -11,7 +11,7 @@ Plain-English summary of the rules, in the order they are checked:
   3. Nothing sends outside 8am-8pm in the customer's time zone. An approved
      text waits until 8am instead.
   4. A text Gerrit approved sends.
-  5. A text he did not approve sends by itself only when ALL of these hold:
+  5. A text Gerrit did not approve sends by itself only when ALL of these hold:
        - it is an "on my way / running late" or a quick acknowledgment,
        - that type has earned auto-send (20 approvals in a row, no edits),
        - the customer is matched to a Salesforce Prospect,
@@ -213,7 +213,7 @@ def _business_time_between(start: datetime, end: datetime) -> timedelta:
 
 
 def waiting_status(created_at: datetime, now: datetime, handled: bool) -> str:
-    """For a customer draft waiting on Gerrit: 'ok', 'escalate' (text his cell
+    """For a customer draft waiting on Gerrit: 'ok', 'escalate' (text Gerrit's cell
     from the Quo number) or 'missed' (show in the next brief)."""
     if handled:
         return "ok"

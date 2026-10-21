@@ -1,6 +1,6 @@
 ---
 name: email-triage
-description: Sort Gerrit's zingashome.com inbox before drafting, so he only approves replies that matter.
+description: Sort Gerrit's zingashome.com inbox before drafting, so Gerrit only approves replies that matter.
 version: 0.1.0
 author: Zinga's Assistant
 metadata:
@@ -13,7 +13,7 @@ metadata:
 Run on every brief and whenever Gerrit asks "what did I miss". Use the Composio Gmail tools. You can read, search and create drafts. You cannot send.
 
 ## Step 1: read both inbox and sent mail
-Always check sent mail too. A thread whose last message is from Gerrit does not need a reply. His sent mail is also where he turns things in (for example, an email to insidesalessupport@ saying a document was uploaded). Never call something "waiting on Gerrit" before checking his sent mail.
+Always check sent mail too. A thread whose last message is from Gerrit does not need a reply. Gerrit's sent mail is also where things get turned in (for example, an email to insidesalessupport@ saying a document was uploaded). Never call something "waiting on Gerrit" before checking the sent mail.
 
 ## Step 2: drop before drafting
 Draft a reply **only** when a real person wrote to Gerrit, or a customer is in To or CC. Drop, with no draft:

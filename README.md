@@ -1,9 +1,9 @@
 # Zinga's Assistant
 
 An always-on assistant for Gerrit. It reads work email and the Quo business
-number, drafts every reply in his voice, and waits for his tap before anything
+number, drafts every reply in Gerrit's voice, and waits for Gerrit's tap before anything
 reaches a customer. It runs on an Orgo cloud computer, so it keeps working when
-his laptop is closed. It is built on Nick's Stack (Hermes agent); see
+the laptop is closed. It is built on Nick's Stack (Hermes agent); see
 `THIRD_PARTY_NOTICES.md`.
 
 The full plan is in `docs/PLAN.md`. What Gerrit has to sign up for is in
@@ -12,7 +12,7 @@ The full plan is in `docs/PLAN.md`. What Gerrit has to sign up for is in
 ## How it fits together
 
 - **Assistant bot (Telegram):** Gerrit chats with the assistant here all day.
-  He can ask questions, send voice-note debriefs and get the morning and
+  Gerrit can ask questions, send voice-note debriefs and get the morning and
   evening briefs.
 - **Approvals bot (Telegram):** a second, separate bot owned by `quo-bridge`.
   Every customer text draft arrives here with Approve, Edit and Skip buttons.

@@ -74,7 +74,7 @@ def main():
 
     deadline = time.time() + 15 * 60          # try up to 15 min of fresh QRs
     while time.time() < deadline:
-        pairing = create_pairing(bot_name="Zinga's Assistant")
+        pairing = create_pairing(bot_name="Val")
         log("Pairing created. Deep link:")
         print("    " + pairing.deep_link, flush=True)
         if render_qr_png(pairing.qr_payload, QR_PATH):
