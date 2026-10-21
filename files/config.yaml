@@ -90,7 +90,6 @@ secrets:
     enabled: false
     env:
       TELEGRAM_BOT_TOKEN: op://Zingas Assistant/Assistant Secrets/TELEGRAM_BOT_TOKEN
-      COMPOSIO_CONSUMER_KEY: op://Zingas Assistant/Assistant Secrets/COMPOSIO_CONSUMER_KEY
       OPENROUTER_API_KEY: op://Zingas Assistant/Assistant Secrets/OPENROUTER_API_KEY
       XAI_API_KEY: op://Zingas Assistant/Assistant Secrets/XAI_API_KEY
       OPENAI_API_KEY: op://Zingas Assistant/Assistant Secrets/OPENAI_API_KEY
@@ -145,15 +144,15 @@ plugins:
     - xai-provider
     - web-xai
 mcp_servers:
-  # Composio holds the Google sign-in. Its MCP server must be set up with
-  # ONLY these Gmail and Calendar actions: read mail, search mail, create
-  # draft, read calendar. No "send email" and no calendar writes. Gerrit sends
-  # every email himself from Gmail.
-  composio:
-    url: https://connect.composio.dev/mcp
-    enabled: true
-    headers:
-      x-consumer-api-key: ${COMPOSIO_CONSUMER_KEY}
+  # Gmail and Calendar go through mail-bridge, a small service on this
+  # computer that holds the Composio key (from the Zingas Bridge vault) and
+  # offers ONLY: read mail, search mail, create draft, read calendar. Composio
+  # itself can send, forward and delete, so Val never gets the key or a direct
+  # Composio connection. Gerrit sends every email from Gmail.
+  # Ships disabled until mail-bridge is built and running.
+  mail-bridge:
+    url: http://127.0.0.1:8790/mcp
+    enabled: false
   obsidian-vault:
     command: npx
     args:

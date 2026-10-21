@@ -10,7 +10,7 @@ metadata:
 
 # Email triage
 
-Run on every brief and whenever Gerrit asks "what did I miss". Use the Composio Gmail tools. You can read, search and create drafts. You cannot send.
+Run on every brief and whenever Gerrit asks "what did I miss". Use the Gmail tools from mail-bridge (Composio behind it). You can read, search and create drafts. You cannot send, forward or delete.
 
 ## Step 1: read both inbox and sent mail
 Always check sent mail too. A thread whose last message is from Gerrit does not need a reply. Gerrit's sent mail is also where things get turned in (for example, an email to insidesalessupport@ saying a document was uploaded). Never call something "waiting on Gerrit" before checking the sent mail.

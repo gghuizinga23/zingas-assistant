@@ -26,7 +26,7 @@ It starts with Gerrit, then rolls out to 5 reps, then 15 to 20. It gets built st
 | Gerrit ↔ assistant | Telegram bot with Approve / Edit / Skip buttons and voice notes |
 | Customer texting | A **new Quo business number**, in a Zinga's company Quo workspace so it scales to reps. New customers get this number |
 | Personal cell | **Stays personal. It is not ported and not read live.** Gerrit answers those texts directly during the overlap months. One exception: a one-time read of past **customer** texts on Gerrit's Mac, to learn Gerrit's voice. Then the iMessage reader is retired |
-| Email | zingashome.com Gmail through Composio. Drafts also land in Gmail Drafts |
+| Email | zingashome.com Gmail through Composio (free Hobby plan). Drafts also land in Gmail Drafts. Composio can send, forward and delete, so its key lives only in **mail-bridge** (Zingas Bridge vault), which gives Val read, search, draft and read-calendar and nothing else (2026-10-21) |
 | Scope | Work only |
 | Quotes | Built in the home on the iPad, as today. The assistant **reads** proposals so its follow-ups are right; it never creates or prices one |
 | System of record | **Salesforce.** Gerrit gets a write-scoped Connected App approved (Phase 0). The assistant writes notes, follow-up date and spouse name after Gerrit approves. Results stay in RemodelerGo. **Write access is on hold (Gerrit, 2026-10-20):** until then Val keeps these in the vault and lists them in the evening brief for Gerrit to paste |
@@ -53,6 +53,7 @@ healthchecks.io ◄── ping every 10 min└───────────�
   - Port the prototype's cadence rules, voice rules and promise tracker as Hermes skills.
   - Real customer data never goes in git.
 - **New skills** under `files/skills/zingas/`: `voice`, `email-triage`, `followup-cadence`, `briefs`, `customer-memory`, `quo-texting`, `estimator-followups`, `truck-debrief`, `scheduling-handoff`.
+- **`mail-bridge/`** (small, same idea as quo-bridge): holds the Composio key and opens a Composio session limited to read mail, search mail, create draft and read calendar (`SESSION_PRESET_DIRECT_TOOLS` with an allowlist). Val reaches Gmail only through it.
 - **`quo-bridge/`** is modeled on Nick's `agentphone_bridge.py` (HMAC check, dedupe, ordering). It points at Quo's API and is the **only path to customers**. It enforces in code:
   - approval required unless that category has earned auto-send, and then a 5-minute Stop countdown
   - the customer's own message is checked too: money, complaints, cancellations or "is this a real person?" always go to Gerrit

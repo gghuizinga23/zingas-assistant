@@ -130,15 +130,28 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
   and follows its own rules.
 - **Done when:** Plus is active and Privacy Mode is on.
 
-### 8. Composio (connects your Gmail and Calendar)
-- Sign up at composio.dev. Connect your **zingashome.com Gmail** and **Google
-  Calendar**.
-- When Composio asks which actions to allow, pick only: read email, search
-  email, create draft, read calendar. **Do not allow "send email".** You send
-  every email yourself from the Gmail app.
-- If Google says the app is blocked, ask whoever runs the Google Workspace admin to
-  allow Composio (Admin console → Security → API controls).
-- Save the Composio API key in 1Password.
+### 8. Composio (lets Val read your work email and calendar)
+- **Why:** Composio holds the Google sign-in so Val can read mail, search it,
+  write drafts and read your calendar.
+- **Safety:** Composio can also send, forward and delete email. So we set it up
+  locked down: Val gets only read, search, draft and read-calendar. Its key goes
+  in the **Zingas Bridge** vault, which Val can't open, so she can never unlock
+  the rest. You still send every email yourself from Gmail.
+- **Plan:** **Hobby**, free, no card (100,000 actions a month, far more than Val needs).
+- **Do now** (about 5 minutes, on your laptop):
+  1. Go to composio.dev → **GET STARTED – FREE**.
+  2. Click **Sign up**, then **Continue with email**. Use your zingashome.com email.
+  3. Save the login in 1Password, in your own main vault.
+  4. Stay on the free Hobby plan.
+  5. Find out who runs Google Workspace for zingashome.com (ask the office or IT).
+     If Google blocks Composio later, that person allows it in the Admin console
+     (Security → API controls).
+- **Don't, for now:**
+  - Don't connect Gmail or Calendar.
+  - Don't copy any key, and don't set up anything called "Connect" or "AI clients".
+  - We do those together on Val's computer, with the locked-down setup.
+- **Done when:** you can sign in to the Composio dashboard and you know who your
+  Google Workspace admin is.
 
 ### 9. healthchecks.io (texts you if the assistant stops)
 - Sign up at healthchecks.io. Add your cell number for text alerts.

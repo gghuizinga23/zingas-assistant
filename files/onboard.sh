@@ -107,8 +107,8 @@ fi
 hr
 say "Step 4/4 — The rest of your setup"
 cat <<'NEXT'
-  • Composio (Gmail + Calendar): COMPOSIO_CONSUMER_KEY in 1Password. Allow only
-      read mail, search mail, create draft, read calendar. Never "send email".
+  • Gmail + Calendar: COMPOSIO_API_KEY goes in the Zingas Bridge vault, for
+      mail-bridge only. Val gets read, search, draft and read-calendar. Never send.
   • quo-bridge (customer texts): its keys go in its OWN env file, never in
       ~/.hermes/.env, so the agent cannot text a customer by itself.
   • healthchecks.io: HEALTHCHECKS_PING_URL in 1Password. A missed ping texts
