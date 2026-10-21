@@ -35,7 +35,7 @@ It starts with Gerrit, then rolls out to 5 reps, then 15 to 20. It gets built st
 | Auto-send (after trust) | "On my way / running late" and quick acknowledgments only |
 | Alerts | Telegram alerts immediately. If a customer draft sits for **10 minutes** during business hours, the Quo number texts Gerrit's personal cell. After 2 hours it shows as "missed" in the next brief |
 | Recorder | **Plaud** (NotePin S or Note Pro, Unlimited plan; official MCP/CLI to read transcripts). Rollout: Plaud Team, or Siro if its quote is reasonable. Fieldy and Rilla ruled out (chosen 2026-10-20) |
-| Persona | **Val** (short for Valance), the same name for every rep. A calm right-hand with no set gender: short and organized, a little humor and Indiana flavor, emojis only as markers. Nudges once, shares ideas often, drafts whatever Gerrit asks (still behind the approval tap), quiet after 8pm and on weekends except emergencies. Customers never see Val. Details in `files/SOUL.md` (chosen 2026-10-20) |
+| Persona | **Val** (short for Valance), the same name for every rep. Her emoji is 🪟. A calm right-hand, a woman: short and organized, a little humor and Indiana flavor, emojis only as markers. Nudges once, shares ideas often, drafts whatever Gerrit asks (still behind the approval tap), quiet after 8pm and on weekends except emergencies. Customers never see Val. Details in `files/SOUL.md` (chosen 2026-10-20) |
 
 ## Architecture
 ```
