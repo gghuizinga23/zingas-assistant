@@ -101,7 +101,6 @@ secrets:
       ESTIMATOR_URL: op://Zingas Assistant/Assistant Secrets/ESTIMATOR_URL
       ESTIMATOR_SERVICE_TOKEN: op://Zingas Assistant/Assistant Secrets/ESTIMATOR_SERVICE_TOKEN
       HEALTHCHECKS_PING_URL: op://Zingas Assistant/Assistant Secrets/HEALTHCHECKS_PING_URL
-      SCHEDULING_CONTACT: op://Zingas Assistant/Assistant Secrets/SCHEDULING_CONTACT
     binary_path: /usr/bin/op
 _config_version: 33
 session_reset:

@@ -103,7 +103,7 @@ healthchecks.io ◄── ping every 10 min└───────────�
 
 **Scheduling handoff**
 - A customer texts "Can we do Thursday instead?"
-- The assistant drafts a reply to the customer ("I'll have our scheduling team get that moved for you") and a request to the call center with the customer, current time and wanted day.
+- The assistant drafts a reply to the customer ("I'll have our scheduling team get that moved for you") and a request to the call center (Gmail draft to appointments@zingashome.com, a shared inbox; backup (317) 339-1166) with just the customer's name and what they asked for.
 - Both wait for Gerrit's tap.
 
 **Watchdog and backups**
