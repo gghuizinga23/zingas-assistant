@@ -41,21 +41,31 @@ Laptop-off test passed 2026-10-21: Gerrit closed the laptop, texted Val on Teleg
 ## Gmail and Calendar (next, chosen 2026-10-21)
 
 Val reads, searches and drafts email, and reads your calendar. She can **never** send, forward or
-delete. **Why it's built this way:** Val can read every file on her computer, so the Composio key must
-never go there. Composio itself locks a link to the 4 allowed jobs. Val gets only that link.
+delete. **Why it's built this way:** Val can read every file on her computer, so the main Composio key
+must never go there. I use it from this laptop to make a locked session that allows only the jobs
+above. Val gets the session link plus a **limited key** that can only use that session: it can't make
+a new session or reach any other tool.
 
 | # | Part | Who | Time |
 |---|---|---|---|
-| G1 | In Composio: turn off **Require API Key for MCP** (Project Settings). Save the Composio API key in 1Password: **Zingas Bridge** vault, note **Bridge Secrets**, field **COMPOSIO_API_KEY**. Never in chat | Gerrit | 5 min |
+| G1 | In Composio (API Keys): save the **main** key in 1Password (**Zingas Bridge** vault, note **Bridge Secrets**, field **COMPOSIO_API_KEY**). Make a second key, **Val limited**, with only "Session tool execution: Write" (everything else None). Save it in **Zingas Assistant** vault, note **Assistant Secrets**, field **COMPOSIO_VAL_KEY**. Leave **Require API Key for MCP** ON. Never in chat | Gerrit | 10 min |
 | G2 | Connect your zingashome.com Gmail and Calendar to Composio: open the link I give you and sign in to Google. If Google blocks it, Delisa allows Composio in Google Admin | Gerrit (Delisa if blocked) | 5 min |
-| G3 | Paste the Composio key into a hidden box on this laptop. It makes the locked link and sends it straight to Val's computer. The key is not saved anywhere | Gerrit pastes, I do the rest | 5 min |
-| G4 | Safety test: through the link, I try to send an email to you, and to delete one. Both must be refused. If not, we stop and use a helper on Vercel instead | Me | 5 min |
+| G3 | Paste the main key into a hidden box on this laptop. It makes the locked session (sandbox and raw-API access off) and sends only the session link to Val's computer. The main key is not saved anywhere | Gerrit pastes, I do the rest | 5 min |
+| G4 | Safety tests with Val's limited key: sending an email to you, deleting one, and making a new session must all be refused. If any works, we stop and use a helper on Vercel instead | Me | 10 min |
 | G5 | Turn it on for Val. Test: ask her on Telegram for your newest email and a draft reply. The draft shows in Gmail Drafts; nothing is sent | Gerrit | 3 min |
+
+Tech notes: sessions replace Composio's old `mcp.create` (deprecated). Allowed tools:
+GMAIL_FETCH_EMAILS, GMAIL_LIST_MESSAGES, GMAIL_LIST_THREADS, GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID,
+GMAIL_FETCH_MESSAGE_BY_THREAD_ID, GMAIL_CREATE_EMAIL_DRAFT, GMAIL_LIST_DRAFTS, GMAIL_GET_DRAFT,
+GMAIL_GET_ATTACHMENT, GOOGLECALENDAR_EVENTS_LIST, GOOGLECALENDAR_FIND_EVENT, GOOGLECALENDAR_EVENTS_GET,
+GOOGLECALENDAR_LIST_CALENDARS, GOOGLECALENDAR_FREE_BUSY_QUERY. Google has no draft-only scope
+(gmail.compose can send), so the lock must be Composio's. Hermes `tools: include` is not a lock
+(it runs on Val's computer). Check at G3 whether sessions expire.
 
 **Note for Quo later:** Quo's keys have the same problem (Val can read files on her computer).
 Solve it the same way, or with a helper off her computer, before customer texting starts.
 
-**Later (not today):** connect Gmail and Calendar through mail-bridge; the
+**Later (not today):** the
 approvals chat and customer texting (Quo approved 2026-10-21, ready to build); Plaud once it arrives.
 
 **Rules that hold the whole way:**
