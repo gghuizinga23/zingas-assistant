@@ -29,5 +29,9 @@ Later, when Gmail works: the same for 12 months of sent work email.
   (no names, phone numbers, emails, addresses, places or dollar amounts left).
 - Written, in the git-ignored `voice-work/` folder: `VOICE.md` (Gerrit's openers, sign-off, phrases,
   tone, and what Gerrit does in 10 situations) and `voice-examples.md` (45 examples, 18 situations).
-- Next: Gerrit reads both and says yes. Then I copy them to Val's computer
-  (`/root/Documents/ZingasVault/VOICE.md` and `voice-examples/`) and retire the Messages reader.
+- Gerrit said yes. Copied to Val's computer, root-only: `/root/Documents/ZingasVault/VOICE.md` and
+  `voice-examples/gerrit-texts.md` (fingerprints match this Mac's copies).
+- **The one-time reader is retired.** The script that read Messages is deleted. Nothing reads texts
+  on a timer (no scheduled tasks, no cron, no launch agents for it). Val never reads the personal cell.
+- Still on this Mac: the old dashboard's `promises.py` can read Messages if someone runs it by hand.
+  It doesn't run on its own.
