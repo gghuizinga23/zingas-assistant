@@ -63,6 +63,15 @@ Write column, and **Read All** is ticked at the start):
    Observability, and the "Legacy" rows).
 5. Click **Create**, copy the key, and save it in 1Password as COMPOSIO_VAL_KEY.
 
+**G1: making and saving the main key** (only this laptop's hidden box ever uses it):
+1. In Composio's API Keys page, click **Create API Key**. Name: **Main (setup only)**.
+2. Leave **Read All** ticked and also tick **Write All**. Click **Create** and copy the key.
+3. In the 1Password app, open the **Zingas Bridge** vault (left side).
+4. If there is a **Bridge Secrets** note, open it and click **Edit**. If there isn't one, click
+   **+ New Item**, then **Secure Note**, and name it **Bridge Secrets**.
+5. Click **+ add more**, then **Password**. Name the field **COMPOSIO_API_KEY** and paste the key as
+   its value. Click **Save**.
+
 Tech notes: sessions replace Composio's old `mcp.create` (deprecated). Allowed tools:
 GMAIL_FETCH_EMAILS, GMAIL_LIST_MESSAGES, GMAIL_LIST_THREADS, GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID,
 GMAIL_FETCH_MESSAGE_BY_THREAD_ID, GMAIL_CREATE_EMAIL_DRAFT, GMAIL_LIST_DRAFTS, GMAIL_GET_DRAFT,
