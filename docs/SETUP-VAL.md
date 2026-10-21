@@ -10,7 +10,7 @@ One part at a time. Gerrit says "done" after each; I do the rest.
 | 4 ✅ | Connect Val's Telegram chat | Gerrit | 5 min |
 | 5 ✅ (Assistant code) | Read-only 1Password "service account" for the **Zingas Assistant** vault only. Paste its code into the hidden box (`files/save-op-token.sh`), never into chat. The **Zingas Bridge** one waits until mail-bridge is set up, so no unused code sits on Val's computer | Gerrit | 10 min |
 | 6 ✅ | Turn on the healthchecks.io check-ins | Me, with Gerrit's link | 3 min |
-| 7 | Test: close the laptop and text Val | Gerrit | 2 min |
+| 7 ✅ | Test: close the laptop and text Val | Gerrit | 2 min |
 
 **Done 2026-10-21:** Orgo helper installed in ~/.orgo-cli (signed in as gghuizinga23@gmail.com).
 Val's files merged into the Orgo Hermes template with `files/install-on-orgo.py` (it keeps the template's
@@ -30,6 +30,9 @@ healthchecks.io: check "Val" (every 10 min, 10 min grace). Its link is HEALTHCHE
 Assistant Secrets, now the only field Val's 1Password list reads (add the rest as their keys arrive).
 `files/heartbeat.sh` runs under supervisord as `zingas-heartbeat`: pings while the gateway runs, reports
 a failure if it stops. First check-in 2026-10-21 13:54 UTC.
+Laptop-off test passed 2026-10-21: Gerrit closed the laptop, texted Val on Telegram, and she answered.
+
+**Still to do for part 5:** the second read-only code, for Zingas Bridge, when mail-bridge (Gmail) is set up.
 
 **Later (not today):** connect Gmail and Calendar through mail-bridge; the
 approvals chat and customer texting once Quo is approved; Plaud once it arrives.
