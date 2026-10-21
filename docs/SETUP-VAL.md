@@ -49,8 +49,7 @@ a new session or reach any other tool.
 | # | Part | Who | Time |
 |---|---|---|---|
 | G1 | In Composio (API Keys): save the **main** key in 1Password (**Zingas Bridge** vault, note **Bridge Secrets**, field **COMPOSIO_API_KEY**). Make a second key, **Val limited**, with only "Session tool execution: Write" (everything else None). Save it in **Zingas Assistant** vault, note **Assistant Secrets**, field **COMPOSIO_VAL_KEY**. Leave **Require API Key for MCP** ON. Never in chat | Gerrit | 10 min |
-| G2 | Connect your zingashome.com Gmail and Calendar to Composio: open the link I give you and sign in to Google. If Google blocks it, Delisa allows Composio in Google Admin | Gerrit (Delisa if blocked) | 5 min |
-| G3 | Paste the main key into a hidden box on this laptop. It makes the locked session (sandbox and raw-API access off) and sends only the session link to Val's computer. The main key is not saved anywhere | Gerrit pastes, I do the rest | 5 min |
+| G2+G3 | Run the hidden box `files/gmail-setup.sh` and paste the **main** key. A Google sign-in opens twice (Gmail, then Calendar): sign in with zingashome.com and click Allow. If Google blocks it, Delisa allows Composio in Google Admin. Then it makes the locked session (no workbench, no raw API, no new connections, narrow Google scopes) and sends only the session link to Val's computer. The main key is not saved anywhere | Gerrit pastes and signs in, I do the rest | 10 min |
 | G4 | Safety tests with Val's limited key: sending an email to you, deleting one, and making a new session must all be refused. If any works, we stop and use a helper on Vercel instead | Me | 10 min |
 | G5 | Turn it on for Val. Test: ask her on Telegram for your newest email and a draft reply. The draft shows in Gmail Drafts; nothing is sent | Gerrit | 3 min |
 
