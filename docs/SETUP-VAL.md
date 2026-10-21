@@ -54,6 +54,15 @@ a new session or reach any other tool.
 | G4 | Safety tests with Val's limited key: sending an email to you, deleting one, and making a new session must all be refused. If any works, we stop and use a helper on Vercel instead | Me | 10 min |
 | G5 | Turn it on for Val. Test: ask her on Telegram for your newest email and a draft reply. The draft shows in Gmail Drafts; nothing is sent | Gerrit | 3 min |
 
+**G1: making the "Val limited" key** (Composio's "Create API key" window has a Read column and a
+Write column, and **Read All** is ticked at the start):
+1. Name: **Val limited**.
+2. Untick **Read All**. Every box in the Read column clears.
+3. Tick only one box: **Session tool execution**, Write column.
+4. Scroll down to the end of the list and check that no other box is ticked (also Triggers, Webhooks,
+   Observability, and the "Legacy" rows).
+5. Click **Create**, copy the key, and save it in 1Password as COMPOSIO_VAL_KEY.
+
 Tech notes: sessions replace Composio's old `mcp.create` (deprecated). Allowed tools:
 GMAIL_FETCH_EMAILS, GMAIL_LIST_MESSAGES, GMAIL_LIST_THREADS, GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID,
 GMAIL_FETCH_MESSAGE_BY_THREAD_ID, GMAIL_CREATE_EMAIL_DRAFT, GMAIL_LIST_DRAFTS, GMAIL_GET_DRAFT,
