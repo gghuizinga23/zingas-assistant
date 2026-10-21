@@ -54,7 +54,7 @@ healthchecks.io ◄── ping every 10 min└───────────�
   - Real customer data never goes in git.
 - **New skills** under `files/skills/zingas/`: `voice`, `email-triage`, `followup-cadence`, `briefs`, `customer-memory`, `quo-texting`, `estimator-followups`, `truck-debrief`, `scheduling-handoff`.
 - **`mail-bridge/`** (small, same idea as quo-bridge): holds the Composio key and opens a Composio session limited to read mail, search mail, create draft and read calendar (`SESSION_PRESET_DIRECT_TOOLS` with an allowlist). Val reaches Gmail only through it.
-- **`quo-bridge/`** is modeled on Nick's `agentphone_bridge.py` (HMAC check, dedupe, ordering). It points at Quo's API and is the **only path to customers**. It enforces in code:
+- **`quo-bridge/`** is modeled on Nick's `agentphone_bridge.py` (HMAC check, dedupe, ordering). It points at Quo's API and is the **only path to customers**. **It runs on Vercel, not on Val's computer** (2026-10-21): Quo keys can't be limited and Val can read every file on her computer. Val holds only a drafts-only code, and a no-AI poller on her computer picks up new texts, so her computer stays closed to the internet. Its records live in a separate free Supabase project. It enforces in code:
   - approval required unless that category has earned auto-send, and then a 5-minute Stop countdown
   - the customer's own message is checked too: money, complaints, cancellations or "is this a real person?" always go to Gerrit
   - 8am–8pm in the customer's time zone

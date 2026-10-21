@@ -90,13 +90,45 @@ GOOGLECALENDAR_LIST_CALENDARS, GOOGLECALENDAR_FREE_BUSY_QUERY. Google has no dra
 (gmail.compose can send), so the lock must be Composio's. Hermes `tools: include` is not a lock
 (it runs on Val's computer). Check at G3 whether sessions expire.
 
-**Note for Quo later:** Quo's keys have the same problem (Val can read files on her computer).
-Solve it the same way, or with a helper off her computer, before customer texting starts.
+## Quo texting (chosen 2026-10-21)
 
-**Later (not today):** the
-approvals chat and customer texting (Quo approved 2026-10-21, ready to build); Plaud once it arrives.
+Customers text your Quo number. Val drafts each reply. **Only your tap sends a text.**
+**Why it's built this way:** a Quo key can do everything in your Quo account (Quo's own docs:
+"each key has full access to your workspace's API"; there are no limited keys). Val can read every
+file on her computer, so the key never goes there. It lives in a small helper, **quo-bridge**, on
+Vercel (Gerrit chose this 2026-10-21). Val gets a **drafts-only code**: she can hand the helper a
+draft and pick up new customer texts, nothing else. Even if someone stole that code, the worst it
+could do is put a draft in front of you.
+
+| # | Part | Who | Time |
+|---|---|---|---|
+| Q1 | Move Vercel to **Pro** ($20 a month). The free plan is for personal use and only runs timed jobs once a day; the helper needs one every minute. Vercel → your team (top left) → **Settings → Billing → Upgrade to Pro**. This also covers the Estimator, which is a business tool on the free plan today | Gerrit | 5 min |
+| Q2 | In Quo: (a) **Settings → Billing**: add API texting credits ($20 to start; about 1 cent a text). (b) **Workspace Settings → API → Generate API key**, name it `zingas-bridge`. Save it in 1Password, **Zingas Bridge** vault, note **Bridge Secrets**, field **QUO_API_KEY**. Never in chat | Gerrit | 10 min |
+| Q3 | Make the **approvals bot** in Telegram: open **@BotFather** → `/newbot` → name **Val Approvals** → a username ending in `bot`. Save its token in **Bridge Secrets** as **APPROVALS_BOT_TOKEN**. Then open the new bot and press **Start** | Gerrit | 5 min |
+| Q4 | Build quo-bridge (details below) and test it with fake texts on this laptop | Me | 1 to 2 days |
+| Q5 | Run a hidden box and paste the two keys. It puts them in Vercel's locked settings (never on Val's computer, and not saved on this laptop), connects Quo's "new text" alert to the helper, and gives Val her drafts-only code | Gerrit pastes, I do the rest | 10 min |
+| Q6 | Safety tests: Val's code can't send; a fake "text from Quo" is refused; a 9pm send waits until 8am; money words never send alone; a customer who texts STOP is never texted again | Me | 15 min |
+| Q7 | Real test: text the Quo number from your cell. Val's draft shows in **Val Approvals**. Tap **Approve**; the reply reaches your cell | Gerrit | 5 min |
+
+**What quo-bridge does** (Q4):
+- **New customer text:** Quo tells the helper; the helper checks it really came from Quo and saves it.
+  A small program on Val's computer (no AI, no keys) asks the helper every 30 seconds for new texts
+  and hands them to Val. Val's computer stays closed to the internet.
+- **Val's draft** goes to the helper with her drafts-only code, then shows in **Val Approvals** with
+  **Approve / Edit / Skip**. Only your Telegram account can press them.
+- **On Approve** the helper runs the same safety rules as `quo-bridge/send_gate.py` (same tests),
+  then sends through Quo. Every send is logged.
+- **Every minute:** sends approved texts that waited for 8am, texts your cell when a draft sits
+  10 minutes in work hours, marks drafts "missed" after 2 hours for the brief.
+- **Auto-send stays off** at the start. Each kind earns it later (20 approvals in a row, no edits).
+- Records go in a **new free Supabase project** just for Val's texts, not the dashboard's, so the
+  helper can't reach dashboard data.
+
+**Cost:** Vercel Pro $20 a month, Quo texts about 1 cent each, Supabase free.
+
+**Later (not today):** Plaud once it arrives.
 
 **Rules that hold the whole way:**
 - Nothing goes to GitHub or anywhere else; files go straight from this laptop to Val's computer.
 - No passwords or keys in chat.
-- Val can't send email or text customers yet.
+- Val can't send email. She can't text customers until Q7, and then only after your tap.
