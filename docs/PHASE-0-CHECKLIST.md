@@ -10,7 +10,7 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
 
 ## Start today (these take days or weeks)
 
-### 1. Quo business number and texting registration ⏳ (2026-10-21: all done, waiting on Quo's approval)
+### 1. Quo business number and texting registration ✅ (approved 2026-10-21)
 - **Why:** customers will text this number. The assistant reads and drafts for it.
 - **Do:**
   1. Sign up at quo.com with your zingashome.com email. Make it a company

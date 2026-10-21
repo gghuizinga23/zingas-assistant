@@ -38,7 +38,7 @@ Laptop-off test passed 2026-10-21: Gerrit closed the laptop, texted Val on Teleg
 **Still to do for part 5:** the second read-only code, for Zingas Bridge, when mail-bridge (Gmail) is set up.
 
 **Later (not today):** connect Gmail and Calendar through mail-bridge; the
-approvals chat and customer texting once Quo is approved; Plaud once it arrives.
+approvals chat and customer texting (Quo approved 2026-10-21, ready to build); Plaud once it arrives.
 
 **Rules that hold the whole way:**
 - Nothing goes to GitHub or anywhere else; files go straight from this laptop to Val's computer.
