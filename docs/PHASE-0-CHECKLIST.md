@@ -68,8 +68,21 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
 - **Done when:** both vaults and both notes exist.
 
 ### 5. Telegram
-- **Now:** install Telegram on your iPhone (free, App Store) and make an account
-  with your cell number.
+- **Now** (about 5 minutes, on the iPhone you carry every day):
+  1. App Store → search **Telegram Messenger** (by Telegram FZ-LLC) → Get. Free.
+  2. Open it → **Start Messaging**.
+  3. Phone number: your **personal cell, the number of this iPhone**. Not the new
+     Quo number: that one is for customers only, and it isn't set up yet.
+     Telegram only uses your number to sign you in. Val never reads your texts.
+  4. Type in the code Telegram sends.
+  5. First name **Gerrit**, last name **Huizinga**. A photo is optional.
+  6. Settings → Privacy and Security:
+     - **Phone Number** → "Who can see my phone number": **Nobody**.
+       "Who can find me by my number": **My Contacts**.
+     - **Two-Step Verification** → turn it on and make a password. Save it in
+       1Password, in your own main vault (called **Personal** or **Private**),
+       not the Zingas vaults. This stops
+       anyone from taking over the chat that approves customer texts.
 - **Later, after Orgo (step 6):**
   - **Val's chat:** the cloud computer shows a QR code. Scan it, tap "Create Bot".
     Nothing to copy.
