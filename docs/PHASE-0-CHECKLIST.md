@@ -68,8 +68,14 @@ text. Put it in 1Password (step 4). The assistant reads it from there.
 - **Done when:** both vaults and both notes exist.
 
 ### 5. Telegram
-- Install Telegram on your iPhone and make an account. That's all for now. The
-  assistant pairs with it later by QR code.
+- **Now:** install Telegram on your iPhone (free, App Store) and make an account
+  with your cell number.
+- **Later, after Orgo (step 6):**
+  - **Val's chat:** the cloud computer shows a QR code. Scan it, tap "Create Bot".
+    Nothing to copy.
+  - **Approvals chat** (the one with the Approve / Edit / Skip buttons): make a
+    second bot by messaging @BotFather in Telegram. Save the code it gives you in
+    1Password, in the **Zingas Bridge** vault, never in a chat.
 
 ### 6. Orgo (the always-on cloud computer)
 - Sign up at orgo.ai. Pick the **Hacker** plan.
