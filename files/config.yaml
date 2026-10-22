@@ -13,6 +13,13 @@ model:
   default: anthropic/claude-sonnet-5.5
   provider: nous
   base_url: https://inference-api.nousresearch.com/v1
+# Backup brain: when Nous fails (2026-10-22 8:45 AM, Nous gave HTTP 503 for
+# several minutes and Val stopped), Hermes switches to Orgo's own Anthropic
+# credits (ANTHROPIC_API_KEY/ANTHROPIC_BASE_URL, set by Orgo on Val's computer).
+# Same model, so Val writes the same way. Used only while Nous is down.
+fallback_model:
+  provider: anthropic
+  model: claude-sonnet-5-5
 # Voice bake-off: the Nous sign-in already covers Claude, GPT and Grok, so no
 # extra keys. Try each on the same 20 real situations before choosing the default.
 agent:
