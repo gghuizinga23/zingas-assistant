@@ -115,23 +115,20 @@ could do is put a draft in front of you.
 | Q2 | ✅ **Done (Gerrit, by 2026-10-21).** In Quo: (a) **Settings → Billing**: add API texting credits ($20 to start; about 1 cent a text). (b) **Workspace Settings → API → Generate API key**, name it `zingas-bridge`. Save it in 1Password, **Zingas Bridge** vault, note **Bridge Secrets**, field **QUO_API_KEY**. Never in chat | Gerrit | 10 min |
 | Q3 | ✅ **Done (Gerrit, by 2026-10-21).** Make the **approvals bot** in Telegram: open **@BotFather** → `/newbot` → name **Val Approvals** → a username ending in `bot`. Save its token in **Bridge Secrets** as **APPROVALS_BOT_TOKEN**. Then open the new bot and press **Start** | Gerrit | 5 min |
 | Q4 | ✅ **Done 2026-10-21.** quo-bridge and Val's pickup program are built. 109 tests pass with fake texts | Me | done |
-| Q5 | Run a hidden box and paste the two keys. It puts them in Vercel's locked settings (never on Val's computer, and not saved on this laptop), connects Quo's "new text" alert to the helper, and gives Val her drafts-only code | Gerrit pastes, I do the rest | 10 min |
-| Q6 | Safety tests: Val's code can't send; a fake "text from Quo" is refused; a 9pm send waits until 8am; money words never send alone; a customer who texts STOP is never texted again. (2 of the 10 live checks already pass on Val's computer: her drafting run reaches only a to-do tool, and an order hidden in a customer text only changes the draft) | Me | 15 min |
+| Q5 | ✅ **Done 2026-10-22.** quo-bridge is online at https://zingas-quo-bridge.vercel.app. Quo's text and call/voicemail alerts and **Val Approvals** are connected; 7 of 7 lock checks passed from outside; Val's pickup program is RUNNING with only the helper's address and her drafts-only code. Records are in the **Zingas Assistant** Supabase organization (project "gghuizinga23's Project", reused because the free plan allows 2 projects). Fixes on the way: the laptop reaches Quo through curl (its Python is too old for Quo's servers); Supabase goes through the Supabase app signed in on this laptop, not a token (Gerrit's choice); the box refuses a cell number that is the Quo number | Gerrit pasted, I did the rest | done |
+| Q6 | ✅ **Done 2026-10-22.** `files/quo-safety-check.sh` on Val's computer: 10 of 10 passed (Val's code can't run the timer or press Approve, a fake Quo alert and a wrong code are refused, a confirmation is blocked, no helper keys on Val's computer, her drafting run reaches only the to-do tool, an order hidden in a customer text only makes a draft). The rules (8am–8pm hold, money words, STOP, double taps) pass 95 of 95 quo-bridge tests | Me | done |
 | Q7 | Real test: text the Quo number from your cell. Val's draft shows in **Val Approvals**. Tap **Approve**; the reply reaches your cell | Gerrit | 5 min |
 
-**Q5 step by step (about 15 minutes, at your laptop):**
+**Q5 step by step (to run it again; safe, it reuses what's there):**
 1. **Vercel token (for this run only):** open https://vercel.com/account/tokens. Name `quo-setup`.
    Scope: your **Pro team** → **All Projects**. Expiration: **1 day**. **Create**, then copy it.
-2. **Supabase token (for this run only):** open https://supabase.com/dashboard/account/tokens →
-   **Generate new token**, name `quo-setup`, copy it.
-3. Tell me "ready". I open a hidden box. You paste, one at a time: the Quo key, the bot token
-   (both from 1Password, Zingas Bridge → Bridge Secrets), the Vercel token, the Supabase token.
-   Then type your cell number. Nothing shows while you paste, and nothing is saved on the laptop.
+2. Supabase needs no token: the box uses the Supabase app signed in on this laptop
+   (`supabase login` if it ever says it isn't signed in).
+3. Run `files/quo-setup.sh`. Paste, one at a time: the Quo key, the bot token (both from
+   1Password, Zingas Bridge → Bridge Secrets), the Vercel token. Then type your **personal** cell
+   (not the Quo number). Nothing shows while you paste, and nothing is saved on the laptop.
 4. If it asks, open **Val Approvals** in Telegram and send it the word `hi`.
-5. The box does the rest (about 5 minutes): a new free Supabase project, quo-bridge online on
-   Vercel, Quo's new-text alert and the bot connected, the locks checked from outside, and Val's
-   pickup program started. A "Val Approvals is connected" message lands in Telegram.
-6. Delete both tokens (same two pages). They're not needed again.
+5. Delete the Vercel token afterwards. It's not needed again.
 
 **What quo-bridge does** (Q4):
 - **New customer text:** Quo tells the helper; the helper checks it really came from Quo and saves it.
@@ -144,8 +141,8 @@ could do is put a draft in front of you.
 - **Every minute:** sends approved texts that waited for 8am, texts your cell when a draft sits
   10 minutes in work hours, marks drafts "missed" after 2 hours for the brief.
 - **Auto-send stays off** at the start. Each kind earns it later (20 approvals in a row, no edits).
-- Records go in a **new free Supabase project** just for Val's texts, not the dashboard's, so the
-  helper can't reach dashboard data.
+- Records go in a **separate Supabase organization (Zingas Assistant)** just for Val's texts, not the
+  dashboard's, so the helper can't reach dashboard data.
 
 **Cost:** Vercel Pro $20 a month, Quo texts about 1 cent each, Supabase free.
 

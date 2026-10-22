@@ -1,12 +1,13 @@
 """Zinga's Assistant: Quo part Q5. Puts quo-bridge online and connects everything.
 
-Run by files/quo-setup.sh on Gerrit's laptop. Four keys arrive on stdin (never
+Run by files/quo-setup.sh on Gerrit's laptop. Three keys arrive on stdin (never
 argv, never saved, never printed), then Gerrit's cell number:
   1. QUO_API_KEY            (1Password: Zingas Bridge > Bridge Secrets)
   2. APPROVALS_BOT_TOKEN    (same note)
   3. a Vercel token         (made for this run; delete it after)
-  4. a Supabase token       (made for this run; delete it after)
-  5. Gerrit's cell          (for the 10-minute "a text is waiting" alert)
+  4. Gerrit's cell          (for the 10-minute "a text is waiting" alert)
+Supabase uses the Supabase app already signed in on this laptop, not a token
+(Gerrit's choice, 2026-10-22).
 
 What it does, in order (safe to run again; it reuses what's already there):
   - checks the Quo key and finds the business number's id
@@ -28,8 +29,10 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -171,59 +174,96 @@ def approver_id(tg):
 
 # ---------------------------------------------------------------- Supabase
 
-def supabase(token):
-    api = "https://api.supabase.com/v1"
-    hdr = {"Authorization": "Bearer " + token}
-    st, projects = http("GET", api + "/projects", headers=hdr)
-    if st != 200:
-        raise Stop(f"Supabase didn't accept the token (HTTP {st}).")
+SUPABASE_CLI = shutil.which("supabase") or "/opt/homebrew/bin/supabase"
+VAL_TABLES = {"messages", "drafts", "calls", "contacts", "auto_send_stats", "events"}
+
+
+def sb(*args, raw=False, timeout=180):
+    """Run the Supabase app that is signed in on this laptop. Gerrit chose this
+    (2026-10-22) over pasting a Supabase token. Its output is never printed."""
+    try:
+        r = subprocess.run([SUPABASE_CLI, *args, "--agent", "no"] + ([] if raw else ["-o", "json"]),
+                           capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
+    except FileNotFoundError:
+        raise Stop("The Supabase app isn't on this laptop (brew install supabase/tap/supabase). Tell Claude.")
+    except subprocess.TimeoutExpired:
+        raise Stop(f"The Supabase app didn't answer in time ({args[0]} {args[1] if len(args) > 1 else ''}). Run this again.")
+    if r.returncode != 0:
+        err = [ln.strip() for ln in re.sub(r"\x1b\[[0-9;]*m", "", r.stderr or "").splitlines()
+               if ln.strip() and not ln.startswith("Try rerunning")][-1:] or ["no message"]
+        if "login" in err[0].lower() or "access token" in err[0].lower():
+            raise Stop("The Supabase app on this laptop isn't signed in. Run: supabase login   then run this again.")
+        raise Stop(f"The Supabase app refused '{' '.join(args[:2])}': {err[0][:200]}")
+    if raw:
+        return r.stdout
+    out = r.stdout
+    start = min([i for i in (out.find("["), out.find("{")) if i >= 0], default=-1)
+    try:
+        return json.loads(out[start:]) if start >= 0 else []
+    except ValueError:
+        raise Stop(f"The Supabase app gave an answer I couldn't read ('{' '.join(args[:2])}'). Tell Claude.")
+
+
+def supabase():
+    projects = sb("projects", "list")
     proj = next((p for p in projects if p.get("name") == NAME), None)
     if not proj:
-        st, orgs = http("GET", api + "/organizations", headers=hdr)
-        if st != 200 or not isinstance(orgs, list):
-            orgs = []
-        # No organization of your own (you may only see projects someone else shared) means
-        # no new project can be made. Val's texts get their own free organization, apart from
-        # the dashboard's.
+        orgs = sb("orgs", "list")
         if not orgs:
-            raise Stop(f"Your Supabase account has no organization of its own (HTTP {st}, "
-                       f"{len(projects)} shared projects seen).\n"
-                       "Make one: https://supabase.com/dashboard/organizations → New organization, name it Zingas, Free plan.\n"
-                       "Then run this again with the same token.")
-        org = orgs[0]
-        if len(orgs) > 1:
-            for i, o in enumerate(orgs, 1):
-                say(f"  {i}. {o.get('name')}")
-            org = orgs[int(ask("Which Supabase organization? Type its number: ")) - 1]
-        say(f"Making a free Supabase project {NAME} (takes about 2 minutes)...")
-        st, proj = http("POST", api + "/projects", {
-            "name": NAME, "organization_slug": org["slug"], "db_pass": secrets.token_urlsafe(24),
-            "region_selection": {"type": "specific", "code": "us-east-2"}}, headers=hdr)
-        if st not in (200, 201):
-            msg = proj.get("message") or proj.get("raw") or ""
-            raise Stop(f"Supabase couldn't make the project in {org.get('name')} (HTTP {st}): {msg}\n"
-                       "HTTP 403 means you aren't an owner or admin there; make your own organization "
-                       "(https://supabase.com/dashboard/organizations → New organization, Free plan). Other errors: the "
-                       "free plan allows 2 active projects. Tell Claude either way.")
-    ref = proj["ref"]
+            raise Stop("The Supabase app shows no organization. Tell Claude.")
+        # Val's texts live in their own organization, apart from the dashboard's.
+        org = next((o for o in orgs if o.get("name") == "Zingas Assistant"), None)
+        if not org:
+            if len(orgs) == 1:
+                org = orgs[0]
+            else:
+                for i, o in enumerate(orgs, 1):
+                    say(f"  {i}. {o.get('name')}")
+                org = orgs[int(ask("Which Supabase organization is for Val's texts? Type its number: ")) - 1]
+        # The free plan allows 2 active projects per owner, so reuse a project already in
+        # Val's organization (Supabase made one when the organization was made). Its tables
+        # are checked below before anything is added.
+        in_org = [p for p in projects if p.get("organization_id") == org["id"]]
+        if in_org:
+            proj = in_org[0]
+            if len(in_org) > 1:
+                for i, p in enumerate(in_org, 1):
+                    say(f"  {i}. {p.get('name')}")
+                proj = in_org[int(ask("Which Supabase project is for Val's texts? Type its number: ")) - 1]
+            say(f"Using the Supabase project '{proj.get('name')}' in {org.get('name')}.")
+        else:
+            say(f"Making a free Supabase project {NAME} in {org.get('name')} (takes about 2 minutes)...")
+            sb("projects", "create", NAME, "--org-id", org["id"], "--region", "us-east-2",
+               "--db-password", secrets.token_urlsafe(24), raw=True)
+            proj = next((p for p in sb("projects", "list") if p.get("name") == NAME), None)
+            if not proj:
+                raise Stop("Supabase said it made the project, but it isn't in the list. Run this again in a minute.")
+    ref = proj.get("ref") or proj["id"]
     for _ in range(80):
-        st, p = http("GET", f"{api}/projects/{ref}", headers=hdr)
+        p = next((p for p in sb("projects", "list") if (p.get("ref") or p.get("id")) == ref), {})
         if p.get("status") == "ACTIVE_HEALTHY":
             break
         time.sleep(6)
     else:
         raise Stop("The Supabase project didn't finish starting. Run this again in a few minutes.")
-    with open(os.path.join(BRIDGE_DIR, "schema.sql")) as fh:
-        schema = fh.read()
-    st, out = http("POST", f"{api}/projects/{ref}/database/query", {"query": schema}, headers=hdr, timeout=120)
-    if st not in (200, 201):
-        raise Stop(f"Couldn't make the tables (HTTP {st}).")
-    st, keys = http("GET", f"{api}/projects/{ref}/api-keys?reveal=true", headers=hdr)
+    work = tempfile.mkdtemp(prefix="zingas-sb-")
+    try:
+        sb("link", "--project-ref", ref, "--workdir", work, raw=True)
+        have = sb("db", "query", "--linked", "--workdir", work,
+                  "select table_name from information_schema.tables where table_schema = 'public'")
+        other = sorted({t.get("table_name") for t in have} - VAL_TABLES)
+        if other:
+            raise Stop(f"That Supabase project already has other tables ({', '.join(other[:5])}). "
+                       "Nothing was added. Tell Claude.")
+        sb("db", "query", "--linked", "--workdir", work, "-f", os.path.join(BRIDGE_DIR, "schema.sql"), timeout=300)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+    keys = sb("projects", "api-keys", "--project-ref", ref, "--reveal")
     key = next((k["api_key"] for k in keys if k.get("type") == "secret" and k.get("api_key")), None) \
         or next((k["api_key"] for k in keys if k.get("name") == "service_role" and k.get("api_key")), None)
     if not key:
         raise Stop("Couldn't read the Supabase server key.")
-    say(f"Supabase project ready, tables made: messages, drafts, contacts, auto_send_stats, events")
+    say("Supabase project ready, tables made: messages, drafts, calls, contacts, auto_send_stats, events")
     return f"https://{ref}.supabase.co", key
 
 
@@ -338,10 +378,10 @@ def setup_val(url, val_token):
 
 def main():
     lines = sys.stdin.read().splitlines()
-    if len(lines) < 5 or not all(x.strip() for x in lines[:4]):
+    if len(lines) < 4 or not all(x.strip() for x in lines[:3]):
         raise Stop("Not everything was pasted. Nothing was changed.")
-    quo_key, bot_token, vercel_token, supabase_token = (x.strip() for x in lines[:4])
-    cell = us_phone(lines[4])
+    quo_key, bot_token, vercel_token = (x.strip() for x in lines[:3])
+    cell = us_phone(lines[3])
     if not cell:
         raise Stop("That cell number doesn't look like a US number. Nothing was changed.")
 
@@ -350,7 +390,7 @@ def main():
     tg = TelegramClient(bot_token)
     gerrit_tg = approver_id(tg)
     vercel = Vercel(vercel_token)
-    sb_url, sb_key = supabase(supabase_token)
+    sb_url, sb_key = supabase()
 
     val_token = secrets.token_urlsafe(32)
     cron = secrets.token_urlsafe(32)

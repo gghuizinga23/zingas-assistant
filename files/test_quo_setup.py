@@ -20,7 +20,7 @@ BRIDGE = "https://zingas-quo-bridge.vercel.app"
 
 
 class World:
-    def __init__(self, lock_ok=True, existing_supabase=False):
+    def __init__(self, lock_ok=True, existing_supabase=False, spare_project=False, foreign_tables=False):
         self.env = {}
         self.deploys = 0
         self.calls = []
@@ -31,6 +31,45 @@ class World:
         self.webhooks = [{"id": "WHold", "url": BRIDGE + "/api/quo", "label": "zingas-bridge"}]
         self.hooks_made = []
         self.deleted = []
+        self.sb_made = False
+        self.spare_project = spare_project      # Supabase's own starter project in Val's organization
+        self.foreign_tables = foreign_tables
+        self.schema_run = False
+
+    def sb(self, *args, raw=False, timeout=180):
+        """Stand-in for the Supabase app signed in on Gerrit's laptop."""
+        self.calls.append(("sb",) + args[:2])
+        if args[:2] == ("projects", "list"):
+            have = self.existing_supabase or self.sb_made
+            return [{"name": "Zingas-Sales-Dashboard", "ref": "dash", "organization_id": "dashorg",
+                     "status": "ACTIVE_HEALTHY"}] + \
+                ([{"name": "zingas-quo-bridge", "ref": "abc", "organization_id": "o2", "status": "ACTIVE_HEALTHY"}]
+                 if have else []) + \
+                ([{"name": "gghuizinga23's Project", "ref": "abc", "organization_id": "o2", "status": "ACTIVE_HEALTHY"}]
+                 if self.spare_project else [])
+        if args[:2] == ("orgs", "list"):
+            return [{"id": "dashorg", "name": "Zinga's"}, {"id": "o2", "name": "Zingas Assistant"}]
+        if args[:2] == ("projects", "create"):
+            a = list(args)
+            assert a[a.index("--org-id") + 1] == "o2" and a[a.index("--region") + 1] == "us-east-2"
+            self.sb_made = True
+            return ""
+        if args[0] == "link":
+            assert args[args.index("--project-ref") + 1] == "abc"
+            return ""
+        if args[:2] == ("db", "query"):
+            assert args[args.index("--workdir") - 1] == "--linked"
+            if "-f" not in args:   # the "what tables are already there" check
+                return [{"table_name": "drafts"}] + ([{"table_name": "invoices"}] if self.foreign_tables else [])
+            with open(args[args.index("-f") + 1]) as fh:
+                assert "create table if not exists drafts" in fh.read()
+            self.schema_run = True
+            return []
+        if args[:2] == ("projects", "api-keys"):
+            assert "--reveal" in args and args[args.index("--project-ref") + 1] == "abc"
+            return [{"name": "anon", "type": "legacy", "api_key": "legacy_anon"},
+                    {"name": "default", "type": "secret", "api_key": "sb_secret_x"}]
+        raise AssertionError(args)
 
     def http(self, method, url, body=None, headers=None, timeout=60):
         self.calls.append((method, url.split("?")[0]))
@@ -130,9 +169,10 @@ class World:
                                               f"{self.env['VAL_DRAFT_TOKEN']}\n")
 
     def run(self):
-        stdin = io.StringIO("quo-key\nbot-token\nvercel-token\nsupabase-token\n(317) 555-0999\n")
+        stdin = io.StringIO("quo-key\nbot-token\nvercel-token\n(317) 555-0999\n")
         out = io.StringIO()
         with mock.patch.object(quo_setup, "http", self.http), \
+                mock.patch.object(quo_setup, "sb", self.sb), \
                 mock.patch.object(quo_setup, "QuoClient", self.quo), \
                 mock.patch.object(quo_setup, "TelegramClient", self.telegram), \
                 mock.patch.object(quo_setup, "ask", lambda prompt: "y"), \
@@ -174,11 +214,11 @@ class Q5(unittest.TestCase):
         self.assertIn(w.env["VAL_DRAFT_TOKEN"], s)
         self.assertIn(BRIDGE, s)
         for secret in ("quo-key", "bot-token", "sb_secret_x", "whsec_abc", "whsec_calls", w.env["CRON_SECRET"],
-                       w.env["APPROVALS_WEBHOOK_SECRET"], "vercel-token", "supabase-token"):
+                       w.env["APPROVALS_WEBHOOK_SECRET"], "vercel-token"):
             self.assertNotIn(secret, s)
         # nothing secret is printed on screen
         for secret in ("quo-key", "bot-token", "sb_secret_x", "whsec_abc", "whsec_calls", w.env["VAL_DRAFT_TOKEN"],
-                       w.env["CRON_SECRET"], "vercel-token", "supabase-token"):
+                       w.env["CRON_SECRET"], "vercel-token"):
             self.assertNotIn(secret, w.output)
         self.assertIn("RUNNING", w.output)
 
@@ -190,11 +230,26 @@ class Q5(unittest.TestCase):
     def test_reuses_existing_supabase_project(self):
         w = World(existing_supabase=True).run()
         self.assertIsNone(w.error, w.output)
-        self.assertNotIn(("POST", "https://api.supabase.com/v1/projects"), w.calls)
+        self.assertNotIn(("sb", "projects", "create"), w.calls)
+
+    def test_reuses_spare_project_in_vals_organization(self):
+        # the free plan allows 2 projects; Supabase's starter project in Zingas Assistant is used
+        w = World(spare_project=True).run()
+        self.assertIsNone(w.error, w.output)
+        self.assertNotIn(("sb", "projects", "create"), w.calls)
+        self.assertTrue(w.schema_run)
+        self.assertIn("Using the Supabase project 'gghuizinga23's Project' in Zingas Assistant", w.output)
+        self.assertEqual(w.env["SUPABASE_URL"], "https://abc.supabase.co")
+
+    def test_project_with_other_tables_is_left_alone(self):
+        w = World(spare_project=True, foreign_tables=True).run()
+        self.assertIn("already has other tables (invoices)", w.error)
+        self.assertFalse(w.schema_run)
+        self.assertIsNone(w.val_script)
 
     def test_bad_cell_number_changes_nothing(self):
         w = World()
-        stdin = io.StringIO("a\nb\nc\nd\n12345\n")
+        stdin = io.StringIO("a\nb\nc\n12345\n")
         with mock.patch.object(quo_setup, "http", w.http), mock.patch.object(sys, "stdin", stdin):
             with self.assertRaises(quo_setup.Stop):
                 quo_setup.main()
