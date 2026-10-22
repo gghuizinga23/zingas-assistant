@@ -38,8 +38,37 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 BRIDGE_DIR = os.path.join(HERE, "..", "quo-bridge")
 sys.path.insert(0, BRIDGE_DIR)
-from clients import QuoClient, QuoError, TelegramClient, TelegramError  # noqa: E402
+import clients  # noqa: E402
+from clients import QuoError, TelegramClient, TelegramError  # noqa: E402
 from bridge import CALL_EVENTS  # noqa: E402
+
+
+class QuoClient(clients.QuoClient):
+    """Same as the helper's QuoClient, but talks to Quo through curl.
+
+    The Mac's built-in Python 3.9 has LibreSSL 2.8.3 with no TLS 1.3, and Quo's API
+    refuses it (TLSV1_ALERT_PROTOCOL_VERSION). The Mac's curl connects fine. The key
+    goes to curl on stdin as a config line, never on the command line."""
+
+    def _call(self, method, path, body=None, versioned=True):
+        cfg = ['header = "Authorization: %s"' % self.api_key.replace("\\", "\\\\").replace('"', '\\"'),
+               'header = "Accept: application/json"']
+        if versioned:
+            cfg.append('header = "Quo-Api-Version: %s"' % clients.QUO_API_VERSION)
+        if body is not None:
+            data = json.dumps(body).replace("\\", "\\\\").replace('"', '\\"')
+            cfg += ['header = "Content-Type: application/json"', 'data-binary = "%s"' % data]
+        out = subprocess.run(
+            ["curl", "-sS", "-X", method, "--max-time", str(int(self.timeout)), "-K", "-",
+             "-w", "\n%{http_code}", clients.QUO_API + path],
+            input="\n".join(cfg) + "\n", capture_output=True, text=True)
+        raw, _, status = out.stdout.rpartition("\n")
+        if out.returncode != 0 or not status.isdigit() or status == "000":
+            raise QuoError("No answer from Quo (curl).", unknown=True)
+        if int(status) >= 400:
+            code = int(status)
+            raise QuoError(clients._QUO_REASONS.get(code, f"Quo error {code}."), status=code)
+        return json.loads(raw) if raw.strip() else {}
 
 ORGO = sys.argv[1] if len(sys.argv) > 1 else "orgo"
 COMPUTER = sys.argv[2] if len(sys.argv) > 2 else "Hermes Agent"
@@ -95,7 +124,7 @@ def us_phone(value):
 
 # ---------------------------------------------------------------- Quo + Telegram
 
-def quo_number(quo):
+def quo_number(quo, cell=None):
     try:
         numbers = quo.list_numbers()
     except QuoError as e:
@@ -109,6 +138,9 @@ def quo_number(quo):
             say(f"  {i}. {n.get('phoneNumber')} {n.get('name') or ''}")
         n = numbers[int(ask("Which one is the business number customers text? Type its number: ")) - 1]
     say(f"Quo business number: {n.get('phoneNumber')}")
+    if cell and us_phone(n.get("phoneNumber")) == cell:
+        raise Stop("That cell number is the Quo business number. The 'a text is waiting' alert goes from\n"
+                   "the Quo number to your own cell, so type your personal cell. Nothing was changed.")
     return n["id"]
 
 
@@ -148,8 +180,16 @@ def supabase(token):
     proj = next((p for p in projects if p.get("name") == NAME), None)
     if not proj:
         st, orgs = http("GET", api + "/organizations", headers=hdr)
-        if st != 200 or not orgs:
-            raise Stop("Supabase shows no organization on this account.")
+        if st != 200 or not isinstance(orgs, list):
+            orgs = []
+        # No organization of your own (you may only see projects someone else shared) means
+        # no new project can be made. Val's texts get their own free organization, apart from
+        # the dashboard's.
+        if not orgs:
+            raise Stop(f"Your Supabase account has no organization of its own (HTTP {st}, "
+                       f"{len(projects)} shared projects seen).\n"
+                       "Make one: https://supabase.com/dashboard/organizations → New organization, name it Zingas, Free plan.\n"
+                       "Then run this again with the same token.")
         org = orgs[0]
         if len(orgs) > 1:
             for i, o in enumerate(orgs, 1):
@@ -161,8 +201,10 @@ def supabase(token):
             "region_selection": {"type": "specific", "code": "us-east-2"}}, headers=hdr)
         if st not in (200, 201):
             msg = proj.get("message") or proj.get("raw") or ""
-            raise Stop(f"Supabase couldn't make the project (HTTP {st}): {msg}\n"
-                       "The free plan allows 2 active projects. If that's the problem, tell Claude.")
+            raise Stop(f"Supabase couldn't make the project in {org.get('name')} (HTTP {st}): {msg}\n"
+                       "HTTP 403 means you aren't an owner or admin there; make your own organization "
+                       "(https://supabase.com/dashboard/organizations → New organization, Free plan). Other errors: the "
+                       "free plan allows 2 active projects. Tell Claude either way.")
     ref = proj["ref"]
     for _ in range(80):
         st, p = http("GET", f"{api}/projects/{ref}", headers=hdr)
@@ -304,7 +346,7 @@ def main():
         raise Stop("That cell number doesn't look like a US number. Nothing was changed.")
 
     quo_probe = QuoClient(quo_key, "")
-    number_id = quo_number(quo_probe)
+    number_id = quo_number(quo_probe, cell)
     tg = TelegramClient(bot_token)
     gerrit_tg = approver_id(tg)
     vercel = Vercel(vercel_token)
