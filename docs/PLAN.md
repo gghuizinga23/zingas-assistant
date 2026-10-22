@@ -69,7 +69,7 @@ healthchecks.io ◄── ping every 10 min└───────────�
 
 ## Key pieces
 
-**Identity resolution** (in `customer-memory`)
+**Identity resolution** (in `customer-memory`; grows into F1, "Know the customer before every reply")
 - Everything is keyed on the Salesforce Prospect ID (the dashboard already uses `prospectId`).
 - The resolver tries the phone in E.164 format first, then email, then a Salesforce lookup.
 - **No match:** create a stub, ask Gerrit in Telegram "new lead?", and flag it in the evening brief.
@@ -151,6 +151,25 @@ healthchecks.io ◄── ping every 10 min└───────────�
 | 4 | Truck debrief + Plaud memory (Salesforce write on hold) (consent already collected up front at every appointment, as with Rilla) | Review the first 10 debrief notes | A follow-up uses a recording detail; the note is ready to paste (or shows in Salesforce once write access is on) |
 | 5 | Team rollout 1 → 5 → 15: one Orgo computer per rep from the template, per-rep voice, Quo numbers, a manager view | Pick the first 4 reps | 5 reps live |
 | 6 | Dashboard merge: an "Assistant" tab inside `PageShell` using `src/components/ui.tsx` | None | It appears in the dashboard |
+
+## New features (added 2026-10-22, in build order)
+From Gerrit's answers. The details are in `docs/FEATURE-IDEAS.md`. **Not started.** They come after the
+open work in Phases 1–3: Calendar, the nightly backup and the live tests in Verification. Every customer
+text still waits for Gerrit's tap.
+
+| Order | Feature | Why this spot | Waits on |
+|---|---|---|---|
+| F1 | **Know the customer before every reply:** a text from any number starts a lookup: Val's memory notes, then Salesforce data (appointments, products, results, quotes), the Estimator (proposals, views, questions), Gmail threads, the Gmail **Completed** label and the full Quo text history. Val builds a one-page customer brief (who they are, who decides, every appointment, what was quoted and what happened, sold / open / installed / lost, every past message, what Gerrit promised), decides where they are in the sale, and drafts the way Gerrit would from that stage. The Approve card shows two lines on who this is above the draft. Several matches: Gerrit picks. No match: new-lead stub and "new lead?" as today | Every other feature drafts better with it, and today Val only checks her own notes (1 customer note so far) | A narrow, read-only **customer lookup** that returns one customer's records for one phone number (Val never holds the dashboard's or Salesforce's full key); Estimator Phase 1.5 for proposals; Calendar for upcoming visits |
+| F2 | **Missed-call text-back:** a missed call or voicemail on the Quo number becomes a "Sorry I missed you" draft with a call-back time from the calendar | Smallest; quo-bridge already gets Quo's call alerts. A missed call is a lead lost today | Calendar (for the call-back time; without it Val asks Gerrit) |
+| F3 | **End-of-day wrap-up:** 5:30 PM card per appointment, Sold / Thinking / Lost + one line, which becomes the note to paste, the follow-up date and the follow-up plan | Biggest time saving (evening admin). F8, F9 and F10 use its notes (who is still open, which products) | Nothing |
+| F4 | **After-install program:** from the Gmail label **Completed**: day-3 problem catcher, then a Google review ask (happy customers only), a referral ask, and a 6–12 month "other rooms" check-in | The sale stage Gerrit picked. Brings reviews and new leads at no cost | Zinga's Google review link; referral reward (if any) |
+| F5 | **Neighbor effect:** when a project lands under **Completed**, Val flags open quotes on the same street or in the same neighborhood and drafts a "we just finished a project near you" touch. It never names the neighbor or gives their address | Reuses F4's install list, and a fresh install near an open quote is a strong reason to reach out | F4; the addresses of open quotes (Salesforce exports) |
+| F6 | **Price and competitor answers:** drafts use Gerrit's own value points when a customer brings up a competitor or price. Never a price | Small; makes every other draft stronger | Gerrit's 3–5 best answers |
+| F7 | **Monday numbers:** Sales Dashboard metrics in the Monday brief (Revenue against goal, Sold, Close rate, Average sale, Demos/Appts, Revenue per lead, Cancel rate) plus open quotes. No commission | Needs a safe way to read dashboard data, so it goes after the quick wins | A read-only view of the dashboard numbers (never the dashboard's full key) |
+| F8 | **Quiet-quote rescue + hot-lead alerts:** follow-ups with a reason in each touch, a final "Should I close your file?", and "she opened the proposal 3 times, call now" | Hot-lead alerts need the Estimator's events | Phase 1.5 (Estimator) |
+| F9 | **Weather nudge:** the first hot week of the year brings open outdoor-shade, screen and pergola quotes back with a timely touch in each customer's own area | A kind of quiet-quote follow-up, so it plugs into F8. The first hot week is in spring, so it must be ready by about April 2027 | F8 (or F3's open-quote list); a free weather forecast feed |
+| F10 | **Spouse pack:** a short summary for the decision maker who missed the visit | A typed-line version works after F3; the full version needs the recording | F3; Plaud (Phase 4) for the full version |
+| F11 | **Coaching from recordings:** objections and answers per visit, and monthly win/loss patterns. Gerrit only | Needs weeks of recordings to show patterns | Plaud (Phase 4) |
 
 ## Rough monthly cost
 | | 1 rep | 5 reps | 15 reps |
