@@ -20,7 +20,7 @@ Every customer is keyed on their **Salesforce Prospect ID**. Try in this order:
 **More than one match:** ask Gerrit in Telegram which one, showing name, address and appointment date for each.
 **No match:**
 - Create a stub note marked `unmatched` with what you know.
-- Ask Gerrit in Telegram: "New number texted the business line: [first message]. New lead, or someone you know?"
+- Ask Gerrit in Telegram: "A new number sent a text to the business line: [first message]. Is this person a new lead or a person that you know?"
 - Flag it in the evening brief.
 - **No cadence, no memory updates and no drafts beyond a reply Gerrit asks for** until it is matched.
 

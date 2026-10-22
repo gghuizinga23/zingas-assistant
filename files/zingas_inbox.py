@@ -261,14 +261,15 @@ class Inbox:
                     continue
                 # never lose an email: a plain task Gerrit can sort out
                 r = {"action": "add", "task": "Read this email: " + (t["subject"] or "(no subject)")[:120],
-                     "priority": "today", "due": "", "why": "I couldn't judge this one.", "who": t["from"],
+                     "priority": "today", "due": "", "why": "I could not make a decision about this email.", "who": t["from"],
                      "update_number": 0, "emergency": False}
             tries.pop(t["id"], None)
             st.setdefault("seen", []).append(t["id"])
             before = {i["n"] for i in self.todo.open_items()}
             item = zt.apply_judgement(self.todo, {"from": name_of(t["from"])}, r, "email",
                                       ref="gmail:" + str(m.get("threadId") or ""),
-                                      link=str(m.get("display_url") or ""))
+                                      link=str(m.get("display_url") or ""),
+                                      received=m.get("messageTimestamp"))
             if not item:
                 done["skipped"] += 1
                 continue

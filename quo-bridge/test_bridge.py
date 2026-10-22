@@ -261,7 +261,7 @@ class Flow(unittest.TestCase):
         r.tap("a", d["id"])
         self.assertEqual(r.quo.sent, [(CUSTOMER, "Hi! Thursday at 2 works great. 🙂")])
         self.assertEqual(r.status(d["id"]), "sent")
-        self.assertIn("Already handled", r.tg.answers[-1])
+        self.assertIn("already did an action", r.tg.answers[-1])
         self.assertIn("✅ Sent", r.tg.edits[-1]["text"])
         # Val hears how it went, once.
         out = r.val("GET", "/api/val/updates")[1]["outcomes"]
@@ -416,7 +416,7 @@ class Safety(unittest.TestCase):
         _, d = r.draft()
         r.tap("a", d["id"])
         self.assertEqual(r.status(d["id"]), "pending")
-        self.assertIn("Didn't send", r.tg.edits[-1]["text"])
+        self.assertIn("did not send", r.tg.edits[-1]["text"])
 
     def test_no_answer_from_quo_says_check_before_retrying(self):
         r = Rig()
@@ -481,7 +481,7 @@ class Escalation(unittest.TestCase):
         r.clock.t += timedelta(minutes=1)
         r.tick()
         r.tick()
-        self.assertEqual(r.quo.sent, [(GERRIT_CELL, "Val: 2 customer texts are waiting for your OK in Val Approvals.")])
+        self.assertEqual(r.quo.sent, [(GERRIT_CELL, "Val: 2 customer texts need your approval in Val Approvals.")])
 
     def test_after_2_hours_it_is_missed(self):
         r = Rig()

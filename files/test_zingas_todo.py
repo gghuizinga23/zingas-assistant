@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest import mock
 from datetime import date, datetime
 
 import zingas_todo as zt
@@ -64,6 +65,7 @@ class ListTests(unittest.TestCase):
 
     def test_lines_and_brief(self):
         item = self.todo.add("Call back", who="Pat Lee", source="voicemail", due="2026-10-22")
+        item["reply_by"] = ""   # the 24-hour clock has its own tests below
         self.assertEqual(zt.line(item, today=date(2026, 10, 22)), "🟠 1. Pat Lee: Call back (voicemail, due today)")
         since = zt.stamp()
         self.todo.add("Order samples", priority="week", source="gerrit")
@@ -71,6 +73,55 @@ class ListTests(unittest.TestCase):
         self.assertTrue(brief.startswith("To-do list: 2 open (1 today)"))
         self.assertIn("This week:\n🟡 2. Order samples 🆕", brief)
         self.assertIn("✅ Your to-do list is empty.", zt.render_list([]))
+
+
+class TwentyFourHourRule(unittest.TestCase):
+    """Gerrit's hard rule: every email, text, call and voicemail is answered within 24 hours."""
+
+    def setUp(self):
+        self.todo = zt.TodoList(tempfile.mkdtemp())
+
+    def test_message_tasks_get_a_deadline_24_hours_after_they_came_in(self):
+        item = self.todo.add("Answer shade question", source="text", received="2026-10-20T14:05:00-04:00")
+        self.assertEqual(item["reply_by"], "2026-10-21T18:05:00+00:00")
+        self.assertEqual(self.todo.add("Order samples", source="gerrit")["reply_by"], "")
+
+    def test_gmail_and_quo_times_both_work(self):
+        self.assertEqual(zt.when("1760983500000"), zt.when("2025-10-20T18:05:00Z"))
+        self.assertEqual(zt.when("2025-10-20T18:05:00Z"), zt.when(1760983500))
+        self.assertIsNone(zt.when("not a time"))
+
+    def test_a_message_never_sits_lower_than_today(self):
+        item = self.todo.add("Send the brochure", priority="later", source="email")
+        self.assertEqual(item["priority"], "today")
+        self.assertEqual(self.todo.update(item["n"], priority="week")["priority"], "today")
+        self.assertEqual(self.todo.add("Read the catalog", priority="later", source="gerrit")["priority"], "later")
+        self.assertEqual(self.todo.add("Fix the install", priority="now", source="voicemail")["priority"], "now")
+
+    def test_late_ones_say_so_and_are_counted(self):
+        old = self.todo.add("Answer about shutters", who="Amy Cole", source="email",
+                            received="2026-09-25T09:00:00-04:00")
+        self.assertTrue(zt.late(old))
+        self.assertEqual(zt.line(old), "🟠 1. Amy Cole: Answer about shutters (email, ⚠️ past 24 hours)")
+        fresh = self.todo.add("Answer about blinds", source="text")
+        self.assertFalse(zt.late(fresh))
+        self.assertIn("reply by", zt.line(fresh))
+        self.assertTrue(zt.render_brief(self.todo).startswith("To-do list: 2 open (2 today, 1 past 24 hours)"))
+
+    def test_oldest_unanswered_message_comes_first(self):
+        self.todo.add("Newer", source="text", received="2026-10-15T10:00:00-04:00")
+        self.todo.add("Office ask", source="gerrit")
+        self.todo.add("Older", source="email", received="2026-10-01T10:00:00-04:00")
+        self.assertEqual([i["task"] for i in self.todo.open_items()], ["Older", "Newer", "Office ask"])
+
+    def test_cli_backlog_add(self):
+        folder = self.todo.folder.rsplit("/todo", 1)[0]
+        real = zt.TodoList
+        with mock.patch.object(zt, "TodoList", lambda: real(folder)), mock.patch("sys.stdout"):
+            self.assertEqual(zt.main(["add", "Answer about shutters", "--source", "email", "--who", "Amy",
+                                      "--ref", "gmail:abc", "--received", "2026-10-01T09:00:00-04:00"]), 0)
+        item = self.todo.open_items()[0]
+        self.assertEqual((item["ref"], item["reply_by"]), ("gmail:abc", "2026-10-02T13:00:00+00:00"))
 
 
 class QuietAndAnnounce(unittest.TestCase):
@@ -89,8 +140,8 @@ class QuietAndAnnounce(unittest.TestCase):
         item = self.todo.add("Call back", who="Pat")
         day, night = datetime(2026, 10, 21, 10, 0, tzinfo=zt.TZ), datetime(2026, 10, 21, 22, 0, tzinfo=zt.TZ)
         self.assertTrue(zt.announce([item], self.todo, self.sent.append, at=day))
-        self.assertIn("📝 New on your to-do list\n🟠 1. Pat: Call back", self.sent[0])
-        self.assertIn("This one is at the top.", self.sent[0])
+        self.assertIn("📝 New task on your to-do list:\n🟠 1. Pat: Call back", self.sent[0])
+        self.assertIn("This task is at the top.", self.sent[0])
         self.assertFalse(zt.announce([item], self.todo, self.sent.append, at=night))
         self.assertTrue(zt.announce([item], self.todo, self.sent.append, emergency=True, at=night))
         self.assertEqual(len(self.sent), 2)
@@ -149,7 +200,7 @@ class BriefData(unittest.TestCase):
         todo.close([1])
         second = bd.main(vault, now=datetime(2026, 10, 22, 19, 0, tzinfo=zt.TZ))
         self.assertIn("BRIEF: Evening", second)
-        self.assertIn("🟠 2. Pat: Call back (call) 🆕", second)
+        self.assertRegex(second, r"🟠 2\. Pat: Call back \(call, reply by [^)]+\) 🆕")
         self.assertRegex(second, r"LAST BRIEF: \w+day \d+:\d\d [AP]M")
         self.assertIn("✅ Done since the last brief: 1", second)
 

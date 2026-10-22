@@ -49,7 +49,7 @@ Example: "Tell Pat I'm running 10 minutes late."
    Hi Pat, running about 10 minutes behind. See you soon! Gerrit
    TEXT
    ```
-3. Tell Gerrit: "It's in Val Approvals." Don't say it was sent.
+3. Tell Gerrit: "The draft is in Val Approvals." Don't say it was sent.
 
 If `zingas-quo draft` says the customer is do-not-contact, tell Gerrit and stop. Never try another way.
 

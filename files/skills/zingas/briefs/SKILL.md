@@ -36,19 +36,23 @@ Idea: <at most 2 ideas, each on its own line>
 
 Idea: <at most 2 ideas>
 ```
-- In the evening, the "✅ Done since the last brief" line is the day's wins. Say it plainly in the first line ("5 done today. 3 still open, 1 is due today.").
+- In the evening, the "✅ Done since the last brief" line is the day's wins. Say it plainly in the first line ("You did 5 tasks today. 3 tasks are open. 1 task is due today.").
 - Point out any task that says "due today" or "overdue" in the first line.
+
+## The 24-hour rule (both briefs)
+Every message must be answered within 24 hours (Gerrit's hard rule, skill `todo-list`). If any task says "⚠️ past 24 hours", the brief's first line says how many and names the oldest one ("⚠️ 3 messages are past 24 hours. The oldest is from Amy Cole."). Then say which ones have a draft ready. Never leave this out.
 
 ## Email check (both briefs)
 New work email is already put on the list by `zingas-inbox` every 2 minutes. So the brief does **not** list emails again. Use skill `email-triage` only to look for:
-- a customer or office email from the last 24 hours that asks Gerrit for something and is **not** on the list (the watcher can miss one). Add one line: "Email: <who> asked <what>. Want it on your list?" Never add it yourself.
-- reply drafts you saved in Gmail Drafts that Gerrit hasn't sent. One line: "Drafts waiting in Gmail: 2 (Pat Lee, Beth)."
+- a customer or office email from the last 24 hours that asks Gerrit for something and is **not** on the list (the watcher can miss one). Add one line: "Email: <who> asked <what>. Do you want this on your list?" Never add it yourself.
+- reply drafts you saved in Gmail Drafts that Gerrit hasn't sent. One line: "Drafts in Gmail that you did not send: 2 (Pat Lee, Beth)."
 Skip this part when there's nothing. Never quote an email. Say what is needed in a few plain words.
 
 ## Ideas
 Only here, at the end, each line starting with "Idea:". At most 2. Only facts you know (the list, email, customer notes). No made-up dates, prices or numbers. Skip ideas when you have none.
 
 ## Writing rules
+- Write the brief in ASD-STE100 (skill `ste-writing`). The to-do list block is copied as is.
 - Plain words, short lines. A 6th grader reads it at a glance.
 - Synopses, never pasted customer words.
 - No prices or amounts. No day counts you typed yourself (the list shows due dates).

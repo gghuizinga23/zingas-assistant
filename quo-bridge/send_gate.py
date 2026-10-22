@@ -117,9 +117,9 @@ def needs_gerrit(customer_message: str) -> List[str]:
     (empty list means none)."""
     reasons: List[str] = []
     if _HUMAN_CHECK_RE.search(customer_message):
-        reasons.append("The customer asked if they're talking to a real person. Val never claims to be human.")
+        reasons.append("The customer asked if a real person writes these texts. Val never says that she is a person.")
     if _UPSET_RE.search(customer_message):
-        reasons.append("The customer sounds upset or mentions cancelling.")
+        reasons.append("The customer is angry or wants to cancel.")
     found = money_terms(customer_message)
     if found:
         reasons.append("The customer asked about money (" + ", ".join(sorted(set(found), key=str.lower)) + ").")
@@ -195,7 +195,7 @@ def decide(msg: OutgoingText, now: datetime,
         raise ValueError("now must be timezone-aware")
 
     if msg.category in NEVER_SEND_CATEGORIES:
-        return Decision("block", ["Appointment confirmations never send: corporate already sends them."])
+        return Decision("block", ["Appointment confirmations do not go out from here. Corporate sends them."])
     if msg.do_not_contact:
         return Decision("block", ["This customer is marked do not contact."])
     if not msg.text.strip():
@@ -204,7 +204,7 @@ def decide(msg: OutgoingText, now: datetime,
     try:
         tz = ZoneInfo(msg.customer_time_zone)
     except Exception:
-        return Decision("block", [f"Unknown time zone: {msg.customer_time_zone!r}."])
+        return Decision("block", [f"The time zone is not known: {msg.customer_time_zone!r}."])
 
     local_now = now.astimezone(tz)
     in_window = SEND_WINDOW_START <= local_now.time() < SEND_WINDOW_END
@@ -214,7 +214,7 @@ def decide(msg: OutgoingText, now: datetime,
             return Decision("send", ["Approved by Gerrit."])
         return Decision(
             "hold",
-            ["Approved, but it is outside 8am-8pm for the customer. It waits until 8am."],
+            ["Approved. It is outside 8am to 8pm for the customer, so the text will wait until 8am."],
             send_after=_next_window_open(local_now),
         )
 
@@ -229,15 +229,15 @@ def decide(msg: OutgoingText, now: datetime,
         reasons.append("The customer is not matched to a Salesforce Prospect.")
     reasons.extend(needs_gerrit(msg.in_reply_to))
     if len(msg.text) > AUTO_SEND_MAX_CHARS:
-        reasons.append(f"Too long to send by itself ({len(msg.text)} characters).")
+        reasons.append(f"The text is too long to send by itself ({len(msg.text)} characters).")
     found = money_terms(msg.text)
     if found:
-        reasons.append("Mentions money (" + ", ".join(sorted(set(found), key=str.lower)) + ").")
+        reasons.append("The text mentions money (" + ", ".join(sorted(set(found), key=str.lower)) + ").")
     countdown_ends = local_now + AUTO_SEND_DELAY
     if not in_window:
-        reasons.append("Outside 8am-8pm for the customer.")
+        reasons.append("It is outside 8am to 8pm for the customer.")
     elif not SEND_WINDOW_START <= countdown_ends.time() < SEND_WINDOW_END:
-        reasons.append("The 5-minute countdown would end after 8pm for the customer.")
+        reasons.append("The 5-minute countdown will end after 8pm for the customer.")
 
     if reasons:
         return Decision("needs_approval", reasons)

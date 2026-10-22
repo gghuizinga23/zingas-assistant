@@ -196,8 +196,8 @@ class Bridge:
                         d["id"], [d["status"]], {"status": "blocked", "reasons": "Customer texted STOP."}):
                     self._edit_card(d, self._card_text(d, "⛔ Not sent: they texted STOP."))
             self._log("dnc_on", None, phone)
-            self._tell_gerrit(f"🚫 {pretty_phone(phone)} texted \"{text[:40]}\". They're now do-not-contact. "
-                              "Val won't text them again.")
+            self._tell_gerrit(f"🚫 {pretty_phone(phone)} texted \"{text[:40]}\". This number is now do-not-contact. "
+                              "Val will not send texts to this number again.")
         elif word in START_WORDS:
             self.store.set_dnc(phone, False, self._stamp())
             self._log("dnc_off", None, phone)
@@ -348,7 +348,7 @@ class Bridge:
             self._edit_card(d, self._card_text(d, f"⏰ Approved. It sends {when}, their time."),
                             [[{"text": "✖️ Cancel", "callback_data": "s:" + d["id"]}]])
             self._log("held", d["id"], " ".join(decision.reasons))
-            return "Approved. It waits until 8am their time."
+            return "Approved. The text will wait until 8am in their time zone."
         if not ok_to_send:
             reasons = " ".join(decision.reasons)
             if decision.action == "block":
@@ -358,7 +358,7 @@ class Bridge:
                 return "Not sent."
             # An auto-send that no longer passes: back to Gerrit.
             self.store.update_draft(d["id"], {"status": "pending", "reasons": reasons, "send_after": None})
-            self._edit_card(d, self._card_text(d, "👀 This needs you after all: " + reasons), self._buttons(d))
+            self._edit_card(d, self._card_text(d, "👀 This draft needs your approval: " + reasons), self._buttons(d))
             self._log("needs_approval", d["id"], reasons)
             return "Needs Gerrit."
         try:
@@ -366,11 +366,11 @@ class Bridge:
         except QuoError as e:
             status = "failed" if e.unknown else "pending"
             note = (f"⚠️ No answer from Quo. Check the Quo app before you tap Approve again."
-                    if e.unknown else f"⚠️ Didn't send: {e} Tap Approve to try again.")
+                    if e.unknown else f"⚠️ The text did not send: {e} Tap Approve to try again.")
             self.store.update_draft(d["id"], {"status": status, "error": str(e)})
             self._edit_card(d, self._card_text(d, note), self._buttons(d))
             self._log("send_failed", d["id"], str(e))
-            return "Quo didn't send it."
+            return "Quo did not send the text."
         stamp = self._stamp()
         self.store.update_draft(d["id"], {"status": "sent", "sent_at": stamp, "quo_message_id": quo_id,
                                           "error": None, "send_after": None})
@@ -410,13 +410,13 @@ class Bridge:
         action, _, draft_id = str(cq.get("data") or "").partition(":")
         d = self.store.get_draft(draft_id)
         if not d:
-            self._answer(cq, "I can't find that draft.")
+            self._answer(cq, "I cannot find that draft.")
             return
         if action == "a":
             claimed = self.store.claim_draft(draft_id, ["pending", "failed"],
                                              {"status": "approving", "approved_at": d.get("approved_at") or self._stamp()})
             if not claimed:
-                self._answer(cq, "Already handled.")
+                self._answer(cq, "Someone already did an action on this draft.")
                 return
             if not d.get("approved_at"):   # count each draft once toward auto-send
                 stats = self._stats(d["category"])
@@ -428,7 +428,7 @@ class Bridge:
             if claimed:
                 self._edit_card(claimed, self._card_text(claimed, "✖️ Skipped. Nothing was sent."))
                 self._log("skipped", draft_id, "")
-            self._answer(cq, "Skipped." if claimed else "Already handled.")
+            self._answer(cq, "Skipped." if claimed else "Someone already did an action on this draft.")
         elif action == "x":
             claimed = self.store.claim_draft(draft_id, ["countdown"], {"status": "stopped"})
             if claimed:
@@ -438,11 +438,11 @@ class Bridge:
                 self._edit_card(claimed, self._card_text(claimed, "🛑 Stopped. Nothing was sent. "
                                                                    "This kind of text needs your OK again."))
                 self._log("stopped", draft_id, "")
-            self._answer(cq, "Stopped." if claimed else "Too late, it already went or was handled.")
+            self._answer(cq, "Stopped." if claimed else "You are too late. The text went out, or someone already did an action on it.")
         elif action == "e":
             claimed = self.store.claim_draft(draft_id, ["pending", "failed"], {"status": "editing"})
             if not claimed:
-                self._answer(cq, "Already handled.")
+                self._answer(cq, "Someone already did an action on this draft.")
                 return
             prompt = self._tell_gerrit(f"✏️ Reply to this message with the new text for "
                                        f"{d.get('customer_name') or pretty_phone(d['phone'])}. [{draft_id}]",
@@ -457,11 +457,11 @@ class Bridge:
             return
         text = str(msg.get("text") or "").strip()
         if text.startswith("/start"):
-            self._tell_gerrit("Val Approvals is ready. Customer text drafts show up here with Approve, Edit and Skip.")
+            self._tell_gerrit("Val Approvals is ready. Customer text drafts come here with Approve, Edit and Skip buttons.")
             return
         if text.startswith("/waiting"):
             n = len(self.store.drafts_by_status(["pending", "editing"], MAX_PENDING + 1))
-            self._tell_gerrit(f"{n} draft(s) waiting for you.")
+            self._tell_gerrit(f"{n} draft(s) need your approval.")
             return
         replied = (msg.get("reply_to_message") or {}).get("message_id")
         d = self.store.find_draft_by_prompt(int(replied)) if replied else None
@@ -469,7 +469,7 @@ class Bridge:
             editing = self.store.drafts_by_status(["editing"], 2)
             d = editing[0] if len(editing) == 1 else None
         if not d or d["status"] != "editing":
-            self._tell_gerrit("To change a draft, tap ✏️ Edit on it first, then reply to my message.")
+            self._tell_gerrit("To change a draft, tap ✏️ Edit on the draft. Then reply to my message.")
             return
         if not text or len(text) > MAX_TEXT:
             self._tell_gerrit(f"The text must be 1 to {MAX_TEXT} characters. Try again.", force_reply=True)
@@ -527,8 +527,8 @@ class Bridge:
                                                  require_null="escalated_at")]
             if claimed:
                 n = len(claimed)
-                note = ("Val: a customer text is waiting for your OK in Val Approvals."
-                        if n == 1 else f"Val: {n} customer texts are waiting for your OK in Val Approvals.")
+                note = ("Val: 1 customer text needs your approval in Val Approvals."
+                        if n == 1 else f"Val: {n} customer texts need your approval in Val Approvals.")
                 try:
                     self.quo.send_text(self.cfg.gerrit_cell, note)
                     done["escalated"] = n
