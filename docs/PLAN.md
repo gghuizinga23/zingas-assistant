@@ -10,7 +10,7 @@ Gerrit runs 9 to 15 in-home appointments a week for Zinga's (window coverings an
 It starts with Gerrit, then rolls out to 5 reps, then 15 to 20. It gets built standalone first and folded into the Sales Dashboard later. Gerrit doesn't write code, so every setup step Gerrit has to do is listed in plain words.
 
 **What already exists:**
-- **`~/Desktop/Zinga Follow-Up` already does part of this.** It reads iMessage, tracks promises, reads Salesforce CSVs, and drafts in Gerrit's voice using the rules in `zingas-followup-system-spec.md` §3 and `DAILY-BRIEF-RUNBOOK.md`. It only runs while Gerrit's Mac is on. **This plan grows it into the assistant.**
+- **`~/Projects/Zinga's Assistant` already does part of this.** It reads iMessage, tracks promises, reads Salesforce CSVs, and drafts in Gerrit's voice using the rules in `zingas-followup-system-spec.md` §3 and `DAILY-BRIEF-RUNBOOK.md`. It only runs while Gerrit's Mac is on. **This plan grows it into the assistant.**
 - **Sales Dashboard:** Next.js 16, Supabase, Google sign-in, Vercel. Salesforce access is read-only. The Inbox and Briefing patterns already exist.
 - **Estimator (`estimator-legal/`):** Next.js 16, Prisma on Neon.
   - Gerrit builds every quote **in the home on the iPad** with it.
@@ -48,7 +48,7 @@ Estimator ──events in / reads────┘   │  quo-bridge (send gate, q
 Salesforce (read + approved write) ◄►│  identity resolver → customer memory (Supabase)        │
 healthchecks.io ◄── ping every 10 min└───────────────── nightly backup ──► object storage ───┘
 ```
-- **Repo:** turn `Zinga Follow-Up` into a git repo, `zingas-assistant`.
+- **Repo:** turn `Zinga's Assistant` (was `Zinga Follow-Up`) into a git repo, `zingas-assistant`.
   - Copy in `files/` from nicks-stack: `config.yaml`, `gateway-run.sh`, `onboard.sh`, `telegram-pair.py`, the skills layout and `build_template.py`.
   - Port the prototype's cadence rules, voice rules and promise tracker as Hermes skills.
   - Real customer data never goes in git.
