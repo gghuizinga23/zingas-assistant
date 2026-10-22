@@ -29,6 +29,7 @@ class World:
         self.val_script = None
         self.tg_calls = []
         self.webhooks = [{"id": "WHold", "url": BRIDGE + "/api/quo", "label": "zingas-bridge"}]
+        self.hooks_made = []
         self.deleted = []
 
     def http(self, method, url, body=None, headers=None, timeout=60):
@@ -98,8 +99,11 @@ class World:
             def delete_webhook(self, wid):
                 world.deleted.append(wid)
 
-            def create_webhook(self, url, nid):
+            def create_webhook(self, url, nid, events=("message.received",), label="zingas-bridge"):
                 assert (url, nid) == (BRIDGE + "/api/quo", "PNbiz")
+                world.hooks_made.append((tuple(events), label))
+                if label == "zingas-bridge-calls":
+                    return {"id": "WHcalls", "key": "whsec_calls"}
                 return {"id": "WHnew", "key": "whsec_abc"}
         return Q()
 
@@ -152,7 +156,9 @@ class Q5(unittest.TestCase):
         self.assertTrue(set(bridge_app.REQUIRED) <= set(w.env), set(bridge_app.REQUIRED) - set(w.env))
         cfg = Config.from_env(w.env)
         self.assertEqual((cfg.approver_id, cfg.gerrit_cell, cfg.quo_webhook_secret, cfg.auto_send_enabled),
-                         (4242, "+13175550999", "whsec_abc", False))
+                         (4242, "+13175550999", "whsec_abc,whsec_calls", False))
+        self.assertEqual([label for _, label in w.hooks_made], ["zingas-bridge", "zingas-bridge-calls"])
+        self.assertIn("call.voicemail.completed", w.hooks_made[1][0])
         self.assertEqual((w.env["QUO_API_KEY"], w.env["APPROVALS_BOT_TOKEN"], w.env["QUO_PHONE_NUMBER_ID"]),
                          ("quo-key", "bot-token", "PNbiz"))
         self.assertEqual((w.env["SUPABASE_URL"], w.env["SUPABASE_SERVICE_KEY"]),
@@ -167,11 +173,11 @@ class Q5(unittest.TestCase):
         s = w.val_script
         self.assertIn(w.env["VAL_DRAFT_TOKEN"], s)
         self.assertIn(BRIDGE, s)
-        for secret in ("quo-key", "bot-token", "sb_secret_x", "whsec_abc", w.env["CRON_SECRET"],
+        for secret in ("quo-key", "bot-token", "sb_secret_x", "whsec_abc", "whsec_calls", w.env["CRON_SECRET"],
                        w.env["APPROVALS_WEBHOOK_SECRET"], "vercel-token", "supabase-token"):
             self.assertNotIn(secret, s)
         # nothing secret is printed on screen
-        for secret in ("quo-key", "bot-token", "sb_secret_x", "whsec_abc", w.env["VAL_DRAFT_TOKEN"],
+        for secret in ("quo-key", "bot-token", "sb_secret_x", "whsec_abc", "whsec_calls", w.env["VAL_DRAFT_TOKEN"],
                        w.env["CRON_SECRET"], "vercel-token", "supabase-token"):
             self.assertNotIn(secret, w.output)
         self.assertIn("RUNNING", w.output)

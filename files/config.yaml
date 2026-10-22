@@ -102,6 +102,8 @@ secrets:
       COMPOSIO_VAL_KEY: op://Zingas Assistant/Assistant Secrets/COMPOSIO_VAL_KEY
     binary_path: /usr/bin/op
 _config_version: 33
+# Briefs at 8:00am and 7:00pm and quiet hours use Gerrit's time, not the server's (UTC).
+timezone: America/Indiana/Indianapolis
 session_reset:
   mode: both
   idle_minutes: 1440
@@ -110,6 +112,11 @@ group_sessions_per_user: true
 # No tool here can text a customer. Customer texts leave only through
 # quo-bridge, after Gerrit taps Approve in the approvals bot.
 platform_toolsets:
+  # Timed jobs (the briefs). Messaging and clarify are always off for these; the
+  # Gmail and notes-vault tool servers are added on top. No terminal or files.
+  cron:
+    - skills
+    - todo
   cli:
     - browser
     - clarify

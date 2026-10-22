@@ -41,6 +41,18 @@ create table if not exists drafts (
 );
 create index if not exists drafts_status on drafts (status);
 
+-- Calls and voicemails on the business number, for Val's to-do list.
+-- Val only reads these; nothing here can call or text anyone.
+create table if not exists calls (
+  id          text primary key,              -- Quo event resource id
+  phone       text not null,                 -- the caller, E.164
+  kind        text not null check (kind in ('missed', 'voicemail', 'call_summary')),
+  body        text not null default '',      -- voicemail transcript or call summary
+  created_at  timestamptz not null default now(),
+  picked_at   timestamptz
+);
+create index if not exists calls_unpicked on calls (created_at) where picked_at is null;
+
 create table if not exists contacts (
   phone           text primary key,
   do_not_contact  boolean not null default false,
@@ -63,6 +75,7 @@ create table if not exists events (
 
 alter table messages enable row level security;
 alter table drafts enable row level security;
+alter table calls enable row level security;
 alter table contacts enable row level security;
 alter table auto_send_stats enable row level security;
 alter table events enable row level security;

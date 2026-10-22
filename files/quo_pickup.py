@@ -24,6 +24,12 @@ How a new customer text becomes a card in Val Approvals:
 
 Outcomes (sent, skipped, edited) are saved to the vault for the weekly voice
 review: voice-edits/<YYYY-MM>.jsonl.
+
+Gerrit's to-do list (zingas_todo): the same answer from Val also says whether
+the text puts a task on the list. Missed calls become "Call back" tasks with no
+AI. Voicemails and call summaries are judged by Val like emails. This program
+writes the list and tells Gerrit; when Gerrit's approved reply goes out, the
+text's task closes by itself.
 """
 
 from __future__ import annotations
@@ -41,6 +47,10 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Callable, List, Optional
 from zoneinfo import ZoneInfo
+
+sys.path.insert(0, "/usr/local/lib/zingas")
+sys.path.insert(1, os.path.dirname(os.path.abspath(__file__)))
+import zingas_todo as zt  # noqa: E402
 
 VAULT = os.environ.get("ZINGAS_VAULT", "/root/Documents/ZingasVault")
 HERMES_HOME = os.environ.get("HERMES_HOME", "/root/.hermes")
@@ -130,9 +140,10 @@ class BridgeClient:
     def updates(self) -> dict:
         return self.call("GET", "/api/val/updates")
 
-    def ack(self, texts: List[str] = (), outcomes: List[str] = ()) -> None:
-        if texts or outcomes:
-            self.call("POST", "/api/val/ack", {"texts": list(texts), "outcomes": list(outcomes)})
+    def ack(self, texts: List[str] = (), outcomes: List[str] = (), calls: List[str] = ()) -> None:
+        if texts or outcomes or calls:
+            self.call("POST", "/api/val/ack", {"texts": list(texts), "outcomes": list(outcomes),
+                                               "calls": list(calls)})
 
     def draft(self, payload: dict) -> dict:
         return self.call("POST", "/api/val/drafts", payload)
@@ -204,6 +215,15 @@ def save_unmatched(phone: str, text: str, vault: str = VAULT) -> bool:
     return False
 
 
+def note_name(note_path: Optional[str]) -> str:
+    """The customer's name from the first '# ' line of their memory note."""
+    for row in _read(note_path, 2000).splitlines() if note_path else []:
+        if row.startswith("# "):
+            name = row[2:].strip()
+            return "" if name.lower().startswith("unmatched") else name[:80]
+    return ""
+
+
 def valid_tz(name) -> str:
     try:
         ZoneInfo(str(name))
@@ -235,7 +255,8 @@ def _read(path: str, limit: int) -> str:
 
 # --------------------------------------------------------------- the prompt
 
-def build_prompt(text: dict, note_path: Optional[str], vault: str = VAULT, skill_path: str = SKILL) -> str:
+def build_prompt(text: dict, note_path: Optional[str], vault: str = VAULT, skill_path: str = SKILL,
+                 open_items: Optional[List[dict]] = None, todo_skill: str = zt.SKILL) -> str:
     thread = "\n".join(f"[{t['at'][:16]}] {'Customer' if t['from'] == 'customer' else 'Gerrit'}: {t['text']}"
                        for t in text.get("thread") or [])
     note = _read(note_path, 3000) if note_path else ""
@@ -253,12 +274,21 @@ def build_prompt(text: dict, note_path: Optional[str], vault: str = VAULT, skill
                                                 "unmatched: no Salesforce Prospect ID.") + "\n</customer_note>",
         f"## The conversation so far (oldest first)\n<thread>\n{thread}\n</thread>",
         f"## The new text, from {pretty(text['phone'])}\n<customer_text>\n{text['text']}\n</customer_text>",
+        "## Gerrit's to-do list\nAlso decide if this text puts a task on Gerrit's to-do list. If you wrote a "
+        "draft, the task is what Gerrit still has to do (often \"Approve the reply to Pat\"); it closes by "
+        "itself when the reply is sent. Use update when the list already has a task for this customer.\n"
+        + (_read(todo_skill, 5000) or "(todo-list skill missing)")
+        + "\n### Open list now\n" + ("\n".join(zt.line(i) for i in open_items or []) or "(empty)"),
         "## Answer with ONLY this JSON, nothing else:\n"
         '{"action": "draft" | "no_reply" | "ask_gerrit", "category": one of '
         + ", ".join(CATEGORIES) + ', "text": "the reply (empty unless action is draft)", '
         '"customer_name": "first name or empty", "prospect_id": "from the note or empty", '
         '"time_zone": "IANA name, America/Indiana/Indianapolis if unknown", '
-        '"note_for_gerrit": "one short line for Gerrit, or empty"}',
+        '"note_for_gerrit": "one short line for Gerrit, or empty", '
+        '"todo": {"action": "add" | "update" | "skip", "task": "starts with a verb, 12 words or less", '
+        '"who": "name, short", "priority": "now" | "today" | "week" | "later", '
+        '"due": "YYYY-MM-DD only if the text gives a date, else empty", "why": "one short line or empty", '
+        '"update_number": "for update: the open task number", "emergency": true | false}}',
     ])
 
 
@@ -279,14 +309,28 @@ def parse_answer(raw: str) -> dict:
     return ans
 
 
+def todo_of(ans: dict) -> Optional[dict]:
+    """Val's to-do part of the answer, checked like any judgement. None if missing or broken."""
+    raw = ans.get("todo")
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return zt.parse_judgement(json.dumps({"results": [dict(raw, id="t")]}), ["t"]).get("t")
+    except ValueError:
+        return None
+
+
 # ---------------------------------------------------------------- the loop
 
 class Pickup:
     def __init__(self, bridge: BridgeClient, ask_val: Callable[[str], str] = run_val,
                  notify: Callable[[str], None] = tell_gerrit, vault: str = VAULT, state_path: str = STATE,
-                 skill_path: str = SKILL):
+                 skill_path: str = SKILL, todo: Optional[zt.TodoList] = None, todo_skill: str = zt.SKILL):
         self.bridge, self.ask_val, self.notify = bridge, ask_val, notify
         self.vault, self.state_path, self.skill_path = vault, state_path, skill_path
+        self.todo, self.todo_skill = todo or zt.TodoList(vault), todo_skill
+        self.added: List[dict] = []         # new tasks not yet told to Gerrit
+        self.emergency = False
 
     def _tries(self) -> dict:
         try:
@@ -304,9 +348,14 @@ class Pickup:
     def once(self) -> dict:
         up = self.bridge.updates()
         done = {"drafts": 0, "skipped": 0, "outcomes": 0, "retry": 0}
+        if up.get("calls"):
+            done["calls"] = 0
+        self.added, self.emergency = [], False
 
         for o in up.get("outcomes") or []:
             save_outcome(o, self.vault)
+            if o.get("status") == "sent" and o.get("phone"):
+                self.todo.close_auto(o["phone"], "reply_sent")      # Gerrit's reply went out
             done["outcomes"] += 1
         self.bridge.ack(outcomes=[o["draft_id"] for o in up.get("outcomes") or []])
 
@@ -319,8 +368,78 @@ class Pickup:
                 done["drafts" if finished == "draft" else "skipped"] += 1
             else:
                 done["retry"] += 1
+        calls = up.get("calls") or []
+        if calls:
+            finished = self._calls(calls, tries)
+            if finished:
+                self.bridge.ack(calls=finished)
+            done["calls"] = len(finished)
+            done["retry"] += len(calls) - len(finished)
         self._save_tries(tries)
+        zt.announce(self.added, self.todo, self.notify, emergency=self.emergency)
         return done
+
+    # ------------------------------------------------------------ the list
+
+    def _task(self, r: Optional[dict], who: str, source: str, ref: str, auto_done: str = "") -> Optional[dict]:
+        """Put one task on the list. Returns it if it's new (Gerrit hasn't been told yet)."""
+        if not r:
+            return None
+        before = {i["n"] for i in self.todo.open_items()}
+        item = zt.apply_judgement(self.todo, {"from": who}, r, source, ref=ref, auto_done=auto_done)
+        if not item or item["n"] in before:
+            return None
+        self.emergency = self.emergency or bool(r.get("emergency"))
+        return item
+
+    def _calls(self, calls: List[dict], tries: dict) -> List[str]:
+        """Missed calls, voicemails and call summaries. Returns the ids that are dealt with."""
+        finished, things, judged = [], [], []
+        for c in calls:
+            note = find_customer_note(c["phone"], self.vault)
+            if not note:
+                save_unmatched(c["phone"], {"missed": "[missed call]", "voicemail": "[voicemail] "}.get(
+                    c["kind"], "[call] ") + (c.get("text") or "")[:200], self.vault)
+            name = note_name(note)
+            who = name or pretty(c["phone"])
+            if c["kind"] == "missed":
+                again = [i for i in self.todo.open_for(c["phone"]) if i["task"].startswith("Call back")]
+                if again:
+                    self.todo.update(again[0]["n"], why="Called more than once.")
+                else:
+                    self.added.append(self.todo.add("Call back", priority="today", who=who, source="call",
+                                                    ref=c["phone"], why="" if note else "New number. New lead?"))
+                finished.append(c["id"])
+                continue
+            things.append({"id": c["id"], "kind": c["kind"], "from": f"{name} {pretty(c['phone'])}" if name else who,
+                           "text": (c.get("text") or "")[:3000],
+                           "note": _read(note, 1200).replace("\n", " ") if note else ""})
+            judged.append((c, who))
+        if not things:
+            return finished
+        try:
+            got = zt.parse_judgement(self.ask_val(zt.judge_prompt(things, self.todo.open_items(), self.todo_skill)),
+                                     [t["id"] for t in things])
+        except Exception as e:
+            log(f"calls: Val's answer didn't work ({type(e).__name__})")
+            got = {}
+        for (c, who), t in zip(judged, things):
+            r = got.get(c["id"])
+            if r is None:
+                n = tries.get(c["id"], 0) + 1
+                tries[c["id"]] = n
+                if n < MAX_TRIES:
+                    continue
+                r = {"action": "add", "priority": "today" if c["kind"] == "voicemail" else "week",
+                     "task": "Listen to the voicemail and call back" if c["kind"] == "voicemail"
+                     else "Check the notes from this call", "due": "", "why": "", "emergency": False,
+                     "update_number": 0}
+            tries.pop(c["id"], None)
+            item = self._task(r, who, "voicemail" if c["kind"] == "voicemail" else "call", c["phone"])
+            if item:
+                self.added.append(item)
+            finished.append(c["id"])
+        return finished
 
     def _handle(self, t: dict, tries: dict) -> Optional[str]:
         """Returns 'draft' or 'skipped' when the text is dealt with, None to try again later."""
@@ -330,7 +449,8 @@ class Pickup:
         note = find_customer_note(t["phone"], self.vault)
         first_time = not note and save_unmatched(t["phone"], t["text"], self.vault)
         try:
-            ans = parse_answer(self.ask_val(build_prompt(t, note, self.vault, self.skill_path)))
+            ans = parse_answer(self.ask_val(build_prompt(t, note, self.vault, self.skill_path,
+                                                         self.todo.open_items(), self.todo_skill)))
         except Exception as e:
             n = tries.get(t["id"], 0) + 1
             tries[t["id"]] = n
@@ -341,13 +461,18 @@ class Pickup:
                         "Please answer it in the Quo app.")
             return "skipped"
 
-        who = ans.get("customer_name") or pretty(t["phone"])
+        who = note_name(note) or ans.get("customer_name") or pretty(t["phone"])
         extra = f"\n{ans['note_for_gerrit']}" if ans.get("note_for_gerrit") else ""
         if first_time:
             extra += "\nNew number. Is this a new lead, or someone you know?"
+        task = todo_of(ans)
+        if task is None and ans["action"] == "ask_gerrit":       # never lose one that needs Gerrit
+            task = {"action": "add", "task": "Answer the text from " + who, "priority": "today", "due": "",
+                    "why": "", "update_number": 0, "emergency": False}
         if ans["action"] != "draft":
             why = "No reply needed, I think." if ans["action"] == "no_reply" else "This one needs you."
-            self.notify(f"🪟 {who} texted: \"{t['text'][:200]}\"\n{why}{extra}")
+            item = self._task(task, who, "text", t["phone"])
+            self.notify(f"🪟 {who} texted: \"{t['text'][:200]}\"\n{why}{extra}" + self._listed(item))
             return "skipped"
         try:
             self.bridge.draft({"to": t["phone"], "text": ans["text"], "category": ans["category"],
@@ -359,11 +484,24 @@ class Pickup:
                 log(f"text {t['id']}: quo-bridge busy ({e}); trying again soon")
                 return None
             if e.status != 409:      # 409 = do-not-contact: nothing to do
-                self.notify(f"🪟 My draft for {who} was refused ({e}). Please answer in the Quo app.")
+                item = self._task(task or {"action": "add", "task": "Answer the text from " + who,
+                                           "priority": "today", "due": "", "why": "", "update_number": 0,
+                                           "emergency": False}, who, "text", t["phone"])
+                self.notify(f"🪟 My draft for {who} was refused ({e}). Please answer in the Quo app."
+                            + self._listed(item))
             return "skipped"
+        if task is None and not self.todo.open_for(t["phone"]):
+            task = {"action": "add", "task": "Approve the reply to " + who, "priority": "today", "due": "",
+                    "why": "", "update_number": 0, "emergency": False}
+        item = self._task(task, who, "text", t["phone"], auto_done="reply_sent")
         if extra.strip():
-            self.notify(f"🪟 Draft for {who} is in Val Approvals.{extra}")
+            self.notify(f"🪟 Draft for {who} is in Val Approvals.{extra}" + self._listed(item))
+        elif item:
+            self.added.append(item)
         return "draft"
+
+    def _listed(self, item: Optional[dict]) -> str:
+        return f"\n📝 On your to-do list: {zt.line(item)}" if item else ""
 
 
 # ------------------------------------------------------------------- the CLI

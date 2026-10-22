@@ -46,6 +46,7 @@ class MemoryStore:
     def __init__(self):
         self.messages: Dict[str, dict] = {}
         self.drafts: Dict[str, dict] = {}
+        self.calls: Dict[str, dict] = {}
         self.contacts: Dict[str, dict] = {}
         self.stats: Dict[str, dict] = {}
         self.events: List[dict] = []
@@ -78,6 +79,22 @@ class MemoryStore:
     def latest_inbound(self, phone: str) -> Optional[dict]:
         rows = [m for m in self.messages.values() if m["phone"] == phone and m["direction"] == "in"]
         return copy.deepcopy(max(rows, key=lambda m: m["created_at"])) if rows else None
+
+    # calls
+    def add_call(self, row: dict) -> bool:
+        if row["id"] in self.calls:
+            return False
+        self.calls[row["id"]] = dict(row, picked_at=row.get("picked_at"))
+        return True
+
+    def unpicked_calls(self, limit: int = 20) -> List[dict]:
+        rows = [c for c in self.calls.values() if not c.get("picked_at")]
+        return copy.deepcopy(sorted(rows, key=lambda c: c["created_at"])[:limit])
+
+    def ack_calls(self, ids: Iterable[str], at: str) -> None:
+        for i in ids:
+            if i in self.calls and not self.calls[i].get("picked_at"):
+                self.calls[i]["picked_at"] = at
 
     # drafts
     def insert_draft(self, row: dict) -> None:
@@ -207,6 +224,21 @@ class SupabaseStore:
     def latest_inbound(self, phone: str) -> Optional[dict]:
         rows = self._call("GET", f"messages?phone=eq.{_q(phone)}&direction=eq.in&order=created_at.desc&limit=1")
         return rows[0] if rows else None
+
+    # calls
+    def add_call(self, row: dict) -> bool:
+        out = self._call("POST", "calls?on_conflict=id", [row],
+                         prefer="resolution=ignore-duplicates,return=representation")
+        return bool(out)
+
+    def unpicked_calls(self, limit: int = 20) -> List[dict]:
+        return self._call("GET", f"calls?picked_at=is.null&order=created_at.asc&limit={int(limit)}")
+
+    def ack_calls(self, ids: Iterable[str], at: str) -> None:
+        ids = list(ids)
+        if ids:
+            self._call("PATCH", f"calls?id={_in_list(ids)}&picked_at=is.null", {"picked_at": at},
+                       prefer="return=minimal")
 
     # drafts
     def insert_draft(self, row: dict) -> None:

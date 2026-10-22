@@ -39,6 +39,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BRIDGE_DIR = os.path.join(HERE, "..", "quo-bridge")
 sys.path.insert(0, BRIDGE_DIR)
 from clients import QuoClient, QuoError, TelegramClient, TelegramError  # noqa: E402
+from bridge import CALL_EVENTS  # noqa: E402
 
 ORGO = sys.argv[1] if len(sys.argv) > 1 else "orgo"
 COMPUTER = sys.argv[2] if len(sys.argv) > 2 else "Hermes Agent"
@@ -48,6 +49,8 @@ VAL_FILES = {   # laptop file -> place on Val's computer
     "quo_pickup.py": "/usr/local/bin/zingas-quo",
     "quo-pickup.supervisor.conf": "/etc/supervisor/conf.d/zingas-quo-pickup.conf",
     "skills/zingas/quo-texting/SKILL.md": "/root/.hermes/skills/zingas/quo-texting/SKILL.md",
+    "zingas_todo.py": "/usr/local/lib/zingas/zingas_todo.py",      # the to-do list the pickup adds to
+    "skills/zingas/todo-list/SKILL.md": "/root/.hermes/skills/zingas/todo-list/SKILL.md",
 }
 
 
@@ -266,14 +269,14 @@ def check_locks(url, val_token, cron):
 
 
 def setup_val(url, val_token):
-    parts = ["set -e", "umask 077", "mkdir -p /root/.hermes/skills/zingas/quo-texting"]
+    parts = ["set -e", "umask 077", "mkdir -p /root/.hermes/skills/zingas/quo-texting /root/.hermes/skills/zingas/todo-list /usr/local/lib/zingas"]
     for src, dst in VAL_FILES.items():
         with open(os.path.join(HERE, src), "rb") as fh:
             b64 = base64.b64encode(fh.read()).decode()
         parts.append(f"echo '{b64}' | base64 -d > '{dst}'")
     parts += [
         "chmod 755 /usr/local/bin/zingas-quo",
-        "chmod 644 /etc/supervisor/conf.d/zingas-quo-pickup.conf",
+        "chmod 644 /etc/supervisor/conf.d/zingas-quo-pickup.conf /usr/local/lib/zingas/zingas_todo.py",
         f"printf 'QUO_BRIDGE_URL=%s\\nVAL_DRAFT_TOKEN=%s\\n' '{url}' '{val_token}' > /root/.hermes/quo-bridge.env",
         "chmod 600 /root/.hermes/quo-bridge.env",
         "supervisorctl reread >/dev/null && supervisorctl update >/dev/null",
@@ -323,12 +326,22 @@ def main():
     hook_url = url + "/api/quo"
     quo = QuoClient(quo_key, number_id)
     for w in quo.list_webhooks():
-        if w.get("url") == hook_url or w.get("label") == "zingas-bridge":
+        if w.get("url") == hook_url or w.get("label") in ("zingas-bridge", "zingas-bridge-calls"):
             quo.delete_webhook(w["id"])
     hook = quo.create_webhook(hook_url, number_id)
     if not hook.get("key"):
         raise Stop("Quo made the alert but didn't give its signing key. Tell Claude.")
-    vercel.set_env({"QUO_WEBHOOK_SECRET": hook["key"]})
+    keys = [hook["key"]]
+    # Calls and voicemails, for Val's to-do list. Its own alert, so a refusal here
+    # never stops texting from working.
+    try:
+        calls = quo.create_webhook(hook_url, number_id, events=CALL_EVENTS, label="zingas-bridge-calls")
+        if calls.get("key"):
+            keys.append(calls["key"])
+        say("Quo's call and voicemail alert is connected.")
+    except QuoError as e:
+        say(f"Quo didn't connect the call and voicemail alert ({e}). Texts still work. Tell Claude.")
+    vercel.set_env({"QUO_WEBHOOK_SECRET": ",".join(keys)})
     say("Quo's new-text alert is connected. Restarting quo-bridge with its key...")
     url = vercel.deploy()
 

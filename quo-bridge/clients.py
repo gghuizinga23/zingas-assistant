@@ -116,10 +116,11 @@ class QuoClient:
     def delete_webhook(self, webhook_id: str) -> None:
         self._call("DELETE", "/v1/webhooks/" + webhook_id, versioned=False)
 
-    def create_webhook(self, url: str, number_id: str) -> dict:
+    def create_webhook(self, url: str, number_id: str, events=("message.received",),
+                       label: str = "zingas-bridge") -> dict:
         return self._call("POST", "/webhooks", {
-            "url": url, "events": ["message.received"], "resourceIds": [number_id],
-            "label": "zingas-bridge"}).get("data") or {}
+            "url": url, "events": list(events), "resourceIds": [number_id],
+            "label": label}).get("data") or {}
 
 
 class TelegramError(RuntimeError):

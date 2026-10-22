@@ -100,6 +100,16 @@ class Rig:
         return self.call("POST", "/api/quo", raw, {"webhook-id": "EV" + msg_id, "webhook-timestamp": str(ts),
                                                     "webhook-signature": sig})
 
+    def quo_event(self, kind, resource, external=(CUSTOMER,), secret=QUO_SECRET):
+        self._n += 1
+        ev = f"EVcall{self._n}"
+        raw = json.dumps({"id": ev, "type": kind, "data": {"resource": resource, "context": {
+            "phoneNumberId": "PNbiz", "participants": {"workspace": ["+13175550100"],
+                                                       "external": list(external), "resolution": "available"}}}}).encode()
+        ts = int(self.clock().timestamp())
+        return self.call("POST", "/api/quo", raw, {"webhook-id": ev, "webhook-timestamp": str(ts),
+                                                    "webhook-signature": sign_quo_body(raw, secret, ev, ts)})
+
     def val(self, method, path, body=b"", token=VAL_TOKEN):
         return self.call(method, path, body, {"Authorization": "Bearer " + token})
 
@@ -126,6 +136,48 @@ class Rig:
 
     def status(self, draft_id):
         return self.store.get_draft(draft_id)["status"]
+
+
+class Calls(unittest.TestCase):
+    def test_missed_call_voicemail_and_summary_reach_val_once(self):
+        r = Rig()
+        r.quo_event("call.completed", {"id": "CA1", "direction": "incoming", "status": "unanswered",
+                                       "hasVoicemail": False, "createdAt": "2026-10-20T14:00:00Z"})
+        r.quo_event("call.completed", {"id": "CA2", "direction": "incoming", "status": "unanswered",
+                                       "hasVoicemail": True})            # the voicemail alert covers it
+        r.quo_event("call.voicemail.completed", {"id": "VM1", "callId": "CA2", "direction": "incoming",
+                                                 "from": CUSTOMER, "transcript": "Hi Gerrit, call me back."})
+        self.assertEqual(r.quo_event("call.voicemail.completed", {"id": "VM1", "from": CUSTOMER,
+                                                                  "transcript": "again"})[1], {"duplicate": True})
+        r.quo_event("call.summary.completed", {"callId": "CA3", "processingStatus": "completed",
+                                               "summary": ["Asked about shutters."], "nextSteps": ["Send quote"],
+                                               "fromPhoneNumber": CUSTOMER})
+        _, up = r.val("GET", "/api/val/updates")
+        got = {c["id"]: (c["kind"], c["text"]) for c in up["calls"]}
+        self.assertEqual(got, {"CA1": ("missed", ""), "VM1": ("voicemail", "Hi Gerrit, call me back."),
+                               "sum-CA3": ("call_summary", "Asked about shutters.\nNext steps:\nSend quote")})
+        r.val("POST", "/api/val/ack", {"calls": ["CA1", "VM1", "sum-CA3"]})
+        self.assertEqual(r.val("GET", "/api/val/updates")[1]["calls"], [])
+
+    def test_outgoing_answered_and_unsigned_calls_are_not_kept(self):
+        r = Rig()
+        r.quo_event("call.completed", {"id": "CA9", "direction": "outgoing", "status": "unanswered"})
+        r.quo_event("call.completed", {"id": "CA8", "direction": "incoming", "status": "answered"})
+        r.quo_event("call.summary.completed", {"callId": "CA7", "processingStatus": "in-progress"})
+        r.quo_event("call.completed", {"id": "CA6", "direction": "incoming", "status": "unanswered"},
+                    external=("not-a-phone",))
+        bad = "whsec_" + base64.b64encode(b"x" * 24).decode()
+        self.assertEqual(r.quo_event("call.completed", {"id": "CA5", "direction": "incoming",
+                                                        "status": "unanswered"}, secret=bad)[0], 401)
+        self.assertEqual(r.val("GET", "/api/val/updates")[1]["calls"], [])
+
+    def test_a_second_alert_key_is_accepted(self):
+        second = "whsec_" + base64.b64encode(b"c" * 24).decode()
+        r = Rig()
+        r.bridge.cfg.quo_webhook_secret = QUO_SECRET + "," + second
+        self.assertEqual(r.quo_event("call.completed", {"id": "CA1", "direction": "incoming",
+                                                        "status": "unanswered"}, secret=second)[0], 200)
+        self.assertEqual(len(r.val("GET", "/api/val/updates")[1]["calls"]), 1)
 
 
 class Locks(unittest.TestCase):

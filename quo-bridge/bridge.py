@@ -1,7 +1,7 @@
 """quo-bridge: the only way a text reaches a customer.
 
 Four ways in, each with its own lock:
-  - Quo's "new text" alert (signed by Quo)          -> handle_quo()
+  - Quo's text and call alerts (signed by Quo)    -> handle_quo()
   - Val's computer, with the drafts-only code       -> val_updates(), val_ack(), val_draft()
   - Gerrit's taps in the Val Approvals bot          -> handle_telegram()
   - Vercel's every-minute timer (CRON_SECRET)       -> tick()
@@ -34,6 +34,7 @@ MAX_TEXT = 1600            # Quo's limit for one text
 STOP_WORDS = {"STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT", "OPTOUT", "REVOKE"}
 START_WORDS = {"START", "UNSTOP"}
 _CATEGORY_RE = re.compile(r"^[a-z_]{1,32}$")
+CALL_EVENTS = ("call.completed", "call.voicemail.completed", "call.summary.completed")
 
 Response = Tuple[int, dict]
 
@@ -163,12 +164,16 @@ class Bridge:
     # ------------------------------------------------------------- 1. Quo alert
 
     def handle_quo(self, headers: Mapping[str, str], raw: bytes) -> Response:
-        if not verify_quo_signature(headers, raw, self.cfg.quo_webhook_secret, now=self.now().timestamp()):
+        # One secret per Quo alert subscription (texts and calls may be two), comma-separated.
+        secrets_ = [x.strip() for x in self.cfg.quo_webhook_secret.split(",") if x.strip()]
+        if not any(verify_quo_signature(headers, raw, sec, now=self.now().timestamp()) for sec in secrets_):
             return 401, {"error": "bad signature"}
         try:
             event = json.loads(raw)
         except ValueError:
             return 200, {"ignored": "not json"}
+        if event.get("type") in CALL_EVENTS:
+            return self._on_call(event)
         if event.get("type") != "message.received":
             return 200, {"ignored": event.get("type")}
         data = event.get("data") or {}
@@ -199,6 +204,40 @@ class Bridge:
             self._tell_gerrit(f"✅ {pretty_phone(phone)} texted START. They can get texts again.")
         return 200, {"stored": True}
 
+    def _on_call(self, event: dict) -> Response:
+        """Calls and voicemails go on Val's to-do list. Only incoming calls from a US
+        number are kept: a missed call with no voicemail, a voicemail (with Quo's
+        transcript), or an answered call's summary (Quo's Business plan)."""
+        kind_of = event.get("type")
+        data = event.get("data") or {}
+        res, ctx = data.get("resource") or {}, data.get("context") or {}
+        external = (ctx.get("participants") or {}).get("external") or []
+        if kind_of == "call.completed":
+            if res.get("direction") != "incoming" or res.get("hasVoicemail"):
+                return 200, {"ignored": "not a missed call"}     # the voicemail alert covers it
+            if res.get("status") not in ("unanswered", "abandoned", "failed"):
+                return 200, {"ignored": "answered call"}          # the summary alert covers it
+            phone, kind, body, row_id = us_phone(external[0] if external else ""), "missed", "", res.get("id")
+        elif kind_of == "call.voicemail.completed":
+            if res.get("direction") not in (None, "incoming"):
+                return 200, {"ignored": "outgoing"}
+            phone = us_phone(res.get("from") or (external[0] if external else ""))
+            kind, row_id = "voicemail", res.get("id") or res.get("voicemailId")
+            body = str(res.get("transcript") or "").strip() or "[Quo had no transcript yet. Listen in the Quo app.]"
+        else:   # call.summary.completed
+            if res.get("processingStatus") != "completed":
+                return 200, {"ignored": "summary not ready"}
+            phone = us_phone(res.get("fromPhoneNumber") or (external[0] if external else ""))
+            kind, row_id = "call_summary", "sum-" + str(res.get("callId") or "")
+            lines = [str(x) for x in (res.get("summary") or [])]
+            steps = [str(x) for x in (res.get("nextSteps") or [])]
+            body = "\n".join(lines + (["Next steps:"] + steps if steps else []))
+        if not row_id or row_id == "sum-" or not phone:
+            return 200, {"ignored": "no id or not a US number"}
+        new = self.store.add_call({"id": str(row_id), "phone": phone, "kind": kind, "body": body[:4000],
+                                   "created_at": res.get("createdAt") or res.get("completedAt") or self._stamp()})
+        return 200, ({"stored": True} if new else {"duplicate": True})
+
     # ------------------------------------------------------- 2. Val's computer
 
     def val_updates(self) -> Response:
@@ -214,11 +253,15 @@ class Bridge:
                      "edited": bool(d.get("edited")), "sent_at": d.get("sent_at"),
                      "reasons": d.get("reasons") or ""}
                     for d in self.store.unreported_outcomes(20)]
-        return 200, {"texts": texts, "outcomes": outcomes}
+        calls = [{"id": c["id"], "phone": c["phone"], "kind": c["kind"], "text": c.get("body") or "",
+                  "received_at": c["created_at"]} for c in self.store.unpicked_calls(20)]
+        return 200, {"texts": texts, "outcomes": outcomes, "calls": calls}
 
     def val_ack(self, payload: dict) -> Response:
         texts = [str(i) for i in (payload.get("texts") or [])][:100]
         outcomes = [str(i) for i in (payload.get("outcomes") or [])][:100]
+        calls = [str(i) for i in (payload.get("calls") or [])][:100]
+        self.store.ack_calls(calls, self._stamp())
         self.store.ack_messages(texts, self._stamp())
         self.store.mark_reported(outcomes, self._stamp())
         return 200, {"ok": True}
