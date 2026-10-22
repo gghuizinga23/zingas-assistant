@@ -76,6 +76,18 @@ class QuietHours(unittest.TestCase):
     def test_exactly_8pm_is_outside(self):
         self.assertEqual(decide(text(approved=True), at(20)).action, "hold")
 
+    def test_send_now_overrides_the_hold_for_an_approved_text(self):
+        t = text(approved=True); t.gerrit_said_send_now = True
+        self.assertTrue(decide(t, at(0, 15)).may_send_now)
+
+    def test_send_now_without_approval_does_nothing(self):
+        t = text(); t.gerrit_said_send_now = True
+        self.assertFalse(decide(t, at(0, 15)).may_send_now)
+
+    def test_send_now_never_beats_do_not_contact(self):
+        t = text(approved=True); t.gerrit_said_send_now = True; t.do_not_contact = True
+        self.assertEqual(decide(t, at(0, 15)).action, "block")
+
 
 class AutoSend(unittest.TestCase):
     def test_earned_on_my_way_counts_down_then_sends(self):

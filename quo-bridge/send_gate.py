@@ -9,7 +9,7 @@ Plain-English summary of the rules, in the order they are checked:
   1. Appointment confirmations never send. Corporate already sends them.
   2. Do-not-contact customers never get anything.
   3. Nothing sends outside 8am-8pm in the customer's time zone. An approved
-     text waits until 8am instead.
+     text waits until 8am instead, unless Gerrit taps Send now on it.
   4. A text Gerrit approved sends.
   5. A text Gerrit did not approve may go by itself only when ALL of these hold:
        - it is one of the auto-send kinds: on my way / running late, a quick
@@ -163,6 +163,7 @@ class OutgoingText:
     do_not_contact: bool = False
     approved_by_gerrit: bool = False
     in_reply_to: str = ""            # the customer's message this answers, if any
+    gerrit_said_send_now: bool = False   # Gerrit tapped Send now on a held text
 
 
 @dataclass
@@ -212,6 +213,8 @@ def decide(msg: OutgoingText, now: datetime,
     if msg.approved_by_gerrit:
         if in_window:
             return Decision("send", ["Approved by Gerrit."])
+        if msg.gerrit_said_send_now:
+            return Decision("send", ["Approved by Gerrit. He tapped Send now outside 8am to 8pm."])
         return Decision(
             "hold",
             ["Approved. It is outside 8am to 8pm for the customer, so the text will wait until 8am."],

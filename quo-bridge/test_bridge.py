@@ -300,6 +300,70 @@ class Flow(unittest.TestCase):
         self.assertEqual(len(r.quo.sent), 1)
         self.assertEqual(r.status(d["id"]), "sent")
 
+    def test_send_now_sends_a_held_text_at_once(self):
+        r = Rig(now=TUE_9PM)
+        _, d = r.draft()
+        r.tap("a", d["id"])
+        self.assertIn("n:" + d["id"], json.dumps(r.tg.edits[-1]))
+        r.tap("n", d["id"])
+        self.assertEqual(len(r.quo.sent), 1)
+        self.assertEqual(r.status(d["id"]), "sent")
+        r.tap("n", d["id"])                      # a double tap sends nothing more
+        r.clock.t = datetime(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
+        r.tick()
+        self.assertEqual(len(r.quo.sent), 1)
+
+    def test_only_gerrit_can_tap_send_now(self):
+        r = Rig(now=TUE_9PM)
+        _, d = r.draft()
+        r.tap("a", d["id"])
+        r.tap("n", d["id"], who=999)
+        self.assertEqual(r.quo.sent, [])
+        self.assertEqual(r.status(d["id"]), "held")
+
+    def test_send_now_works_only_on_a_held_text(self):
+        r = Rig(now=TUE_9PM)
+        _, d = r.draft()
+        r.tap("n", d["id"])                      # not approved yet
+        self.assertEqual(r.quo.sent, [])
+        self.assertEqual(r.status(d["id"]), "pending")
+
+    def test_send_now_still_blocks_do_not_contact(self):
+        r = Rig(now=TUE_9PM)
+        _, d = r.draft()
+        r.tap("a", d["id"])
+        r.customer_texts("STOP")
+        r.tap("n", d["id"])
+        self.assertEqual(r.quo.sent, [])
+        self.assertEqual(r.status(d["id"]), "blocked")
+
+    def test_failed_send_now_stays_held_and_can_try_again(self):
+        r = Rig(now=TUE_9PM)
+        _, d = r.draft()
+        r.tap("a", d["id"])
+        r.quo.fail_with = [QuoError("Quo refused it.", status=403)]
+        r.tap("n", d["id"])
+        self.assertEqual(r.status(d["id"]), "held")
+        self.assertIn("n:" + d["id"], json.dumps(r.tg.edits[-1]))
+        r.tap("n", d["id"])
+        self.assertEqual(len(r.quo.sent), 1)
+        self.assertEqual(r.status(d["id"]), "sent")
+
+    def test_typed_message_with_one_held_text_shows_send_now(self):
+        r = Rig(now=TUE_9PM)
+        _, d = r.draft()
+        r.tap("a", d["id"])
+        r.reply("Go ahead and send now.")
+        last = r.tg.sent[-1]
+        self.assertIn("I cannot read typed messages", last["text"])
+        self.assertIn("n:" + d["id"], json.dumps(last))
+        self.assertEqual(r.quo.sent, [])         # typing alone never sends
+
+    def test_typed_message_with_nothing_held_explains_the_buttons(self):
+        r = Rig()
+        r.reply("hello?")
+        self.assertIn("I cannot read typed messages. Use the buttons on each draft.", r.tg.sent[-1]["text"])
+
     def test_held_text_can_still_be_cancelled(self):
         r = Rig(now=TUE_9PM)
         _, d = r.draft()

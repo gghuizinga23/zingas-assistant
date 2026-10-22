@@ -155,11 +155,17 @@ class Bridge:
     def _save_stats(self, s: send_gate.AutoSendStats) -> None:
         self.store.save_stats(s.category, s.approvals_in_a_row_unedited, s.enabled)
 
-    def _outgoing(self, d: dict, approved: bool) -> send_gate.OutgoingText:
+    @staticmethod
+    def _held_buttons(d: dict) -> list:
+        return [[{"text": "📤 Send now", "callback_data": "n:" + d["id"]},
+                 {"text": "✖️ Cancel", "callback_data": "s:" + d["id"]}]]
+
+    def _outgoing(self, d: dict, approved: bool, send_now: bool = False) -> send_gate.OutgoingText:
         return send_gate.OutgoingText(
             text=self._text_of(d), category=d["category"], customer_time_zone=d["time_zone"],
             prospect_id=d.get("prospect_id") or None, do_not_contact=self.store.is_dnc(d["phone"]),
-            approved_by_gerrit=approved, in_reply_to=d.get("customer_said") or "")
+            approved_by_gerrit=approved, in_reply_to=d.get("customer_said") or "",
+            gerrit_said_send_now=send_now)
 
     # ------------------------------------------------------------- 1. Quo alert
 
@@ -336,19 +342,21 @@ class Bridge:
 
     # ----------------------------------------------------------- sending
 
-    def _send_now(self, d: dict, approved: bool) -> str:
+    def _send_now(self, d: dict, approved: bool, send_now: bool = False) -> str:
         """d is already claimed (status 'approving' or 'sending'). Runs the gate
-        once more, then sends, holds or blocks. Returns a short result line."""
-        decision = send_gate.decide(self._outgoing(d, approved), self.now(),
+        once more, then sends, holds or blocks. Returns a short result line.
+        send_now=True means Gerrit tapped Send now on a held text."""
+        decision = send_gate.decide(self._outgoing(d, approved, send_now), self.now(),
                                     None if approved else self._stats(d["category"]))
         ok_to_send = decision.action == "send" or (not approved and decision.action == "countdown")
         if decision.action == "hold":
             when = _local(decision.send_after, d["time_zone"])
             self.store.update_draft(d["id"], {"status": "held", "send_after": utc_iso(decision.send_after)})
-            self._edit_card(d, self._card_text(d, f"⏰ Approved. It sends {when}, their time."),
-                            [[{"text": "✖️ Cancel", "callback_data": "s:" + d["id"]}]])
+            self._edit_card(d, self._card_text(d, f"⏰ Approved. It sends {when}, their time. "
+                                                  f"To send it now, tap 📤 Send now."),
+                            self._held_buttons(d))
             self._log("held", d["id"], " ".join(decision.reasons))
-            return "Approved. The text will wait until 8am in their time zone."
+            return "Approved. The text waits until 8 AM in their time zone."
         if not ok_to_send:
             reasons = " ".join(decision.reasons)
             if decision.action == "block":
@@ -364,11 +372,17 @@ class Bridge:
         try:
             quo_id = self.quo.send_text(d["phone"], self._text_of(d))
         except QuoError as e:
-            status = "failed" if e.unknown else "pending"
-            note = (f"⚠️ No answer from Quo. Check the Quo app before you tap Approve again."
-                    if e.unknown else f"⚠️ The text did not send: {e} Tap Approve to try again.")
+            if e.unknown:
+                status, buttons = "failed", self._buttons(d)
+                note = "⚠️ No answer from Quo. Check the Quo app before you tap Approve again."
+            elif send_now:   # keep it approved and waiting; Send now tries again
+                status, buttons = "held", self._held_buttons(d)
+                note = f"⚠️ The text did not send: {e} It still sends at 8 AM. To try again now, tap 📤 Send now."
+            else:
+                status, buttons = "pending", self._buttons(d)
+                note = f"⚠️ The text did not send: {e} Tap Approve to try again."
             self.store.update_draft(d["id"], {"status": status, "error": str(e)})
-            self._edit_card(d, self._card_text(d, note), self._buttons(d))
+            self._edit_card(d, self._card_text(d, note), buttons)
             self._log("send_failed", d["id"], str(e))
             return "Quo did not send the text."
         stamp = self._stamp()
@@ -423,6 +437,13 @@ class Bridge:
                 stats.record_approval(edited=bool(d.get("edited")))
                 self._save_stats(stats)
             self._answer(cq, self._send_now(claimed, approved=True))
+        elif action == "n":
+            claimed = self.store.claim_draft(draft_id, ["held"], {"status": "approving"})
+            if not claimed:
+                self._answer(cq, "Someone already did an action on this draft.")
+                return
+            self._log("send_now", draft_id, "Gerrit tapped Send now outside 8am to 8pm.")
+            self._answer(cq, self._send_now(claimed, approved=True, send_now=True))
         elif action == "s":
             claimed = self.store.claim_draft(draft_id, ["pending", "editing", "held", "failed"], {"status": "skipped"})
             if claimed:
@@ -469,7 +490,7 @@ class Bridge:
             editing = self.store.drafts_by_status(["editing"], 2)
             d = editing[0] if len(editing) == 1 else None
         if not d or d["status"] != "editing":
-            self._tell_gerrit("To change a draft, tap ✏️ Edit on the draft. Then reply to my message.")
+            self._not_an_edit()
             return
         if not text or len(text) > MAX_TEXT:
             self._tell_gerrit(f"The text must be 1 to {MAX_TEXT} characters. Try again.", force_reply=True)
@@ -483,6 +504,25 @@ class Bridge:
         if msg_id:
             self.store.update_draft(d["id"], {"tg_message_id": msg_id})
         self._log("edited", d["id"], "")
+
+    def _not_an_edit(self) -> None:
+        """Gerrit typed a message that is not new text for a draft. The bot
+        cannot read typed messages, so it shows him the buttons to use."""
+        held = self.store.drafts_by_status(["held"], 2)
+        if len(held) == 1:
+            d = held[0]
+            when = _local(parse_time(d.get("send_after")), d["time_zone"]) if d.get("send_after") else "at 8:00 AM"
+            who = d.get("customer_name") or pretty_phone(d["phone"])
+            self._tell_gerrit(f"I cannot read typed messages. Use the buttons.\n"
+                              f"The text to {who} waits until {when}, their time. "
+                              f"To send it now, tap 📤 Send now.", buttons=self._held_buttons(d))
+            return
+        if held:
+            self._tell_gerrit("I cannot read typed messages. Use the buttons.\n"
+                              "To send a waiting text now, tap 📤 Send now on its card.")
+            return
+        self._tell_gerrit("I cannot read typed messages. Use the buttons on each draft.\n"
+                          "To change a draft, tap ✏️ Edit. Then reply to my message.")
 
     # ------------------------------------------------- 4. every-minute check
 

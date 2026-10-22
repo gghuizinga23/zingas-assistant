@@ -69,6 +69,38 @@ class QuoError(RuntimeError):
         self.unknown = unknown   # True when we can't tell if the text went out
 
 
+def quo_said(raw) -> str:
+    """Quo's own words from an error body, short, for the card and the log."""
+    try:
+        body = json.loads(raw or b"{}")
+    except ValueError:
+        text = (raw.decode("utf-8", "replace") if isinstance(raw, bytes) else str(raw or "")).strip()
+        return text[:240] if text and "<" not in text else ""
+    if not isinstance(body, dict):
+        return ""
+    if isinstance(body.get("error"), dict):
+        body = dict(body, **body["error"])
+    parts = [str(body.get(k)).strip() for k in ("title", "message") if body.get(k)]
+    for err in (body.get("errors") or [])[:2]:
+        if isinstance(err, dict) and err.get("message"):
+            parts.append(str(err["message"]).strip())
+    seen = []
+    for x in parts:
+        if x and x not in seen:
+            seen.append(x)
+    return " ".join(seen)[:240]
+
+
+def quo_error(status: int, raw=b"") -> "QuoError":
+    reason = _QUO_REASONS.get(status, f"Quo error {status}.")
+    said = quo_said(raw)
+    return QuoError(f"{reason} Quo said: {said}" if said else reason, status=status)
+
+
+# Quo's firewall (Cloudflare) refuses Python's default "Python-urllib" name tag
+# with "error code: 1010", so every Quo call names itself.
+USER_AGENT = "zingas-quo-bridge/1.0"
+
 _QUO_REASONS = {
     400: "Quo refused it (texting registration not approved, or a bad number).",
     401: "Quo didn't accept the key.",
@@ -86,7 +118,7 @@ class QuoClient:
 
     def _call(self, method: str, path: str, body=None, versioned: bool = True) -> dict:
         headers = {"Authorization": self.api_key, "Content-Type": "application/json",
-                   "Accept": "application/json"}
+                   "Accept": "application/json", "User-Agent": USER_AGENT}
         if versioned:
             headers["Quo-Api-Version"] = QUO_API_VERSION
         data = json.dumps(body).encode() if body is not None else None
@@ -95,7 +127,11 @@ class QuoClient:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 raw = resp.read()
         except urllib.error.HTTPError as e:
-            raise QuoError(_QUO_REASONS.get(e.code, f"Quo error {e.code}."), status=e.code) from None
+            try:
+                body = e.read()
+            except Exception:
+                body = b""
+            raise quo_error(e.code, body) from None
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             raise QuoError(f"No answer from Quo ({type(e).__name__}).", unknown=True) from None
         return json.loads(raw) if raw else {}

@@ -117,7 +117,7 @@ could do is put a draft in front of you.
 | Q4 | ✅ **Done 2026-10-21.** quo-bridge and Val's pickup program are built. 109 tests pass with fake texts | Me | done |
 | Q5 | ✅ **Done 2026-10-22.** quo-bridge is online at https://zingas-quo-bridge.vercel.app. Quo's text and call/voicemail alerts and **Val Approvals** are connected; 7 of 7 lock checks passed from outside; Val's pickup program is RUNNING with only the helper's address and her drafts-only code. Records are in the **Zingas Assistant** Supabase organization (project "gghuizinga23's Project", reused because the free plan allows 2 projects). Fixes on the way: the laptop reaches Quo through curl (its Python is too old for Quo's servers); Supabase goes through the Supabase app signed in on this laptop, not a token (Gerrit's choice); the box refuses a cell number that is the Quo number | Gerrit pasted, I did the rest | done |
 | Q6 | ✅ **Done 2026-10-22.** `files/quo-safety-check.sh` on Val's computer: 10 of 10 passed (Val's code can't run the timer or press Approve, a fake Quo alert and a wrong code are refused, a confirmation is blocked, no helper keys on Val's computer, her drafting run reaches only the to-do tool, an order hidden in a customer text only makes a draft). The rules (8am–8pm hold, money words, STOP, double taps) pass 95 of 95 quo-bridge tests | Me | done |
-| Q7 | Real test: text the Quo number from your cell. Val's draft shows in **Val Approvals**. Tap **Approve**; the reply reaches your cell | Gerrit | 5 min |
+| Q7 | ✅ **Done 2026-10-22 (12:35 AM).** Gerrit texted the Quo number from his cell; Val's draft showed in **Val Approvals**; he tapped Approve, then 📤 Send now; the reply reached his cell. Fixes found on the way: Quo's firewall (Cloudflare, "error code: 1010") blocks Python's default name tag, so quo-bridge now calls Quo as `zingas-quo-bridge/1.0`; a held text (outside 8am–8pm) now has a 📤 Send now button that only Gerrit can tap; the bot answers typed messages with the buttons to use; a Quo refusal shows Quo's own words | Gerrit | done |
 
 **Q5 step by step (to run it again; safe, it reuses what's there):**
 1. **Vercel token (for this run only):** open https://vercel.com/account/tokens. Name `quo-setup`.
@@ -151,4 +151,4 @@ could do is put a draft in front of you.
 **Rules that hold the whole way:**
 - Nothing goes to GitHub or anywhere else; files go straight from this laptop to Val's computer.
 - No passwords or keys in chat.
-- Val can't send email. She can't text customers until Q7, and then only after your tap.
+- Val can't send email. She texts customers only after your tap (Approve, or Send now on a text held outside 8am–8pm).

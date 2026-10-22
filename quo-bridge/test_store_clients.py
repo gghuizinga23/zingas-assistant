@@ -168,6 +168,7 @@ class QuoClientTests(unittest.TestCase):
         self.assertEqual((r["method"], r["url"]), ("POST", "https://api.quo.com/v1/messages"))
         self.assertEqual(r["headers"]["authorization"], "quo-key")
         self.assertEqual(r["body"], {"content": "Hi there", "from": "PN123", "to": ["+13175550100"]})
+        self.assertEqual(r["headers"]["user-agent"], "zingas-quo-bridge/1.0")   # not Python-urllib (Cloudflare 1010)
 
     def test_versioned_calls_send_the_version(self):
         net = FakeNet(b'{"data":[{"id":"PN1","phoneNumber":"+13175550000"}]}',
@@ -191,6 +192,19 @@ class QuoClientTests(unittest.TestCase):
                 self.q.send_text("+1", "x")
         self.assertTrue(cm.exception.unknown)
 
+
+    def test_quo_own_words_are_kept(self):
+        body = io.BytesIO(b'{"message":"Messaging not allowed: number not registered","code":"0201403","status":403,"title":"Forbidden"}')
+        e403 = urllib.error.HTTPError("u", 403, "x", {}, body)
+        with mock.patch("urllib.request.urlopen", FakeNet(e403)):
+            with self.assertRaises(clients.QuoError) as cm:
+                self.q.send_text("+1", "x")
+        self.assertEqual(cm.exception.status, 403)
+        self.assertIn("Quo said: Forbidden Messaging not allowed: number not registered", str(cm.exception))
+        self.assertEqual(clients.quo_said(b"error code: 1010"), "error code: 1010")
+        self.assertEqual(clients.quo_said(b"<html>blocked</html>"), "")
+        self.assertEqual(clients.quo_said(b'{"error":{"message":"Missing authorization header"}}'),
+                         "Missing authorization header")
 
 class TelegramClientTests(unittest.TestCase):
     def setUp(self):
