@@ -136,6 +136,8 @@ platform_toolsets:
     - todo
     - vision
     - web
+  # No built-in "todo" tool here: Val read it as "the to-do list" (2026-10-22)
+  # and said the list was empty. The real list is the zingas-todo command.
   telegram:
     - clarify
     - cronjob
@@ -144,7 +146,6 @@ platform_toolsets:
     - session_search
     - skills
     - terminal
-    - todo
     - vision
     - web
 plugins:
