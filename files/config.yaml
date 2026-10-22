@@ -49,9 +49,12 @@ prompt_caching:
 display:
   compact: false
   busy_input_mode: interrupt
+  # Gerrit (2026-10-21): no gear/tool lines, no thinking, no in-between
+  # messages in Telegram. Only the answer.
   show_reasoning: false
+  interim_assistant_messages: false
   streaming: true
-  tool_progress: all
+  tool_progress: "off"
   long_running_notifications: true
 stt:
   # Telegram voice notes (truck debriefs) are transcribed.
@@ -96,6 +99,7 @@ secrets:
     #   (each as op://Zingas Assistant/Assistant Secrets/<NAME>)
     env:
       HEALTHCHECKS_PING_URL: op://Zingas Assistant/Assistant Secrets/HEALTHCHECKS_PING_URL
+      COMPOSIO_VAL_KEY: op://Zingas Assistant/Assistant Secrets/COMPOSIO_VAL_KEY
     binary_path: /usr/bin/op
 _config_version: 33
 session_reset:
@@ -139,14 +143,23 @@ plugins:
     - xai-provider
     - web-xai
 mcp_servers:
-  # Gmail and Calendar go through mail-bridge, a small service on this
-  # computer that holds the Composio key (from the Zingas Bridge vault) and
-  # offers ONLY: read mail, search mail, create draft, read calendar. Composio
-  # itself can send, forward and delete, so Val never gets the key or a direct
-  # Composio connection. Gerrit sends every email from Gmail.
-  # Ships disabled until mail-bridge is built and running.
-  mail-bridge:
-    url: http://127.0.0.1:8790/mcp
+  # Gmail: Composio's locked session (read, search, draft only). The link is
+  # COMPOSIO_MAIL_MCP_URL in .env; COMPOSIO_VAL_KEY is Val's limited key from
+  # 1Password. Made by files/gmail-setup.sh; checked by files/gmail-safety-check.sh.
+  gmail:
+    url: ${COMPOSIO_MAIL_MCP_URL}
+    headers:
+      x-api-key: ${COMPOSIO_VAL_KEY}
+    timeout: 120
+    tools:
+      include: [GMAIL_FETCH_EMAILS, GMAIL_LIST_MESSAGES, GMAIL_LIST_THREADS,
+        GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID, GMAIL_FETCH_MESSAGE_BY_THREAD_ID,
+        GMAIL_CREATE_EMAIL_DRAFT, GMAIL_LIST_DRAFTS, GMAIL_GET_DRAFT, GMAIL_GET_ATTACHMENT]
+      prompts: false
+      resources: false
+  # Orgo's template adds its own "orgo" server, which can send email, edit the
+  # calendar and share Drive with no approval tap. Keep it off.
+  orgo:
     enabled: false
   obsidian-vault:
     command: npx

@@ -50,8 +50,8 @@ a new session or reach any other tool.
 |---|---|---|---|
 | G1 | In Composio (API Keys): save the **main** key in 1Password (**Zingas Bridge** vault, note **Bridge Secrets**, field **COMPOSIO_API_KEY**). Make a second key, **Val limited**, with only "Session tool execution: Write" (everything else None). Save it in **Zingas Assistant** vault, note **Assistant Secrets**, field **COMPOSIO_VAL_KEY**. Leave **Require API Key for MCP** ON. Never in chat | Gerrit | 10 min |
 | G2+G3 | Run the hidden box `files/gmail-setup.sh` and paste the **main** key. A Google sign-in opens twice (Gmail, then Calendar): sign in with zingashome.com and click Allow. If Google blocks it, Delisa allows Composio in Google Admin. Then it makes the locked session (no workbench, no raw API, no new connections, narrow Google scopes) and sends only the session link to Val's computer. The main key is not saved anywhere | Gerrit pastes and signs in, I do the rest | 10 min |
-| G4 | Safety tests with Val's limited key: sending an email to you, deleting one, and making a new session must all be refused. If any works, we stop and use a helper on Vercel instead | Me | 10 min |
-| G5 | Turn it on for Val. Test: ask her on Telegram for your newest email and a draft reply. The draft shows in Gmail Drafts; nothing is sent | Gerrit | 3 min |
+| G4 | Safety tests with Val's limited key: sending an email to you, deleting one, and making a new session must all be refused. If any works, we stop and use a helper on Vercel instead. **Done 2026-10-21 (Gmail only): `files/gmail-safety-check.sh` 16 of 16 passed.** Send, send-draft, reply, forward, delete, trash, new connection and workbench all came back "not found"; send through the multi-tool runner came back "Session Restriction"; Val's key got 403 for a new session, a direct send and the account list. Run it again after Calendar is added | Me | 10 min |
+| G5 | ✅ **Done 2026-10-21.** Turn it on for Val. Test: ask her on Telegram for your newest email and a draft reply. The draft shows in Gmail Drafts; nothing is sent. Notes: Orgo's own "orgo" tool server (send email, calendar edits, Drive sharing, no tap) is turned off; Val searches all labels, not just the inbox; gear lines, thinking and in-between messages are off in Telegram | Gerrit | 3 min |
 
 **G2 status 2026-10-21: Google said "This app is blocked"** (Gerrit's screenshot: "This app tried to
 access sensitive info in your Google Account... Google blocked this access"). Google's admin help
@@ -62,7 +62,16 @@ when an app the admin hasn't trusted asks for a restricted service like Gmail. D
 3. Click **Change access**. Choose only Gerrit's org unit, or leave the top level for everyone.
 4. Pick **Trusted** → **Next** → **Change access**.
 Then run `files/gmail-setup.sh` again; it reuses what it already made.
-**Gmail is paused** until Delisa says it's done. Next: G2+G3 again, then G4 and G5.
+**Delisa trusted Composio (Gerrit, 2026-10-21).** Next: G2+G3 again, then G4 and G5.
+
+**G2 rerun 2026-10-21: Gmail connected; Calendar still "This app is blocked".** Composio's Calendar
+sign-in shows up in Google as a separate app entry, or the trust Delisa set covers Gmail only. Delisa fixes it:
+1. Same page: **Manage App Access**. Every **Composio** entry must be **Trusted**, not "Specific Google data"
+   or "Limited". If there are two, trust both.
+2. If Calendar's entry isn't listed: on Google's blocked page, Gerrit clicks **error details** and sends
+   Delisa the **client ID**. Delisa clicks **Configure new app**, pastes that ID, and picks **Trusted**.
+Meanwhile Gmail goes live alone: `GMAIL_ONLY=1 bash files/gmail-setup.sh`. Later, run
+`bash files/gmail-setup.sh` once more to add Calendar. It skips Gmail and makes a new locked link.
 
 **G1: making the "Val limited" key** (Composio's "Create API key" window has a Read column and a
 Write column, and **Read All** is ticked at the start):

@@ -12,7 +12,15 @@ metadata:
 
 Run on every brief and whenever Gerrit asks "what did I miss". Use the Gmail tools from mail-bridge (Composio behind it). You can read, search and create drafts. You cannot send, forward or delete.
 
-## Step 1: read both inbox and sent mail
+## Step 1: read all mail, not just the inbox, plus sent mail
+Gerrit's Gmail filters move a lot of mail into labels and folders, and some of it skips the inbox. So **never limit a search to the inbox**:
+- Never pass `label_ids: ["INBOX"]`, `in:inbox` or `category:primary` unless Gerrit asks for the inbox only.
+- For received mail use `GMAIL_FETCH_EMAILS` with no `label_ids`, `include_spam_trash: false`, and the query `-in:sent -in:drafts -in:chats` (add `after:YYYY/MM/DD` for a time window). This covers the inbox, every label and folder, archived mail, and the Promotions, Updates and other tabs.
+- **Keep the list small** so it fits in one answer: `verbose: false`, `include_payload: false`, and `max_results` 10 (25 for a brief). Results come newest first. Then open only the messages you need with `GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID` (or `..._BY_THREAD_ID` for the whole thread).
+- **Never use the terminal or Python to read email results.** If a result is too big, ask the Gmail tool again with fewer results.
+- "Newest email" means the newest received message anywhere, not the newest in the inbox: `max_results` 1 to 5 with the settings above.
+- When you list an email, say which label or folder it is in if it is not the inbox.
+
 Always check sent mail too. A thread whose last message is from Gerrit does not need a reply. Gerrit's sent mail is also where things get turned in (for example, an email to insidesalessupport@ saying a document was uploaded). Never call something "waiting on Gerrit" before checking the sent mail.
 
 ## Step 2: drop before drafting

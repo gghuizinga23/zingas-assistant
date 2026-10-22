@@ -12,6 +12,7 @@ Val reaches the session with her own limited key (COMPOSIO_VAL_KEY in 1Password)
 which can only run tools inside a session. Python standard library only.
 """
 import json
+import os
 import subprocess
 import sys
 import time
@@ -114,17 +115,28 @@ def main():
     if not key:
         raise SystemExit("No key pasted. Nothing was changed.")
     print("Checking the key with Composio...")
+    try:
+        call(key, "GET", "/auth_configs", query={"limit": "1"})
+    except SystemExit as e:
+        if "(401)" in str(e):
+            print("Composio says that key is not right. Nothing was changed.")
+            sys.exit(3)
+        raise
+    # GMAIL_ONLY=1: leave Calendar out (e.g. while Google still blocks it). Run
+    # again without it later; the new session link replaces this one.
+    kits = {k: v for k, v in TOOLKITS.items() if not (os.environ.get("GMAIL_ONLY") and k != "gmail")}
     acs, cas = {}, {}
-    for slug, spec in TOOLKITS.items():
+    for slug, spec in kits.items():
         acs[slug] = auth_config(key, slug, spec)
     for slug, label in (("gmail", "Gmail"), ("googlecalendar", "Calendar")):
-        cas[slug] = connect(key, slug, acs[slug], label)
+        if slug in kits:
+            cas[slug] = connect(key, slug, acs[slug], label)
 
-    every_tool = [t for spec in TOOLKITS.values() for t in spec["tools"]]
+    every_tool = [t for spec in kits.values() for t in spec["tools"]]
     session = call(key, "POST", "/tool_router/session", {
         "user_id": USER_ID,
-        "toolkits": {"enable": list(TOOLKITS)},
-        "tools": {slug: {"enable": spec["tools"]} for slug, spec in TOOLKITS.items()},
+        "toolkits": {"enable": list(kits)},
+        "tools": {slug: {"enable": spec["tools"]} for slug, spec in kits.items()},
         "auth_configs": acs,
         "connected_accounts": {slug: [ca] for slug, ca in cas.items()},
         "manage_connections": {"enable": False},

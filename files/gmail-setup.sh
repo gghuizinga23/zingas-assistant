@@ -11,16 +11,22 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ORGO="${ORGO:-$HOME/.orgo-cli/bin/orgo}"
 COMPUTER="${COMPUTER:-Hermes Agent}"
 
-echo
-echo "Paste the MAIN Composio key (1Password: Zingas Bridge > Bridge Secrets >"
-echo "COMPOSIO_API_KEY), then press Return. Nothing shows while you paste."
-printf '> '
-IFS= read -rs KEY
-echo
-KEY="$(printf '%s' "$KEY" | tr -d '[:space:]')"
-[ -n "$KEY" ] || { echo "Nothing pasted. Nothing was changed."; exit 1; }
-
-printf '%s\n' "$KEY" | python3 -I "$HERE/gmail_setup.py" "$ORGO" "$COMPUTER"
+for TRY in 1 2 3; do
+  echo
+  echo "Paste the MAIN Composio key (1Password: Zingas Bridge > Bridge Secrets >"
+  echo "COMPOSIO_API_KEY), then press Return. Nothing shows while you paste."
+  printf '> '
+  IFS= read -rs KEY
+  echo
+  KEY="$(printf '%s' "$KEY" | tr -d '[:space:]')"
+  [ -n "$KEY" ] || { echo "Nothing pasted. Try again."; continue; }
+  set +e
+  printf '%s\n' "$KEY" | python3 -I "$HERE/gmail_setup.py" "$ORGO" "$COMPUTER"
+  RC=$?
+  set -e
+  [ "$RC" -eq 3 ] && { echo "Paste it again in this same box (try $TRY of 3)."; continue; }
+  break
+done
 unset KEY
 echo
 echo "You can close this tab."
