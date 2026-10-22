@@ -70,7 +70,7 @@ class InboxTests(unittest.TestCase):
                          ("Call back about shades", "Pat Lee", "email", "gmail:th-m1"))
         self.assertTrue(item["link"].startswith("https://mail.google.com/"))
         self.assertIn("motorized shades", self.prompts[0])
-        self.assertIn("📝 New task on your to-do list:\n🟠 1. Pat Lee: Call back about shades", self.sent[0])
+        self.assertIn("📝 New task on your to-do list:\n🟡 1. Pat Lee: Call back about shades", self.sent[0])
         self.now += 120
         self.assertEqual(self.inbox.once()["new"], 0)     # never twice
 

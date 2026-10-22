@@ -7,8 +7,9 @@ Runs on Val's computer. Three things write to the list:
   - Val, in Telegram, when Gerrit says "add ...", "done 3" or "move 4 to later".
 
 The list lives in the vault: todo/todo.json (the record) and To-Do.md (a view
-to read, rebuilt on every change). Open tasks keep a small number that never
-changes while they're open, so "done 3" always means the same task.
+to read, rebuilt on every change). Open tasks are renumbered 1, 2, 3... in the order
+Gerrit sees them on every change (his rule, 2026-10-22). Each task also has a fixed
+id, so code that read the list a moment ago still changes the right task.
 
   zingas-todo list               open tasks, most important first
   zingas-todo brief              the list as the briefs show it
@@ -31,6 +32,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Iterable, List, Optional
 from zoneinfo import ZoneInfo
@@ -40,11 +42,11 @@ HERMES_HOME = os.environ.get("HERMES_HOME", "/root/.hermes")
 SKILL = os.path.join(HERMES_HOME, "skills/zingas/todo-list/SKILL.md")
 TZ = ZoneInfo("America/Indiana/Indianapolis")
 
-# key: (sort rank, marker, heading)
+# key: (sort rank, marker, heading). Gerrit's colors (2026-10-22): red, yellow, green, later.
 PRIORITIES = {
     "now": (0, "🔴", "Now"),
-    "today": (1, "🟠", "Today"),
-    "week": (2, "🟡", "This week"),
+    "today": (1, "🟡", "Today"),
+    "week": (2, "🟢", "This week"),
     "later": (3, "⚪", "Later"),
 }
 SOURCES = ("email", "text", "call", "voicemail", "gerrit", "val")
@@ -115,15 +117,19 @@ class TodoList:
             items = self._read()
             box = {"items": items}
             yield box
+            renumber(box["items"])
             self._write(box["items"])
 
     def _read(self) -> List[dict]:
         try:
             with open(self.path, encoding="utf-8") as fh:
                 data = json.load(fh)
-            return data.get("items", []) if isinstance(data, dict) else []
+            items = data.get("items", []) if isinstance(data, dict) else []
         except (OSError, ValueError):
             return []
+        for i in items:   # tasks from before 2026-10-22 have no id yet; the next change saves one
+            i.setdefault("id", f"t-{i.get('added_at') or ''}-{i.get('n')}")
+        return items
 
     def _write(self, items: List[dict]) -> None:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=KEEP_CLOSED_DAYS)).isoformat()
@@ -158,9 +164,8 @@ class TodoList:
             if PRIORITIES[priority][0] > PRIORITIES["today"][0]:
                 priority = "today"
         with self._locked() as box:
-            used = {i["n"] for i in box["items"] if i["status"] == "open"}
-            n = next(k for k in range(1, len(used) + 2) if k not in used)
-            item = {"n": n, "task": task, "priority": priority, "who": clean(who, 80),
+            # The number is set when the list is saved (renumber); the id never changes.
+            item = {"id": uuid.uuid4().hex[:12], "n": 0, "task": task, "priority": priority, "who": clean(who, 80),
                     "source": source, "ref": clean(ref, 200), "reply_by": by,
                     "due": due if _DATE.match(due or "") else "", "why": clean(why, 200),
                     "link": link if str(link).startswith("https://") else "", "auto_done": auto_done,
@@ -169,8 +174,17 @@ class TodoList:
         return dict(item)
 
     def update(self, n: int, **fields) -> Optional[dict]:
+        """Change open task number n (the number Gerrit sees now)."""
+        return self._update(lambda items: _find_open(items, n), fields)
+
+    def update_id(self, item_id: str, **fields) -> Optional[dict]:
+        """Change an open task by its id. For code that read the list earlier: numbers can move."""
+        return self._update(lambda items: next((i for i in items if i.get("id") == item_id
+                                                and i["status"] == "open"), None), fields)
+
+    def _update(self, find, fields: dict) -> Optional[dict]:
         with self._locked() as box:
-            item = _find_open(box["items"], n)
+            item = find(box["items"])
             if not item:
                 return None
             if fields.get("priority") in PRIORITIES:
@@ -183,7 +197,7 @@ class TodoList:
                 item["due"] = fields["due"] if _DATE.match(fields["due"]) else ""
             if fields.get("why"):
                 item["why"] = clean(fields["why"], 200)
-            return dict(item)
+        return dict(item)   # after the save, so it has its new number
 
     def close(self, numbers: Iterable[int], status: str = "done") -> List[dict]:
         closed = []
@@ -196,15 +210,15 @@ class TodoList:
         return closed
 
     def reopen(self, n: int) -> Optional[dict]:
+        """Reopen the last closed task that had number n when it was closed.
+        Closed tasks keep that number; only open tasks are renumbered."""
         with self._locked() as box:
-            if _find_open(box["items"], n):
-                return None
             gone = [i for i in box["items"] if i["n"] == n and i["status"] != "open"]
             if not gone:
                 return None
             item = max(gone, key=lambda i: i.get("closed_at") or "")
             item["status"], item["closed_at"] = "open", None
-            return dict(item)
+        return dict(item)
 
     def close_auto(self, ref: str, when: str) -> List[dict]:
         """Close open tasks that finish when something happens, e.g. a text task
@@ -219,6 +233,13 @@ class TodoList:
 
     def open_for(self, ref: str) -> List[dict]:
         return [i for i in self.open_items() if ref and i.get("ref") == ref]
+
+
+def renumber(items: List[dict]) -> None:
+    """Gerrit's rule (2026-10-22): the open tasks are always numbered 1, 2, 3... in the
+    order he sees them. Runs on every change. Closed tasks keep the number they had."""
+    for k, item in enumerate(sort_items(i for i in items if i["status"] == "open"), start=1):
+        item["n"] = k
 
 
 def _find_open(items: List[dict], n: int) -> Optional[dict]:
@@ -289,23 +310,30 @@ def summary(items: List[dict]) -> str:
     return f"{len(items)} open" + (f" ({', '.join(parts)})" if parts else "")
 
 
+def render_groups(items: List[dict], today=None, since: Optional[str] = None) -> List[str]:
+    """Every group under its own heading, empty ones too, so Gerrit always sees what is
+    red, yellow, green and later (his rule, 2026-10-22)."""
+    items = sort_items(items)
+    out = []
+    for p, (_, mark, head) in PRIORITIES.items():
+        group = [i for i in items if i["priority"] == p]
+        out.append(f"{mark} {head.upper()} ({len(group)})" if group else f"{mark} {head.upper()}: none")
+        out += [line(i, today) + (" 🆕" if since and i["added_at"] >= since else "") for i in group]
+    return out
+
+
 def render_list(items: List[dict], today=None) -> str:
+    """The whole open list, grouped. Shown after every change."""
     if not items:
         return "✅ Your to-do list is empty."
-    return "\n".join(line(i, today) for i in sort_items(items))
+    return "\n".join([f"Your list: {summary(items)}"] + render_groups(items, today))
 
 
 def render_brief(todo: TodoList, since: Optional[str] = None, today=None) -> str:
     """The block every morning and evening brief starts its list with."""
     items = todo.open_items()
     out = [f"To-do list: {summary(items)}"]
-    for p in PRIORITIES:
-        group = [i for i in items if i["priority"] == p]
-        if group:
-            out.append(f"{PRIORITIES[p][2]}:")
-            out += [line(i, today) + (" 🆕" if since and i["added_at"] >= since else "") for i in group]
-    if not items:
-        out.append("✅ No tasks are open.")
+    out += render_groups(items, today, since) if items else ["✅ No tasks are open."]
     if since:
         done = [i for i in todo.all_items() if i["status"] == "done" and (i.get("closed_at") or "") >= since]
         if done:
@@ -359,8 +387,8 @@ def announce(added: List[dict], todo: TodoList, notify: Callable[[str], None] = 
             row += f"\n   {a['why']}"
         rows.append(row)
     top = [a for a in added if where.get(a["n"]) == 1]
-    tail = f"Your list: {summary(items)}." + (" This task is at the top." if top and len(added) == 1 else "")
-    notify(head + "\n" + "\n".join(rows) + "\n" + tail)
+    tail = ("This task is at the top.\n" if top and len(added) == 1 else "") + render_list(items)
+    notify(head + "\n" + "\n".join(rows) + "\n\n" + tail)
     return True
 
 
@@ -452,16 +480,21 @@ def parse_judgement(raw: str, ids: Iterable[str]) -> dict:
 
 
 def apply_judgement(todo: TodoList, thing: dict, r: dict, source: str, ref: str = "",
-                    link: str = "", auto_done: str = "", received=None) -> Optional[dict]:
-    """Put one judged item on the list. Returns the new or changed task, or None."""
+                    link: str = "", auto_done: str = "", received=None,
+                    listed: Optional[List[dict]] = None) -> Optional[dict]:
+    """Put one judged item on the list. Returns the new or changed task, or None.
+    listed: the open list Val was shown. Her update_number points into that list, and the
+    numbers can move while she thinks, so the task is found by its id."""
     if r["action"] == "skip":
         return None
     if r["action"] == "update":
-        current = next((i for i in todo.open_items() if i["n"] == r["update_number"]), None)
+        shown = next((i for i in (listed if listed is not None else todo.open_items())
+                      if i["n"] == r["update_number"]), None)
+        current = next((i for i in todo.open_items() if shown and i["id"] == shown["id"]), None)
         if current:
             better = min((current["priority"], r["priority"]), key=lambda p: PRIORITIES[p][0])
-            return todo.update(current["n"], priority=better, task=r["task"],
-                               due=r["due"] or current.get("due") or "", why=r.get("why") or "")
+            return todo.update_id(current["id"], priority=better, task=r["task"],
+                                  due=r["due"] or current.get("due") or "", why=r.get("why") or "")
     return todo.add(r["task"], priority=r["priority"], who=r.get("who") or thing.get("from", ""),
                     source=source, ref=ref, due=r["due"], why=r.get("why") or "", link=link,
                     auto_done=auto_done, received=received)
@@ -509,7 +542,7 @@ def main(argv=None) -> int:
         except ValueError as e:
             print(f"I did not add the task: {e}")
             return 1
-        print("Added: " + line(item))
+        print("Added: " + line(item) + "\n\n" + render_list(todo.open_items()))
     elif args.cmd in ("done", "drop"):
         closed = todo.close(args.numbers, status="done" if args.cmd == "done" else "dropped")
         missing = sorted(set(args.numbers) - {c["n"] for c in closed})
@@ -517,15 +550,17 @@ def main(argv=None) -> int:
             print(("✅ Done: " if args.cmd == "done" else "Removed: ") + c["task"])
         if missing:
             print("There is no open task with the number " + ", ".join(map(str, missing)) + ".")
-        print(f"Your list: {summary(todo.open_items())}.")
+        print("\n" + render_list(todo.open_items()))
         return 0 if closed else 1
     elif args.cmd == "undo":
         item = todo.reopen(args.number)
-        print("Back on the list: " + line(item) if item else f"There is no closed task with the number {args.number}.")
+        print("Back on the list: " + line(item) + "\n\n" + render_list(todo.open_items()) if item
+              else f"There is no closed task with the number {args.number}.")
         return 0 if item else 1
     elif args.cmd == "set":
         item = todo.update(args.number, priority=args.priority, task=args.task, due=args.due)
-        print("Changed: " + line(item) if item else f"There is no open task with the number {args.number}.")
+        print("Changed: " + line(item) + "\n\n" + render_list(todo.open_items()) if item
+              else f"There is no open task with the number {args.number}.")
         return 0 if item else 1
     return 0
 

@@ -39,8 +39,8 @@ Always `skip`:
 | Priority | Use it when |
 |---|---|
 | `now` 🔴 | It hurts if it waits a few hours: a customer is upset or cancelling, a problem with an install or order, a same-day appointment issue, a signed job at risk, or an office or manager ask due today |
-| `today` 🟠 | A customer or lead is waiting on Gerrit: a question, a quote follow-up, a missed call or voicemail to return, a new lead. Also office paperwork that holds up a deposit or an order (result an appointment, upload a contract) |
-| `week` 🟡 | (Never for an email, text, call or voicemail: those are always `today` or `now`.) Office, HR and admin asks with no near deadline, vendor or rep requests, documents to send that block nothing |
+| `today` 🟡 | A customer or lead is waiting on Gerrit: a question, a quote follow-up, a missed call or voicemail to return, a new lead. Also office paperwork that holds up a deposit or an order (result an appointment, upload a contract) |
+| `week` 🟢 | (Never for an email, text, call or voicemail: those are always `today` or `now`.) Office, HR and admin asks with no near deadline, vendor or rep requests, documents to send that block nothing |
 | `later` ⚪ | Worth remembering but can wait: nice-to-dos, training, far-off meetings |
 
 Ties: customer money first, then a customer waiting, then the office.
@@ -56,7 +56,7 @@ Ties: customer money first, then a customer waiting, then the office.
 - Facts only from the item. No prices or amounts.
 
 ## When Gerrit asks you in Telegram
-Run the command, then answer with only what changed, in ASD-STE100. Nothing extra.
+Run the command. Every command that changes the list also prints the whole new list, grouped under 🔴 NOW, 🟡 TODAY, 🟢 THIS WEEK and ⚪ LATER. Send one short line in ASD-STE100 about what changed, then that whole list exactly as printed (Gerrit's rule, 2026-10-22: he sees every group, every time).
 | Gerrit says | You run |
 |---|---|
 | "What's on my list?" / "to-do list" | `zingas-todo list` and send it as is |
@@ -68,7 +68,7 @@ Run the command, then answer with only what changed, in ASD-STE100. Nothing extr
 | "Take 5 off, not needed" | `zingas-todo drop 5` |
 | "Oops, 3 isn't done" | `zingas-todo undo 3` |
 
-Task numbers stay the same while a task is open, so "done 3" always means the same task. If Gerrit says a task is done and you can't tell which one, ask with the two closest matches.
+The open tasks are renumbered 1, 2, 3... in the order shown every time the list changes (Gerrit's rule, 2026-10-22). So a number means the task with that number in the newest list in this chat. If Gerrit uses a number from an older list, or new tasks came in since he last saw the list, check that the number still points to the task he means (compare the name) before you run `done`, `set` or `drop`. If you can't tell which one, ask with the two closest matches. `zingas-todo done` prints the name of each task it closed: always tell Gerrit that name. `undo` takes the number the task had when it was closed.
 
 When you handle something on the list yourself (you saved the draft Gerrit asked for), say so and ask "Mark 3 done?" only if it isn't obvious. Never mark a task done that needs Gerrit (a call, an upload, a send).
 

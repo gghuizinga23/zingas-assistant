@@ -244,8 +244,9 @@ class Inbox:
             things.append({"id": m["messageId"], "kind": "email", "from": str(m.get("sender") or "")[:120],
                            "subject": str(m.get("subject") or "")[:200], "label": label_of(m),
                            "text": text or "(couldn't open the email; judge from the subject)"})
+        listed = self.todo.open_items()   # the list Val is shown; its numbers can move while she thinks
         try:
-            got = zt.parse_judgement(self.ask_val(zt.judge_prompt(things, self.todo.open_items(), self.skill_path)),
+            got = zt.parse_judgement(self.ask_val(zt.judge_prompt(things, listed, self.skill_path)),
                                      [t["id"] for t in things])
         except Exception as e:
             log(f"Val's answer didn't work ({type(e).__name__})")
@@ -265,15 +266,15 @@ class Inbox:
                      "update_number": 0, "emergency": False}
             tries.pop(t["id"], None)
             st.setdefault("seen", []).append(t["id"])
-            before = {i["n"] for i in self.todo.open_items()}
+            before = {i["id"] for i in self.todo.open_items()}
             item = zt.apply_judgement(self.todo, {"from": name_of(t["from"])}, r, "email",
                                       ref="gmail:" + str(m.get("threadId") or ""),
                                       link=str(m.get("display_url") or ""),
-                                      received=m.get("messageTimestamp"))
+                                      received=m.get("messageTimestamp"), listed=listed)
             if not item:
                 done["skipped"] += 1
                 continue
-            if item["n"] in before:
+            if item["id"] in before:
                 done["updated"] += 1
             else:
                 done["added"] += 1

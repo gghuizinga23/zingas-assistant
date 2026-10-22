@@ -385,14 +385,15 @@ class Pickup:
     # ------------------------------------------------------------ the list
 
     def _task(self, r: Optional[dict], who: str, source: str, ref: str, auto_done: str = "",
-              received=None) -> Optional[dict]:
-        """Put one task on the list. Returns it if it's new (Gerrit hasn't been told yet)."""
+              received=None, listed: Optional[List[dict]] = None) -> Optional[dict]:
+        """Put one task on the list. Returns it if it's new (Gerrit hasn't been told yet).
+        listed: the open list Val was shown (numbers move on every change; ids don't)."""
         if not r:
             return None
-        before = {i["n"] for i in self.todo.open_items()}
+        before = {i["id"] for i in self.todo.open_items()}
         item = zt.apply_judgement(self.todo, {"from": who}, r, source, ref=ref, auto_done=auto_done,
-                                  received=received)
-        if not item or item["n"] in before:
+                                  received=received, listed=listed)
+        if not item or item["id"] in before:
             return None
         self.emergency = self.emergency or bool(r.get("emergency"))
         return item
@@ -410,7 +411,7 @@ class Pickup:
             if c["kind"] == "missed":
                 again = [i for i in self.todo.open_for(c["phone"]) if i["task"].startswith("Call back")]
                 if again:
-                    self.todo.update(again[0]["n"], why="This person called two or more times.")
+                    self.todo.update_id(again[0]["id"], why="This person called two or more times.")
                 else:
                     self.added.append(self.todo.add("Call back", priority="today", who=who, source="call",
                                                     ref=c["phone"], why="" if note else "This is a new number. It can be a new lead.",
@@ -423,8 +424,9 @@ class Pickup:
             judged.append((c, who))
         if not things:
             return finished
+        listed = self.todo.open_items()
         try:
-            got = zt.parse_judgement(self.ask_val(zt.judge_prompt(things, self.todo.open_items(), self.todo_skill)),
+            got = zt.parse_judgement(self.ask_val(zt.judge_prompt(things, listed, self.todo_skill)),
                                      [t["id"] for t in things])
         except Exception as e:
             log(f"calls: Val's answer didn't work ({type(e).__name__})")
@@ -442,7 +444,7 @@ class Pickup:
                      "update_number": 0}
             tries.pop(c["id"], None)
             item = self._task(r, who, "voicemail" if c["kind"] == "voicemail" else "call", c["phone"],
-                              received=c.get("created_at"))
+                              received=c.get("created_at"), listed=listed)
             if item:
                 self.added.append(item)
             finished.append(c["id"])
@@ -455,9 +457,10 @@ class Pickup:
             return "skipped"     # quo-bridge already told Gerrit
         note = find_customer_note(t["phone"], self.vault)
         first_time = not note and save_unmatched(t["phone"], t["text"], self.vault)
+        listed = self.todo.open_items()
         try:
             ans = parse_answer(self.ask_val(build_prompt(t, note, self.vault, self.skill_path,
-                                                         self.todo.open_items(), self.todo_skill)))
+                                                         listed, self.todo_skill)))
         except Exception as e:
             n = tries.get(t["id"], 0) + 1
             tries[t["id"]] = n
@@ -478,7 +481,7 @@ class Pickup:
                     "why": "", "update_number": 0, "emergency": False}
         if ans["action"] != "draft":
             why = "I think that this text does not need a reply." if ans["action"] == "no_reply" else "You must answer this text."
-            item = self._task(task, who, "text", t["phone"], received=t.get("created_at"))
+            item = self._task(task, who, "text", t["phone"], received=t.get("created_at"), listed=listed)
             self.notify(f"🪟 {who} sent this text: \"{t['text'][:200]}\"\n{why}{extra}" + self._listed(item))
             return "skipped"
         try:
@@ -494,14 +497,15 @@ class Pickup:
                 item = self._task(task or {"action": "add", "task": "Answer the text from " + who,
                                            "priority": "today", "due": "", "why": "", "update_number": 0,
                                            "emergency": False}, who, "text", t["phone"],
-                                  received=t.get("created_at"))
+                                  received=t.get("created_at"), listed=listed)
                 self.notify(f"🪟 quo-bridge did not accept my draft for {who} ({e}). Answer the text in the Quo app."
                             + self._listed(item))
             return "skipped"
         if task is None and not self.todo.open_for(t["phone"]):
             task = {"action": "add", "task": "Approve the reply to " + who, "priority": "today", "due": "",
                     "why": "", "update_number": 0, "emergency": False}
-        item = self._task(task, who, "text", t["phone"], auto_done="reply_sent", received=t.get("created_at"))
+        item = self._task(task, who, "text", t["phone"], auto_done="reply_sent", received=t.get("created_at"),
+                          listed=listed)
         if extra.strip():
             self.notify(f"🪟 The draft for {who} is in Val Approvals.{extra}" + self._listed(item))
         elif item:
@@ -509,7 +513,7 @@ class Pickup:
         return "draft"
 
     def _listed(self, item: Optional[dict]) -> str:
-        return f"\n📝 On your to-do list: {zt.line(item)}" if item else ""
+        return f"\n📝 On your to-do list: {zt.line(item)}\n\n{zt.render_list(self.todo.open_items())}" if item else ""
 
 
 # ------------------------------------------------------------------- the CLI
