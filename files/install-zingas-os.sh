@@ -6,6 +6,7 @@
 # file in /root/.hermes/backups/pre-zingas-os-<time>/ first:
 #   zingas_os.py          -> /usr/local/lib/zingas/zingas_os.py and /usr/local/bin/zingas-os
 #   quo_pickup.py         -> /usr/local/bin/zingas-quo           (adds the Salesforce record to each draft)
+#   zingas_customer.py    -> /usr/local/lib/zingas/zingas_customer.py (the customer file; zingas-quo needs it)
 #   zingas_brief_data.py  -> /root/.hermes/scripts/              (Monday numbers, and the calendar in every brief)
 #   skills briefs, customer-memory, quo-texting, scheduling-handoff -> /root/.hermes/skills/zingas/
 # Then restarts the text pickup and Val, and asks the website once (prints only whether it worked).
@@ -19,6 +20,7 @@ COMPUTER="${COMPUTER:-Hermes Agent}"
 FILES=(
   "zingas_os.py|/usr/local/lib/zingas/zingas_os.py|644"
   "zingas_os.py|/usr/local/bin/zingas-os|755"
+  "zingas_customer.py|/usr/local/lib/zingas/zingas_customer.py|644"
   "quo_pickup.py|/usr/local/bin/zingas-quo|755"
   "zingas_brief_data.py|/root/.hermes/scripts/zingas_brief_data.py|644"
   "skills/zingas/briefs/SKILL.md|/root/.hermes/skills/zingas/briefs/SKILL.md|644"

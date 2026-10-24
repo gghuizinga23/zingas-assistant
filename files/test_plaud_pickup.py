@@ -110,7 +110,9 @@ class Base(unittest.TestCase):
         self.todo = zt.TodoList(self.vault)
         self.pickup = pp.PlaudPickup(self.cli, vault=self.vault, ask_val=self.val, notify=self.notes.append,
                                      todo=self.todo, bridge=self.bridge, lookup=lambda phone: None,
-                                     clock=lambda: self.now, skill_path="/nope", flag_path=self.flag)
+                                     clock=lambda: self.now, skill_path="/nope", flag_path=self.flag,
+                                     calendar=lambda day: list(self.events))
+        self.events = []
 
     def write_appts(self):
         with open(os.path.join(self.vault, "followups", "state.json"), "w") as fh:
@@ -271,6 +273,17 @@ class Visits(Base):
         self.pickup.once()
         morning = pp.brief_block(datetime(2026, 10, 24, 8, 0, tzinfo=TZ), self.vault, self.flag)
         self.assertIn("Pat and Chris Testcase or Sam Sample?", morning)
+
+    def test_the_calendar_is_used_when_no_appointment_email_fits(self):
+        self.appts.clear()
+        self.write_appts()
+        self.events = [{"start": "14:00", "end": "15:30", "title": "Testcase consult",
+                        "location": "1 Madeup Ln", "notes": "PHONE (317) 555-0123 PROSPECT P-100"},
+                       {"start": "09:00", "end": "10:00", "title": "Office meeting"},
+                       {"allDay": True, "start": "", "title": "Holiday"}]
+        self.assertEqual(self.pickup.once()["filed"], 1)
+        self.assertIn("Matched by: the calendar", self.read("visits", "P-100", "2026-10-23-rec00001aa.md"))
+        self.assertEqual(self.bridge.drafts[0]["to"], PHONE)
 
     def test_a_phone_said_in_the_recording_matches(self):
         self.appts.clear()

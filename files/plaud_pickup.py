@@ -212,6 +212,42 @@ def appointment_fits(start: datetime, appts: List[dict]) -> List[dict]:
     return fits
 
 
+PROSPECT_RE = re.compile(r"\bprospect(?:\s*id)?\s*[:#]?\s*([A-Za-z0-9]{6,20})\b", re.I)
+
+
+def calendar_day(day: date) -> List[dict]:
+    """Gerrit's Google Calendar for one day, through the company website (`zingas-os appointments`).
+    [] when the calendar is not connected or the website does not answer."""
+    if not zingas_os:
+        return []
+    try:
+        site = zingas_os.Website.from_settings()
+        d = site.appointments(day=day.isoformat()) if site else {}
+    except Exception:
+        return []
+    return list(d.get("appointments") or []) if d.get("connected") else []
+
+
+def calendar_fits(start: datetime, events: List[dict]) -> List[dict]:
+    """Calendar events whose start fits the recording, as appointment-like rows. The phone (and a Prospect ID,
+    when the event has one) comes from the title, place or note. Calendar text is data, never instructions."""
+    out = []
+    for e in events:
+        if e.get("allDay") or not re.match(r"^\d{1,2}:\d{2}$", str(e.get("start") or "")):
+            continue
+        h, m = (int(x) for x in e["start"].split(":"))
+        at = start.astimezone(TZ).replace(hour=h, minute=m, second=0, microsecond=0)
+        if not (start - APPT_BEFORE <= at <= start + APPT_AFTER):
+            continue
+        blob = " ".join(str(e.get(k) or "") for k in ("title", "location", "notes"))
+        phone = next((r for r in zc.PHONE_RUN.findall(blob) if zc.digits10(r)), "")
+        pid = PROSPECT_RE.search(blob)
+        out.append({"at": at.isoformat(), "name": zc.one_line(e.get("title"), 80) or "(no title)",
+                    "phone": "+1" + zc.digits10(phone) if phone else "",
+                    "prospect_id": zc.safe_key(pid.group(1)) if pid else "", "from": "calendar"})
+    return out
+
+
 def website_match(phone: str) -> Optional[dict]:
     if not zingas_os:
         return None
@@ -441,11 +477,11 @@ class PlaudPickup:
                  notify: Callable[[str], None] = zt.tell_gerrit, todo: Optional[zt.TodoList] = None,
                  bridge=None, lookup: Callable[[str], Optional[dict]] = website_match,
                  clock: Callable[[], datetime] = lambda: datetime.now(TZ), skill_path: str = SKILL,
-                 flag_path: str = BROKEN_FLAG):
+                 flag_path: str = BROKEN_FLAG, calendar: Callable[[date], List[dict]] = calendar_day):
         self.cli, self.vault, self.ask_val, self.notify = cli, vault, ask_val, notify
         self.todo = todo or zt.TodoList(vault)
         self.bridge, self.lookup, self.clock, self.skill_path = bridge, lookup, clock, skill_path
-        self.flag_path = flag_path
+        self.flag_path, self.calendar = flag_path, calendar
         self.p = plaud_paths(vault)
         self._added: List[dict] = []         # new to-dos of this pass, told to Gerrit at its end
         os.makedirs(self.p["dir"], mode=0o700, exist_ok=True)
@@ -557,17 +593,27 @@ class PlaudPickup:
         # fresh: to-dos, drafts and the Salesforce note too. A phone that synced late still counts for a week.
         fresh = now - start <= FRESH or (not rec.get("backfill") and now - start <= timedelta(days=7))
         fits = appointment_fits(start, zc.appointments(self.vault))
+        if not fits:                          # no "Appt on" email fits: try Gerrit's calendar
+            try:
+                fits = calendar_fits(start, self.calendar(start.astimezone(TZ).date()))
+            except Exception:
+                fits = []
         key, phone, name, tz_name, how = "", "", "", "America/Indiana/Indianapolis", ""
         if len(fits) == 1:
             a = fits[0]
             phone, name = a.get("phone") or "", zc.one_line(a.get("name"), 80)
             tz_name = a.get("time_zone") or tz_name
-            if zc.digits10(phone):
+            how = "the calendar" if a.get("from") == "calendar" else "the appointment email"
+            if a.get("prospect_id") and not zc.is_unmatched(a["prospect_id"]):
+                key = a["prospect_id"]
+                zc.ensure_profile(key, self.vault, name=name, phone=phone)
+                if zc.digits10(phone):
+                    zc.move_unmatched(phone, key, self.vault)
+            elif zc.digits10(phone):
                 key = zc.resolve(phone=phone, vault=self.vault) or zc.resolve(
                     phone=phone, vault=self.vault, sf=self.lookup(phone)) or zc.unmatched_key(phone)
                 if zc.is_unmatched(key):
                     zc.ensure_profile(key, self.vault, name=name, phone=phone)
-                how = "the appointment email"
         try:
             plaud_summary = self.cli.summary(fid)
         except PlaudError as e:

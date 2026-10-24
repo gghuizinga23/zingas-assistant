@@ -70,9 +70,11 @@ and signs in). The CLI can list and read recordings, with no delete or edit comm
 3. A name or address said in the transcript → suggestion only.
 4. Not sure: one line in the **morning brief**, inside the approval Gerrit already does ("The 2:10 PM
    recording: Smith or Jones?"). No new Telegram question.
-- ~~Depends on Calendar access.~~ **Built without Calendar (2026-10-24):** the time and phone come from the
-  "Appt on ..." emails that F0 already reads (`followups/state.json`), so this works today. Calendar can be
-  added later as one more source.
+- ~~Depends on Calendar access.~~ **Built 2026-10-24 without waiting on it:** the time and phone come first
+  from the "Appt on ..." emails that F0 already reads (`followups/state.json`), so this works today. When no
+  email fits, Val looks at Gerrit's Google Calendar through the website (`/api/assistant/appointments`, once
+  Gerrit connects it): an event whose time fits, with a phone (and a PROSPECT id, if there is one) in its
+  title, place or note.
 
 **What Val makes from each visit.** Val reads the **entire transcript** (not just Plaud's summary) and pulls
 out every action item herself. One `hermes chat --oneshot -t todo` run, as in `quo_pickup.py`: the
@@ -282,8 +284,8 @@ sends Plaud anonymous usage counts (PostHog); no customer data goes there from V
 server was not needed.
 
 **Differences from the plan above**
-- Matching uses F0's appointment emails, not Calendar (see Part 2). Window: the appointment time is 75 minutes
-  before to 45 minutes after the recording's start. An appointment with a phone but no customer file yet is
+- Matching uses F0's appointment emails first, then the calendar through the website (see Part 2). Window:
+  the appointment time is 75 minutes before to 45 minutes after the recording's start. An appointment with a phone but no customer file yet is
   kept under `unmatched-<digits>` and moves to the Prospect ID when the number is matched.
 - Unmatched recordings are kept in `plaud/unmatched/` (not under any customer). Their promises still become
   to-dos (who = the name Val heard). Gerrit's answer to the morning-brief line is filed with
@@ -300,7 +302,9 @@ server was not needed.
   Gerrit.
 - The brief gets a `--- VISITS` block: morning = recordings to match, facts that disagree, problems; evening =
   notes to paste into Salesforce. Each line shows once.
-- `docs/CONNECTIONS.md` (shared with `app/`): no change needed. Nothing new talks to the website.
+- `docs/CONNECTIONS.md` (shared with `app/`): no new route. `zingas-plaud` is one more caller of
+  `GET /api/assistant/appointments` (and of the customer route by phone, like zingas-quo). The "Caller" column
+  of both copies should say so; left for the session that owns the shared file.
 
 ## Verification
 1. `python3 files/test_zingas_customer.py`, `python3 files/test_plaud_pickup.py`, and the existing test files.
