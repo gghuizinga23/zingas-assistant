@@ -67,6 +67,15 @@ if os.path.exists(f"{SRC}/zingas_backup.py"):
     shutil.copy2(f"{SRC}/zingas-backup.supervisor.conf", "/etc/supervisor/conf.d/zingas-backup.conf")
     print("nightly backup installed (starts after: supervisorctl reread && supervisorctl update)")
 
+if os.path.exists(f"{SRC}/zingas_money.py"):
+    os.makedirs("/usr/local/lib/zingas", exist_ok=True)
+    for name in ("zingas_money.py", "money_prices.json"):
+        shutil.copy2(f"{SRC}/{name}", f"/usr/local/lib/zingas/{name}")
+    shutil.copy2(f"{SRC}/zingas_money.py", "/usr/local/bin/zingas-money")
+    os.chmod("/usr/local/bin/zingas-money", 0o755)
+    shutil.copy2(f"{SRC}/zingas-money.supervisor.conf", "/etc/supervisor/conf.d/zingas-money.conf")
+    print("hourly cost count installed (starts after: supervisorctl reread && supervisorctl update)")
+
 if os.path.exists(f"{SRC}/zingas_followups.py"):
     os.makedirs("/usr/local/lib/zingas", exist_ok=True)
     for name in ("zingas_todo.py", "zingas_inbox.py", "followup_wording.py", "zingas_followups.py"):

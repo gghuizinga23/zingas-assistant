@@ -87,16 +87,19 @@ INCLUDE = [
     os.path.join(HERMES_HOME, "channel_directory.json"),
     os.path.join(HERMES_HOME, "inbox-state.json"),
     os.path.join(HERMES_HOME, "quo-pickup-state.json"),
+    os.path.join(HERMES_HOME, "money-state.json"),
     "/usr/local/lib/zingas",
     "/usr/local/bin/zingas-assistant-heartbeat",
     "/usr/local/bin/zingas-assistant-op-enable",
     "/usr/local/bin/zingas-backup",
     "/usr/local/bin/zingas-inbox",
+    "/usr/local/bin/zingas-money",
     "/usr/local/bin/zingas-quo",
     "/usr/local/bin/zingas-todo",
     "/etc/supervisor/conf.d/zingas-backup.conf",
     "/etc/supervisor/conf.d/zingas-heartbeat.conf",
     "/etc/supervisor/conf.d/zingas-inbox.conf",
+    "/etc/supervisor/conf.d/zingas-money.conf",
     "/etc/supervisor/conf.d/zingas-quo-pickup.conf",
 ]
 
@@ -501,8 +504,13 @@ def backup_once(keys: Dict[str, str], now: Optional[datetime] = None, include: O
         b2 = b2_factory(keys["B2_KEY_ID"], keys["B2_APP_KEY"], keys.get("B2_BUCKET", ""))
         b2.authorize()
         b2.upload(name, locked)
-        state.update(last_ok=now.isoformat(timespec="seconds"), last_ok_name=name,
-                     last_ok_bytes=os.path.getsize(locked), last_ok_files=info["files"], last_error="")
+        size = os.path.getsize(locked)
+        # Every backup is kept, so what Backblaze stores (and bills over 10 GB) is the sum of them all.
+        # zingas-money reads this for the cost count.
+        state.update(last_ok=now.isoformat(timespec="seconds"), last_ok_name=name, last_ok_bytes=size,
+                     last_ok_files=info["files"], last_error="",
+                     stored_bytes=int(state.get("stored_bytes") or 0) + size,
+                     backups_ok=int(state.get("backups_ok") or 0) + 1)
         save_state(state, state_path)
         log(f"backup ok: {name} ({info['files']} files, {os.path.getsize(locked)} bytes, {info['skipped']} skipped)")
         ping(keys.get("BACKUP_PING_URL", ""), note=f"{name} {info['files']} files")

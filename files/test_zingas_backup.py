@@ -278,6 +278,22 @@ class BackupTests(Base):
         with self.assertRaises(zb.LockError):
             zb.restore("kid", "ksecret", "wrong", os.path.join(self.tmp, "r2"), b2_factory=factory)
 
+    def test_stored_total_adds_up_every_backup(self):
+        # zingas-money bills Backblaze on the sum of every kept backup, not just the last one.
+        # The lock is a plain copy here, so this runs without gpg.
+        real = zb.lock, zb.unlock
+        zb.lock = zb.unlock = lambda src, dst, pw: shutil.copyfile(src, dst)
+        self.addCleanup(lambda: setattr(zb, "lock", real[0]) or setattr(zb, "unlock", real[1]))
+        keys = {"B2_KEY_ID": "kid", "B2_APP_KEY": "ksecret", "BACKUP_PASSPHRASE": "long-pass"}
+        factory = lambda i, k, b="": zb.B2(i, k, b, api=self.api, timeout=5)
+        first = zb.backup_once(keys, now=datetime(2026, 10, 24, 2, 30, tzinfo=zb.TZ), include=self.include,
+                               state_path=self.state, b2_factory=factory)
+        second = zb.backup_once(keys, now=datetime(2026, 10, 25, 2, 30, tzinfo=zb.TZ), include=self.include,
+                                state_path=self.state, b2_factory=factory)
+        self.assertEqual(second["backups_ok"], 2)
+        self.assertEqual(second["stored_bytes"], first["last_ok_bytes"] + second["last_ok_bytes"])
+        self.assertEqual(sum(len(v) for v in FakeB2.files.values()), second["stored_bytes"])
+
     @unittest.skipUnless(HAS_GPG, "gpg not installed here")
     def test_apply_puts_files_back(self):
         keys = {"B2_KEY_ID": "kid", "B2_APP_KEY": "ksecret", "BACKUP_PASSPHRASE": "pw"}

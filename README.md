@@ -61,9 +61,14 @@ lets only the folders above into git. Keep it that way.
 | `files/zingas_followups.py` | `/usr/local/bin/zingas-followups` (F0 quote follow-ups, run by supervisord) |
 | `files/followup_wording.py` | `/usr/local/lib/zingas/followup_wording.py` (the fixed follow-up wordings) |
 | `files/zingas_os.py` | `/usr/local/lib/zingas/zingas_os.py` and `/usr/local/bin/zingas-os` (Val's read-only line to the company website: customer lookup, Monday numbers). Installed by `files/install-zingas-os.sh` |
+| `files/zingas_money.py` | `/usr/local/lib/zingas/zingas_money.py` and `/usr/local/bin/zingas-money` (Val's hourly cost count to the company website, run by supervisord). With `files/money_prices.json` (public prices only) in `/usr/local/lib/zingas/`. Installed by `files/install-zingas-money.sh` |
 
 ## Tests
 
 ```bash
 python3 -m unittest discover -s quo-bridge -v
+```
+
+```bash
+python3 -m unittest discover -s files -p "test_*.py"
 ```

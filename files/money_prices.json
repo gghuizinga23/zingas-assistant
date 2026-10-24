@@ -1,0 +1,28 @@
+{
+  "_about": "Public list prices only, for Val's cost counter (files/zingas_money.py). This repo is public: Gerrit's own subscriptions, receipts and amounts live in the vault (money/subscriptions.json), never here. Dollars per million tokens for AI, dollars per GB-month for storage.",
+  "checked": "2026-10-24",
+  "ai": {
+    "nous": {
+      "name": "Nous Portal",
+      "defaultPlan": "plus",
+      "plans": {
+        "plus": { "name": "Plus", "monthly": 20, "includedUsage": 22 }
+      },
+      "models": {
+        "anthropic/claude-sonnet-5.5": { "input": 2.0, "output": 10.0, "cacheRead": 0.2, "cacheWrite": 2.5 }
+      },
+      "_note": "Model prices are Anthropic's list prices; Nous may charge a little differently. The monthly receipt check corrects the estimate."
+    },
+    "anthropic": {
+      "name": "Backup brain (inside Orgo's plan)",
+      "includedIn": "orgo",
+      "models": {
+        "claude-sonnet-5-5": { "input": 2.0, "output": 10.0, "cacheRead": 0.2, "cacheWrite": 2.5 }
+      },
+      "_note": "Used only while Nous is down. It runs on Orgo's own AI credits, so it adds nothing to the bill; the line shows that it was used."
+    }
+  },
+  "storage": {
+    "backblaze": { "name": "Backblaze B2", "freeGB": 10, "perGBMonth": 0.00695 }
+  }
+}
