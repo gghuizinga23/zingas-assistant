@@ -258,3 +258,15 @@ class Q5(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DeployFiles(unittest.TestCase):
+    """Every quo-bridge program file goes up with a deploy. One left out means quo-bridge can't start
+    (app.py imports it), which would stop customer texts coming in."""
+
+    def test_every_program_file_is_uploaded(self):
+        folder = os.path.join(HERE, "..", "quo-bridge")
+        program = {f for f in os.listdir(folder) if f.endswith(".py") and not f.startswith("test_")}
+        self.assertEqual(sorted(program - set(quo_setup.DEPLOY_FILES)), [])
+        for f in quo_setup.DEPLOY_FILES:
+            self.assertTrue(os.path.exists(os.path.join(folder, f)), f)
