@@ -28,6 +28,7 @@ It starts with Gerrit, then rolls out to 5 reps, then 15 to 20. It gets built st
 | Personal cell | **Stays personal. It is not ported and not read live.** Gerrit answers those texts directly during the overlap months. One exception: a one-time read of past **customer** texts on Gerrit's Mac, to learn Gerrit's voice. Then the iMessage reader is retired |
 | Email | zingashome.com Gmail through Composio (free Hobby plan). Drafts also land in Gmail Drafts. Composio can send, forward and delete, so its key lives only in **mail-bridge** (Zingas Bridge vault), which gives Val read, search, draft and read-calendar and nothing else (2026-10-21) |
 | Scope | Work only |
+| One app (Gerrit, 2026-10-23) | The Sales Dashboard is the one app. The Estimator merges **into the dashboard first**, while it has no real users (the Estimator's `docs/MERGE.md`). The assistant joins **later** as an Assistant tab (Phase 6). The assistant and the Estimator are **not** merged with each other. Val's agent (Orgo computer + Telegram) and quo-bridge stay separate services; only Val's screens move into the dashboard |
 | Quotes | Built in the home on the iPad, as today. The assistant **reads** proposals so its follow-ups are right; it never creates or prices one |
 | System of record | **Salesforce.** Gerrit gets a write-scoped Connected App approved (Phase 0). The assistant writes notes, follow-up date and spouse name after Gerrit approves. Results stay in RemodelerGo. **Write access is on hold (Gerrit, 2026-10-20):** until then Val keeps these in the vault and lists them in the evening brief for Gerrit to paste |
 | Scheduling | The call center / office owns it. The assistant tells the customer the office will reach out, and sends the office a scheduling request. Calendar stays read-only |
@@ -152,7 +153,7 @@ healthchecks.io ◄── ping every 10 min└───────────�
 | 3 | Quo texting: bridge, cadence, quiet hours, DNC, money check, 10-minute escalation, scheduling handoff | Put the new number on cards and proposals | Texts in and out with the gate enforced |
 | 4 | Plaud memory + one file per customer, right after F0 (`docs/VAL-BRAIN.md` Parts 1–4; replaces the truck debrief; Salesforce write on hold) (consent already collected up front at every appointment, as with Rilla) | Record every visit; review the first 10 visit notes | A follow-up uses a recording detail; the note is ready to paste (or shows in Salesforce once write access is on) |
 | 5 | Team rollout 1 → 5 → 15: one Orgo computer per rep from the template, per-rep voice, Quo numbers, a manager view | Pick the first 4 reps | 5 reps live |
-| 6 | Dashboard merge: an "Assistant" tab inside `PageShell` using `src/components/ui.tsx` | None | It appears in the dashboard |
+| 6 | Dashboard merge: an "Assistant" tab inside `PageShell` using `src/components/ui.tsx`. Comes after the Estimator → dashboard merge. Only Val's screens (drafts, approvals, to-dos, customer notes) move in; Val's agent and quo-bridge stay separate | None | It appears in the dashboard |
 
 ## F0: Quote follow-ups by text and email (added 2026-10-22, first in line)
 Gerrit: "one of the biggest things we need." It goes first, before F1. For now Gerrit approves each day's
