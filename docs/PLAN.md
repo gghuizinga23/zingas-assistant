@@ -143,6 +143,48 @@ healthchecks.io ◄── ping every 10 min└───────────�
 - A weekly "saved you" report.
 - The voice bake-off.
 
+## Build order (Gerrit, 2026-10-23)
+Highest priority first. Each step comes after what it needs. **Gerrit:** marks his part.
+
+**Now**
+1. **Calendar access.** Gerrit: send Delisa the draft in Gmail Drafts (the client ID and "Configure new app →
+   Trusted"). Then run `files/gmail-setup.sh` again and the G4 safety tests with Calendar. Plaud memory, F2 and
+   B3 need it.
+2. **Nightly backup: turn it on.** Built (`files/zingas_backup.py`). Gerrit: the Backblaze sign-up, SETUP-VAL
+   B1–B6, then the restore test B7 the next morning.
+3. **Live tests** (Verification): gate, escalation, triage, unknown number, scheduling and injection now; the
+   watchdog and restore test after step 2. Also Gerrit's review of 20 drafts (Phase 1) and both briefs
+   arriving for a week straight (Phase 2). These pass before F0 sends to customers.
+4. **F0: turn it on.** Built without Calendar, list-only for now. Gerrit: SETUP-VAL F1 (`files/f0-setup.sh`),
+   then F2 (the first **Approve all**).
+
+**Build Val**
+5. **Plaud memory** (Phase 4, `docs/VAL-BRAIN.md` Parts 1–4). Before it, Gerrit: Plaud P1 (AutoFlow, speaker
+   labels, product words, record every visit). Phase 4 has nothing to read without recordings. Then P2
+   (`plaud login`) and P3 (a test recording).
+6. **Val's brain B1–B3.** B3 needs Calendar.
+7. **F2 missed-call text-back.** Ahead of F1: it needs only Calendar, it is small, and a missed call is a
+   lead lost that day.
+8. **Estimator read access** (Phase 1.5). F1, F8 and B4 need it.
+9. **F1 know the customer**, with the read-only customer lookup.
+10. **B4** Salesforce and Estimator facts (needs F1 and step 8).
+11. **F3 end-of-day wrap-up**, rethought: Val reads results herself and never asks Sold / Lost.
+12. **F6 price and competitor answers.** Before it, Gerrit: his 3–5 best answers.
+13. **F4 after-install program.** Before it, Gerrit: Zinga's Google review link and the referral reward.
+14. **F5 neighbor effect** (needs F4).
+15. **F8 hot-lead alerts** (needs step 8).
+16. **F9 weather nudge** (needs F8; ready by about April 2027).
+17. **F7 Monday numbers.**
+18. **F10 spouse pack** (needs F3 and Plaud).
+19. **F11 coaching and B5 playbook** (need weeks of recordings).
+20. **mail-bridge**, and the Zingas Bridge 1Password code that waits on it (SETUP-VAL part 5).
+
+**After Val is done**
+21. Gerrit: put the Quo number on cards and proposals.
+22. Dashboard "Assistant" tab (Phase 6).
+23. Team rollout (Phase 5). Before it, Gerrit: pick the first 4 reps.
+24. Salesforce write access: on hold; it can be switched on at any point.
+
 ## Build phases
 | # | Phase | Gerrit's to-dos (no code) | Done when |
 |---|---|---|---|
@@ -254,8 +296,9 @@ Gerrit approved the plan in `docs/VAL-BRAIN.md`. **Not started.** Build order:
    a self-check before each Approve card, a nightly review, and 32 kinds of context in all.
    B4 and B5 wait on F1, Estimator Phase 1.5 and weeks of recordings.
 
-## New features (added 2026-10-22, in build order)
-From Gerrit's answers. The details are in `docs/FEATURE-IDEAS.md`. **Not started.** They come after F0
+## New features (added 2026-10-22)
+From Gerrit's answers. The details are in `docs/FEATURE-IDEAS.md`. **Not started.** The build order is in
+**Build order** above (F2 now comes before F1). They come after F0
 and the open work in Phases 1–3: Calendar, the nightly backup and the live tests in Verification. Every
 customer text still waits for Gerrit's tap (for F0, the one morning tap above).
 
