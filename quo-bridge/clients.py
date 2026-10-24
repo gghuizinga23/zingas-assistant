@@ -202,3 +202,59 @@ class TelegramClient:
 
     def answer(self, callback_id: str, text: str = "") -> None:
         self.call("answerCallbackQuery", {"callback_query_id": callback_id, "text": text[:180]})
+
+
+# ---------------------------------------------------------------- Gmail (F0)
+
+COMPOSIO_API = "https://backend.composio.dev/api/v3.1"
+
+
+class EmailError(RuntimeError):
+    pass
+
+
+class ComposioGmail:
+    """Sends Gerrit's approved follow-up emails from his zingashome Gmail, through
+    Composio with the MAIN key (Zingas Bridge vault). Only quo-bridge holds it.
+    It does two things only: check that an address got an estimate from Gerrit,
+    and send one email (as a reply in the estimate's thread when we know it)."""
+
+    def __init__(self, api_key: str, account_id: str, user_id: str = "gerrit",
+                 timeout: float = 30.0, api: str = COMPOSIO_API):
+        self.api_key, self.account_id, self.user_id = api_key, account_id, user_id
+        self.timeout, self.api = timeout, api
+
+    def _execute(self, tool: str, arguments: dict) -> dict:
+        body = {"connected_account_id": self.account_id, "user_id": self.user_id, "arguments": arguments}
+        req = urllib.request.Request(f"{self.api}/tools/execute/{tool}", data=json.dumps(body).encode(),
+                                     method="POST", headers={"x-api-key": self.api_key, "User-Agent": USER_AGENT,
+                                                             "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                out = json.loads(resp.read() or b"{}")
+        except urllib.error.HTTPError as e:
+            raise EmailError(f"Composio {tool}: HTTP {e.code}") from None
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
+            raise EmailError(f"Composio {tool}: {type(e).__name__}") from None
+        if out.get("successful") is False or out.get("error"):
+            msg = out.get("error")
+            msg = msg.get("message") if isinstance(msg, dict) else msg
+            raise EmailError(f"Composio {tool}: {str(msg or 'failed')[:200]}")
+        return out.get("data") or {}
+
+    def got_estimate(self, email: str) -> bool:
+        """True when Gerrit's Sent mail has an estimate email to this address."""
+        data = self._execute("GMAIL_FETCH_EMAILS", {"query": f"in:sent to:{email} subject:estimate",
+                                                    "max_results": 1, "verbose": False,
+                                                    "include_payload": False, "include_spam_trash": False})
+        return bool(data.get("messages"))
+
+    def send(self, to: str, subject: str, body: str, thread_id: str = "") -> str:
+        if thread_id:
+            data = self._execute("GMAIL_REPLY_TO_THREAD", {"thread_id": thread_id, "recipient_email": to,
+                                                           "message_body": body, "is_html": False})
+        else:
+            data = self._execute("GMAIL_SEND_EMAIL", {"recipient_email": to, "subject": subject,
+                                                      "body": body, "is_html": False})
+        inner = data.get("response_data") if isinstance(data.get("response_data"), dict) else data
+        return str(inner.get("id") or inner.get("messageId") or "")

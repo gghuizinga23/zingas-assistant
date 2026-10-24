@@ -27,6 +27,24 @@ def shown(since: str) -> str:
         return "none yet"
 
 
+def backup_warning(now) -> str:
+    """One line when the nightly backup is late or failing; "" when fine."""
+    try:
+        import zingas_backup as zb
+        return zb.brief_line(zb.load_state(), now)
+    except Exception:  # the brief must never fail because of this line
+        return ""
+
+
+def followups_block(now) -> str:
+    """The follow-up lines (F0), or "" before F0 is live."""
+    try:
+        import zingas_followups as zf
+        return zf.brief_block(now)
+    except Exception:  # the brief must never fail because of this block
+        return ""
+
+
 def main(vault: str = zt.VAULT, now=None) -> str:
     now = now or zt.now_local()
     todo = zt.TodoList(vault)
@@ -41,6 +59,12 @@ def main(vault: str = zt.VAULT, now=None) -> str:
            "--- TO-DO LIST STARTS (copy the lines below into the brief exactly; never copy this line) ---",
            zt.render_brief(todo, since=since or None, today=now.date()),
            "--- TO-DO LIST ENDS (never copy this line) ---"]
+    block = followups_block(now)
+    if block:
+        out.append(block)
+    warning = backup_warning(now)
+    if warning:
+        out.insert(2, warning)
     os.makedirs(os.path.dirname(last_path(vault)), mode=0o700, exist_ok=True)
     with open(last_path(vault), "w") as fh:
         fh.write(zt.stamp())

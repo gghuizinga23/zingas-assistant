@@ -7,6 +7,11 @@
   POST /api/telegram     Gerrit's taps in Val Approvals (Telegram's secret header)
   GET  /api/tick         every-minute check (Vercel's CRON_SECRET)
   GET  /api/health       {"ok": true}, no secrets needed
+  F0 quote follow-ups (Val's code):
+  POST /api/val/followups           the day's follow-up list -> one card in Val Approvals
+  GET  /api/val/followups/outcomes  what happened to each follow-up
+  POST /api/val/followups/pause     a customer wrote back: hold their follow-ups
+  POST /api/val/followups/contacts  last text in/out and do-not-contact, for a list of phones
 
 Anything that can't be checked fails closed: a missing secret means 401 or 503,
 never "let it through".
@@ -22,10 +27,11 @@ import traceback
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from bridge import Bridge, Config, bearer_ok  # noqa: E402
-from clients import QuoClient, TelegramClient  # noqa: E402
+from clients import ComposioGmail, QuoClient, TelegramClient  # noqa: E402
 from store import SupabaseStore  # noqa: E402
 
 MAX_BODY = 64 * 1024
+MAX_LIST_BODY = 512 * 1024   # the day's follow-up list (up to 40 texts + emails)
 REQUIRED = ("QUO_API_KEY", "QUO_PHONE_NUMBER_ID", "QUO_WEBHOOK_SECRET", "APPROVALS_BOT_TOKEN",
             "APPROVALS_WEBHOOK_SECRET", "APPROVER_TELEGRAM_ID", "VAL_DRAFT_TOKEN", "CRON_SECRET",
             "SUPABASE_URL", "SUPABASE_SERVICE_KEY")
@@ -37,10 +43,14 @@ def build_bridge(env=os.environ) -> Bridge:
     missing = [k for k in REQUIRED if not env.get(k)]
     if missing:
         raise RuntimeError("missing settings: " + ", ".join(missing))   # names only, never values
+    # F0 follow-up emails: only once Gerrit has run files/f0-setup.sh. Until then
+    # follow-ups send their texts and say the email isn't set up.
+    email = (ComposioGmail(env["COMPOSIO_API_KEY"], env["COMPOSIO_GMAIL_ACCOUNT_ID"])
+             if env.get("COMPOSIO_API_KEY") and env.get("COMPOSIO_GMAIL_ACCOUNT_ID") else None)
     return Bridge(Config.from_env(env),
                   SupabaseStore(env["SUPABASE_URL"], env["SUPABASE_SERVICE_KEY"]),
                   QuoClient(env["QUO_API_KEY"], env["QUO_PHONE_NUMBER_ID"]),
-                  TelegramClient(env["APPROVALS_BOT_TOKEN"]))
+                  TelegramClient(env["APPROVALS_BOT_TOKEN"]), email=email)
 
 
 def _headers(environ) -> dict:
@@ -69,7 +79,9 @@ def make_app(get_bridge):
             return _reply(start_response, 200, {"ok": True})
 
         routes = {("POST", "/api/quo"), ("GET", "/api/val/updates"), ("POST", "/api/val/ack"),
-                  ("POST", "/api/val/drafts"), ("POST", "/api/telegram"), ("GET", "/api/tick")}
+                  ("POST", "/api/val/drafts"), ("POST", "/api/telegram"), ("GET", "/api/tick"),
+                  ("POST", "/api/val/followups"), ("GET", "/api/val/followups/outcomes"),
+                  ("POST", "/api/val/followups/pause"), ("POST", "/api/val/followups/contacts")}
         if (method, path) not in routes:
             known = {p for _, p in routes}
             return _reply(start_response, 405 if path in known else 404, {"error": "no such door"})
@@ -78,7 +90,7 @@ def make_app(get_bridge):
             length = int(environ.get("CONTENT_LENGTH") or 0)
         except ValueError:
             length = 0
-        if length > MAX_BODY:
+        if length > (MAX_LIST_BODY if path == "/api/val/followups" else MAX_BODY):
             return _reply(start_response, 413, {"error": "too big"})
         raw = environ["wsgi.input"].read(length) if length > 0 else b""
         headers = _headers(environ)
@@ -98,11 +110,13 @@ def make_app(get_bridge):
                 if not bearer_ok(headers, bridge.cfg.cron_secret):
                     return _reply(start_response, 401, {"error": "bad code"})
                 status, body = bridge.tick()
-            else:   # Val's three doors
+            else:   # Val's doors
                 if not bearer_ok(headers, bridge.cfg.val_token):
                     return _reply(start_response, 401, {"error": "bad code"})
                 if path == "/api/val/updates":
                     status, body = bridge.val_updates()
+                elif path == "/api/val/followups/outcomes":
+                    status, body = bridge.val_followup_outcomes()
                 else:
                     try:
                         payload = json.loads(raw or b"{}")
@@ -110,8 +124,11 @@ def make_app(get_bridge):
                         return _reply(start_response, 400, {"error": "not json"})
                     if not isinstance(payload, dict):
                         return _reply(start_response, 400, {"error": "send a JSON object"})
-                    status, body = (bridge.val_ack(payload) if path == "/api/val/ack"
-                                    else bridge.val_draft(payload))
+                    handler = {"/api/val/ack": bridge.val_ack, "/api/val/drafts": bridge.val_draft,
+                               "/api/val/followups": bridge.val_followups,
+                               "/api/val/followups/pause": bridge.val_followup_pause,
+                               "/api/val/followups/contacts": bridge.val_followup_contacts}[path]
+                    status, body = handler(payload)
         except Exception:
             # The trace names files and lines, never settings values.
             traceback.print_exc(file=sys.stderr)

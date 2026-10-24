@@ -1,7 +1,7 @@
 ---
 name: briefs
 description: Gerrit's morning brief (8:00am) and evening brief (7:00pm), Monday to Friday, Indianapolis time. Every brief has the to-do list.
-version: 0.1.0
+version: 0.2.0
 author: Zinga's Assistant
 metadata:
   hermes:
@@ -21,6 +21,8 @@ Right before you start, a program puts Gerrit's to-do list in your instructions,
 
 <the to-do list block, as written>
 
+<the follow-ups block, as written, if there is one>
+
 <Email: only if something isn't on the list yet, see below>
 
 Idea: <at most 2 ideas, each on its own line>
@@ -31,6 +33,8 @@ Idea: <at most 2 ideas, each on its own line>
 🪟 Evening brief: <one short line: what got done today, what's still open>
 
 <the to-do list block, as written>
+
+<the follow-ups block, as written, if there is one>
 
 <Email: only if something isn't on the list yet>
 
@@ -47,6 +51,12 @@ New work email is already put on the list by `zingas-inbox` every 2 minutes. So 
 - a customer or office email from the last 24 hours that asks Gerrit for something and is **not** on the list (the watcher can miss one). Add one line: "Email: <who> asked <what>. Do you want this on your list?" Never add it yourself.
 - reply drafts you saved in Gmail Drafts that Gerrit hasn't sent. One line: "Drafts in Gmail that you did not send: 2 (Pat Lee, Beth)."
 Skip this part when there's nothing. Never quote an email. Say what is needed in a few plain words.
+
+## Follow-ups (both briefs)
+Once quote follow-ups are on (F0), your instructions also have a block between `--- FOLLOW-UPS STARTS` and `--- FOLLOW-UPS ENDS`. Put the lines between them in the brief **as written**, right after the to-do list block (never the two marker lines). In the morning it is today's follow-ups (Friday: the weekend too) and the customers whose appointment Val could not find. In the evening it is what got sent, paused or removed. The program `zingas-followups` does all the work: never approve, change or send a follow-up yourself, and never ask Gerrit "Sold, Quoted or Lost?". When there is no such block, say nothing about follow-ups.
+
+## Backup warning (both briefs)
+If your instructions have a line that starts with `BACKUP WARNING:`, add one line right before the ideas: "⚠️ Backup: the last good backup was <when>. <the problem, in a few plain words>." Skip this when there is no such line. Never try to fix it yourself.
 
 ## Ideas
 Only here, at the end, each line starting with "Idea:". At most 2. Only facts you know (the list, email, customer notes). No made-up dates, prices or numbers. Skip ideas when you have none.

@@ -150,6 +150,34 @@ could do is put a draft in front of you.
 
 **Cost:** Vercel Pro $20 a month, Quo texts about 1 cent each, Supabase free.
 
+## F0: quote follow-ups (built 2026-10-23)
+Val finds every estimate you email a customer (your Sent mail, PDF attached) and the visit it belongs to
+(the "Appt on ..." email from appointments@zingashome.com, which has the time and the phone). The clock
+starts at the visit. **Calendar access is not needed.** You do no new work: she skips sold customers by
+herself (a "Payment Link" email, a contract email to payments@, insidesalessupport@ or customersuccess@,
+or the Gmail label Completed). When a customer writes back, their follow-ups pause; after 3 quiet days they
+start again in Val's words from the conversation.
+
+**Each weekday:** at 7:40 AM Val makes the day's list (Friday's has the weekend too). The 8:00 brief shows
+it. At 8:01 **Val Approvals** posts one card: **Approve all**, or **Review one by one** (approve, edit or
+remove each, or "No more follow-ups for them"). Approved ones send at their time, 8am to 8pm customer
+time: a text from the Quo number and an email reply in the estimate's thread. Not approved by 8 PM:
+nothing sends, and they come back the next morning.
+
+**Status:** Val's program `zingas-followups` is installed and running, in **list-only** mode: it makes the
+lists in her vault and sends nothing to quo-bridge or the brief. A look at your real Gmail on 2026-10-23
+found 10 customers since Monday 10/19 (1 skipped as sold, 9 on Friday's list, every visit found).
+quo-bridge's new code passed its tests (134) but is not online yet. F1 turns it all on.
+
+| Step | What to do | Who | Time |
+|---|---|---|---|
+| F1 | **Vercel token (for this run only):** https://vercel.com/account/tokens, name `f0-setup`, scope your Pro team, expiry 1 day. Then run `bash files/f0-setup.sh` and paste the **Composio main key** (1Password: Zingas Bridge → Bridge Secrets → COMPOSIO_API_KEY) and the Vercel token. It checks the Gmail connection can read your Sent mail, adds the follow-up tables to Supabase, puts the key in quo-bridge's locked settings, puts the new quo-bridge online, checks the locks, and turns F0 on. Delete the Vercel token afterwards | Gerrit pastes, I do the rest | 5 min |
+| F2 | The next weekday morning: read the follow-ups in the 8:00 brief and tap **Approve all** (or review them) in Val Approvals | Gerrit | 2 min |
+
+**Why the Composio main key goes to quo-bridge:** Val can only draft email, on purpose. quo-bridge (on
+Vercel, where Val has no access) sends only follow-ups you approved, only to an address that already got
+an estimate from you, and logs each send. Val's computer never gets the main key.
+
 ## Plaud (device here 2026-10-23; the build comes right after F0)
 The plan is in `docs/VAL-BRAIN.md`. Do P1 now, so every visit from today is saved. Val reads all past
 recordings when P2 is done.
@@ -160,7 +188,38 @@ recordings when P2 is done.
 | P2 | **After F0.** On Val's computer I run `plaud login`. It prints a link: open it, sign in to Plaud, click **Authorize**. No key to copy | Gerrit signs in, I do the rest | 5 min |
 | P3 | **After F0.** Test: a 2-minute role-play recording during a test calendar event, with one promise ("I'll drop off samples Friday"). A few minutes after it syncs, the to-do and its alert show in Telegram | Gerrit records, I check | 10 min |
 
+## Nightly backup (built 2026-10-23)
+Every night at 2:30 AM, Val's computer packs her vault (customer notes, to-do list, voice), her settings,
+skills, brief schedules, chat history and our programs into one file (about 3 MB today). It locks the file
+with a password and uploads it to **Backblaze B2**. If her computer was off at 2:30, it runs when it is back on.
+**Why it's built this way:** Val's B2 key can only **add** files. It can't read, list or delete them. So
+nothing on her computer can spoil or read an old backup. Backblaze only sees locked files. Keys and passwords
+are never in the backup (1Password has them). Getting a backup back needs a second, read-only key that
+lives in the **Zingas Bridge** vault, which Val can't open.
+
+**Status:** the program is installed and running on Val's computer (`zingas-backup`). It checks every hour
+for the keys below, and the first backup runs within an hour after you save them. A full test on her real
+files (pack, lock, unlock, compare) passed: 380 of 380 files came back the same, a wrong password was refused,
+and no keys were in it. If a backup fails or is late (more than 30 hours), the next brief tells you.
+
+| Step | What to do | Who | Time |
+|---|---|---|---|
+| B1 | **Sign up** at backblaze.com → **B2 Cloud Storage** → Sign up, with your zingashome.com email. Free for the first 10 GB, no card (Val's backups use far less). Save the login in 1Password, your own main vault | Gerrit | 5 min |
+| B2 | **Make the bucket:** Buckets → **Create a Bucket**. Name: `zingas-val-backup` (if it's taken, add a few numbers). Files: **Private**. Default encryption: **Enable**. Object Lock: leave off. Then **Create** | Gerrit | 2 min |
+| B3 | **Val's key (add only):** Application Keys → **Add a New Application Key**. Name `val-backup`. Bucket: `zingas-val-backup` only. Type of access: **Write Only**. Leave the rest empty. Click **Create**. It shows **keyID** and **applicationKey** once: in 1Password, **Zingas Assistant → Assistant Secrets**, add **B2_KEY_ID** (the keyID) and **B2_APP_KEY** (the applicationKey, as a password field). If there is no "Write Only" choice, stop and tell Claude | Gerrit | 5 min |
+| B4 | **The lock password:** in the same note, add a password field **BACKUP_PASSPHRASE**. Use 1Password's generator (30 or more characters). Never change it: old backups only open with the password they were locked with | Gerrit | 2 min |
+| B5 | **Restore key (read only):** back in Backblaze, add a second key. Name `restore`. Same bucket. Type of access: **Read Only**. Save it in **Zingas Bridge → Bridge Secrets** as **B2_RESTORE_KEY_ID** and **B2_RESTORE_KEY**. Not in Val's vault | Gerrit | 3 min |
+| B6 | *Optional:* in healthchecks.io, project Val → **Add Check**. Name `Val nightly backup`, period **1 day**, grace **6 hours**. Copy its ping URL into Assistant Secrets as **BACKUP_PING_URL**. Then a missed backup also warns you by Telegram and email (the brief warns you anyway) | Gerrit | 3 min |
+| B7 | **Restore test,** the morning after B3–B5: run `bash files/backup-restore.sh` and paste the 3 things it asks for. It gets the newest backup, unlocks it on Val's computer, compares every file with the live one, then deletes the test copy | Gerrit pastes, I read the result | 5 min |
+
+**If Val's computer is ever lost:** start a new Orgo Hermes computer, then run
+`APPLY=1 COMPUTER="<new computer name>" bash files/backup-restore.sh`. It puts every file back and restarts
+Val's programs. Then the keys come back from 1Password: `files/save-op-token.sh` (1Password access) and
+`files/quo-setup.sh` (Val's drafts-only code for quo-bridge). Telegram is connected again the way Orgo did it at launch.
+
+**Cost:** free under 10 GB. Every backup is kept for now (about 1 GB a year at today's size).
+
 **Rules that hold the whole way:**
 - Nothing goes to GitHub or anywhere else; files go straight from this laptop to Val's computer.
 - No passwords or keys in chat.
-- Val can't send email. She texts customers only after your tap (Approve, or Send now on a text held outside 8am–8pm).
+- Val can't send email. She texts customers only after your tap (Approve, or Send now on a text held outside 8am–8pm). Follow-up emails are sent by quo-bridge, only after your tap.

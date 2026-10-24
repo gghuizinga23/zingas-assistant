@@ -79,3 +79,5 @@ alter table calls enable row level security;
 alter table contacts enable row level security;
 alter table auto_send_stats enable row level security;
 alter table events enable row level security;
+
+-- F0 quote follow-ups: see schema-f0.sql (run after this file).

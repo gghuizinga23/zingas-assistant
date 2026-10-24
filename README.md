@@ -55,6 +55,9 @@ lets only the folders above into git. Keep it that way.
 | `files/onboard.sh` | `/usr/local/bin/zingas-assistant-onboard.sh` |
 | `files/telegram-pair.py` | `/usr/local/bin/zingas-assistant-telegram-pair.py` |
 | `files/op-enable.py` | `/usr/local/bin/zingas-assistant-op-enable` |
+| `files/zingas_backup.py` | `/usr/local/bin/zingas-backup` (nightly backup, run by supervisord) |
+| `files/zingas_followups.py` | `/usr/local/bin/zingas-followups` (F0 quote follow-ups, run by supervisord) |
+| `files/followup_wording.py` | `/usr/local/lib/zingas/followup_wording.py` (the fixed follow-up wordings) |
 
 ## Tests
 

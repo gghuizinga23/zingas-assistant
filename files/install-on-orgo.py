@@ -59,6 +59,24 @@ if os.path.exists(f"{SRC}/heartbeat.sh"):
     shutil.copy2(f"{SRC}/heartbeat.supervisor.conf", "/etc/supervisor/conf.d/zingas-heartbeat.conf")
     print("heartbeat installed (run: supervisorctl reread && supervisorctl update)")
 
+if os.path.exists(f"{SRC}/zingas_backup.py"):
+    os.makedirs("/usr/local/lib/zingas", exist_ok=True)
+    shutil.copy2(f"{SRC}/zingas_backup.py", "/usr/local/lib/zingas/zingas_backup.py")
+    shutil.copy2(f"{SRC}/zingas_backup.py", "/usr/local/bin/zingas-backup")
+    os.chmod("/usr/local/bin/zingas-backup", 0o755)
+    shutil.copy2(f"{SRC}/zingas-backup.supervisor.conf", "/etc/supervisor/conf.d/zingas-backup.conf")
+    print("nightly backup installed (starts after: supervisorctl reread && supervisorctl update)")
+
+if os.path.exists(f"{SRC}/zingas_followups.py"):
+    os.makedirs("/usr/local/lib/zingas", exist_ok=True)
+    for name in ("zingas_todo.py", "zingas_inbox.py", "followup_wording.py", "zingas_followups.py"):
+        shutil.copy2(f"{SRC}/{name}", f"/usr/local/lib/zingas/{name}")
+    shutil.copy2(f"{SRC}/zingas_followups.py", "/usr/local/bin/zingas-followups")
+    os.chmod("/usr/local/bin/zingas-followups", 0o755)
+    shutil.copy2(f"{SRC}/zingas-followups.supervisor.conf", "/etc/supervisor/conf.d/zingas-followups.conf")
+    print("quote follow-ups installed; they only make lists until f0-setup.sh turns them on "
+          "(starts after: supervisorctl reread && supervisorctl update)")
+
 if os.path.exists(f"{SRC}/quo_pickup.py"):
     shutil.copy2(f"{SRC}/quo_pickup.py", "/usr/local/bin/zingas-quo")
     os.chmod("/usr/local/bin/zingas-quo", 0o755)

@@ -26,6 +26,7 @@ from zoneinfo import ZoneInfo
 
 import send_gate
 from clients import QuoError, TelegramError, verify_quo_signature
+from followups import FollowupMixin
 from store import parse_time, utc_iso
 
 DEFAULT_TIME_ZONE = "America/Indiana/Indianapolis"
@@ -90,10 +91,11 @@ def _local(dt: datetime, tz_name: str) -> str:
     return dt.astimezone(tz).strftime("%a %-I:%M %p")
 
 
-class Bridge:
+class Bridge(FollowupMixin):
     def __init__(self, config: Config, store, quo, telegram,
-                 now: Callable[[], datetime] = lambda: datetime.now(timezone.utc)):
+                 now: Callable[[], datetime] = lambda: datetime.now(timezone.utc), email=None):
         self.cfg = config
+        self.email = email          # ComposioGmail for F0 follow-up emails, or None
         self.store = store
         self.quo = quo
         self.tg = telegram
@@ -130,6 +132,8 @@ class Bridge:
         return d.get("final_body") or d["body"]
 
     def _card_text(self, d: dict, footer: str = "") -> str:
+        if d.get("category") == "followup":
+            return self._fu_card_text(d, footer)
         who = d.get("customer_name") or "a customer"
         lines = [f"📱 Text to {who}, {pretty_phone(d['phone'])}", f"Kind: {d['category']}"]
         if d.get("customer_said"):
@@ -144,6 +148,8 @@ class Bridge:
 
     @staticmethod
     def _buttons(d: dict) -> list:
+        if d.get("category") == "followup":
+            return FollowupMixin._fu_buttons(d)
         return [[{"text": "✅ Approve", "callback_data": "a:" + d["id"]},
                  {"text": "✏️ Edit", "callback_data": "e:" + d["id"]},
                  {"text": "✖️ Skip", "callback_data": "s:" + d["id"]}]]
@@ -258,7 +264,7 @@ class Bridge:
                      "status": d["status"], "val_draft": d["body"], "final_text": self._text_of(d),
                      "edited": bool(d.get("edited")), "sent_at": d.get("sent_at"),
                      "reasons": d.get("reasons") or ""}
-                    for d in self.store.unreported_outcomes(20)]
+                    for d in self.store.unreported_outcomes(20, exclude_category="followup")]
         calls = [{"id": c["id"], "phone": c["phone"], "kind": c["kind"], "text": c.get("body") or "",
                   "received_at": c["created_at"]} for c in self.store.unpicked_calls(20)]
         return 200, {"texts": texts, "outcomes": outcomes, "calls": calls}
@@ -289,7 +295,9 @@ class Bridge:
             return 400, {"error": "unknown 'time_zone'"}
         if self.store.is_dnc(phone):
             return 409, {"error": "This customer is do-not-contact. No card was made."}
-        if len(self.store.drafts_by_status(["pending", "editing", "countdown"], MAX_PENDING + 1)) >= MAX_PENDING:
+        waiting = [x for x in self.store.drafts_by_status(["pending", "editing", "countdown"], 200)
+                   if x["category"] != "followup"]
+        if len(waiting) >= MAX_PENDING:
             return 429, {"error": f"{MAX_PENDING} drafts are already waiting for Gerrit."}
 
         # What the customer said comes from our own records, never from Val, so
@@ -346,6 +354,8 @@ class Bridge:
         """d is already claimed (status 'approving' or 'sending'). Runs the gate
         once more, then sends, holds or blocks. Returns a short result line.
         send_now=True means Gerrit tapped Send now on a held text."""
+        if d.get("category") == "followup":
+            return self._send_followup(d)
         decision = send_gate.decide(self._outgoing(d, approved, send_now), self.now(),
                                     None if approved else self._stats(d["category"]))
         ok_to_send = decision.action == "send" or (not approved and decision.action == "countdown")
@@ -422,6 +432,8 @@ class Bridge:
             self._answer(cq, "Only Gerrit can do this.")
             return
         action, _, draft_id = str(cq.get("data") or "").partition(":")
+        if action in ("fa", "fr", "q") and self._fu_tap(action, draft_id, cq):
+            return
         d = self.store.get_draft(draft_id)
         if not d:
             self._answer(cq, "I cannot find that draft.")
@@ -431,6 +443,9 @@ class Bridge:
                                              {"status": "approving", "approved_at": d.get("approved_at") or self._stamp()})
             if not claimed:
                 self._answer(cq, "Someone already did an action on this draft.")
+                return
+            if d["category"] == "followup":
+                self._answer(cq, self._approve_followup(claimed))
                 return
             if not d.get("approved_at"):   # count each draft once toward auto-send
                 stats = self._stats(d["category"])
@@ -449,6 +464,8 @@ class Bridge:
             if claimed:
                 self._edit_card(claimed, self._card_text(claimed, "✖️ Skipped. Nothing was sent."))
                 self._log("skipped", draft_id, "")
+                if claimed["category"] == "followup":
+                    self._render_batch(claimed.get("batch_id"))
             self._answer(cq, "Skipped." if claimed else "Someone already did an action on this draft.")
         elif action == "x":
             claimed = self.store.claim_draft(draft_id, ["countdown"], {"status": "stopped"})
@@ -461,6 +478,9 @@ class Bridge:
                 self._log("stopped", draft_id, "")
             self._answer(cq, "Stopped." if claimed else "You are too late. The text went out, or someone already did an action on it.")
         elif action == "e":
+            if d["category"] == "followup" and not d["phone"]:
+                self._answer(cq, "This one is email only. To change it, tap Remove and write it yourself.")
+                return
             claimed = self.store.claim_draft(draft_id, ["pending", "failed"], {"status": "editing"})
             if not claimed:
                 self._answer(cq, "Someone already did an action on this draft.")
@@ -508,7 +528,7 @@ class Bridge:
     def _not_an_edit(self) -> None:
         """Gerrit typed a message that is not new text for a draft. The bot
         cannot read typed messages, so it shows him the buttons to use."""
-        held = self.store.drafts_by_status(["held"], 2)
+        held = [d for d in self.store.drafts_by_status(["held"], 50) if d["category"] != "followup"][:2]
         if len(held) == 1:
             d = held[0]
             when = _local(parse_time(d.get("send_after")), d["time_zone"]) if d.get("send_after") else "at 8:00 AM"
@@ -528,7 +548,7 @@ class Bridge:
 
     def tick(self) -> Response:
         now = self.now()
-        done = {"sent_or_held": 0, "auto": 0, "escalated": 0, "missed": 0}
+        done = {"sent_or_held": 0, "auto": 0, "escalated": 0, "missed": 0, "followups_expired": 0}
 
         for d in self.store.drafts_by_status(["held"]):
             due = parse_time(d.get("send_after"))
@@ -553,6 +573,8 @@ class Bridge:
 
         waiting = []
         for d in self.store.drafts_by_status(["pending", "editing"]):
+            if d["category"] == "followup":      # follow-up cards are not customer replies
+                continue
             created = parse_time(d["created_at"])
             state = send_gate.waiting_status(created, now, handled=False)
             if state == "missed" and not d.get("missed_at"):
@@ -577,4 +599,5 @@ class Bridge:
                     for d in claimed:
                         self.store.update_draft(d["id"], {"escalated_at": None})
                     self._log("escalate_failed", None, str(e))
+        done["followups_expired"] = self._fu_tick()
         return 200, done

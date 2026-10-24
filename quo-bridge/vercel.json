@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "app.py": {
-      "excludeFiles": "{**/test_*.py,schema.sql,README.md}"
+      "excludeFiles": "{**/test_*.py,schema.sql,schema-f0.sql,README.md}"
     }
   },
   "crons": [

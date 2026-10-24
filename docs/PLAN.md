@@ -110,6 +110,7 @@ healthchecks.io ◄── ping every 10 min└───────────�
 **Watchdog and backups**
 - The gateway and each brief cron ping healthchecks.io every 10 minutes. When a ping is missed, healthchecks.io itself warns Gerrit by Telegram (its own @HealthchecksBot, not Val's bot) and email, so the alert works even if the VM is dead. Free Hobbyist plan; real phone texts need its $20/month Business plan, only if Telegram isn't enough (checked 2026-10-21).
 - A nightly backup copies the vault, `MEMORY.md`, `VOICE.md`, skills and config to object storage. Orgo is not the backup.
+  **Built 2026-10-23** (`files/zingas_backup.py`): 2:30 AM, locked with gpg, uploaded to Backblaze B2 with an add-only key; restore with `files/backup-restore.sh`. Waiting on Gerrit's Backblaze sign-up (`docs/SETUP-VAL.md`, B1–B7).
 
 **Learning Gerrit's voice**
 1. **Bootstrap:**
@@ -155,7 +156,7 @@ healthchecks.io ◄── ping every 10 min└───────────�
 
 ## F0: Quote follow-ups by text and email (added 2026-10-22, first in line)
 Gerrit: "one of the biggest things we need." It goes first, before F1. For now Gerrit approves each day's
-follow-ups in the morning brief; in about a week they become automatic. **Not started.**
+follow-ups in the morning brief; in about a week they become automatic. **Built 2026-10-23, list-only until Gerrit runs `files/f0-setup.sh` (SETUP-VAL step F1).** Val's side: `files/zingas_followups.py` (+ `followup_wording.py`); quo-bridge side: `quo-bridge/followups.py`, `schema-f0.sql`.
 
 **No new work for Gerrit (Gerrit, 2026-10-22):** Val never asks "Sold / Quoted / Lost" in Telegram. She
 finds out by herself who got an estimate and who didn't.
@@ -168,12 +169,13 @@ do-not-contact customers get nothing.
    estimate or proposal attached or linked. No estimate email, no follow-ups.
 
 **The clock is the appointment time, never the estimate email's time (Gerrit, 2026-10-22).** Val matches
-each estimate email to that customer's appointment on Gerrit's work calendar (the events from
-appointments@zingashome.com; their description has PROSPECT and PHONE) and starts the clock at the
-appointment's start time. The event's phone number is also where the texts go. A declined event is a moved
-appointment; use the one Gerrit accepted. No matching appointment found: nothing is scheduled, and the
-customer shows in the morning review as "appointment not found". **So F0 needs Val's Calendar access**
-(the Composio Calendar fix, open work step 1).
+each estimate email to that customer's appointment and starts the clock at the appointment's start time.
+**Built without Calendar (2026-10-23):** the appointment comes from the "Appt on ..." emails from
+appointments@zingashome.com in Gmail. They have the date, time, names, address and phone. An "UPDATED:"
+email is a moved appointment (the newest one wins); a "CANCELED:" one is ignored. The match: the customer's
+name is in the estimate PDF's file name or their email address, and the visit was up to 10 days before the
+estimate email. When an email lists two phones, the first one gets the texts. No matching appointment
+found: nothing is scheduled, and the customer shows in the morning brief as "appointment not found".
 2. **Later: the Sales Dashboard and the Estimator.** Once they are connected, Val reads the follow-up list,
    each appointment's result, and when each estimate was sent, and goes by that. The Sent-mail search
    becomes the backup.
@@ -183,13 +185,15 @@ Until then Val can't always tell a sold customer from a quoted one: sold custome
 the appointment as sold (for example the "Un-Resulted Appointments" report, or Customer Success asking to
 "result" it and upload the contract), and a customer under the Gmail label **Completed**. The morning review
 below catches the rest. Estimate PDFs Gerrit emails only to himself don't count; only an email to the
-customer starts follow-ups.
+customer starts follow-ups. **What's built (2026-10-23):** a customer is skipped as sold when Gerrit sent
+them a "Zinga's Payment Link" email, sent a contract email to payments@, insidesalessupport@ or
+customersuccess@ that names them, or they are under the label Completed.
 
 **Start-up (Gerrit, 2026-10-22):** the first run starts with this week's estimates (sent from Monday
 2026-10-19), not only new ones. It also takes any appointment from the 7 days before, because its 7-day
 touch is still ahead (for example a Friday visit whose estimate was re-sent on Monday). A 48-hour touch that is already past due goes out as a catch-up in the
 first morning review; the 7-day touch keeps its own date. Customers who already replied start paused.
-Phone numbers come from the calendar event (later Salesforce or the dashboard); a customer with no phone
+Phone numbers come from the appointment email (later Salesforce or the dashboard); a customer with no phone
 found gets email only.
 The customer list stays in Val's vault, never in git (this repo is public).
 

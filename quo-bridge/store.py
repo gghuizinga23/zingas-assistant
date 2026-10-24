@@ -21,7 +21,7 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional
 
-FINISHED = ("sent", "skipped", "stopped", "blocked")
+FINISHED = ("sent", "skipped", "stopped", "blocked", "paused", "expired", "stopped_customer")
 
 
 def utc_iso(dt: datetime) -> str:
@@ -50,6 +50,7 @@ class MemoryStore:
         self.contacts: Dict[str, dict] = {}
         self.stats: Dict[str, dict] = {}
         self.events: List[dict] = []
+        self.batches: Dict[str, dict] = {}
 
     # messages
     def add_message(self, row: dict) -> bool:
@@ -129,9 +130,48 @@ class MemoryStore:
                 return copy.deepcopy(d)
         return None
 
-    def unreported_outcomes(self, limit: int = 20) -> List[dict]:
-        rows = [d for d in self.drafts.values() if d["status"] in FINISHED and not d.get("reported_at")]
+    def unreported_outcomes(self, limit: int = 20, category: Optional[str] = None,
+                            exclude_category: Optional[str] = None) -> List[dict]:
+        rows = [d for d in self.drafts.values() if d["status"] in FINISHED and not d.get("reported_at")
+                and (category is None or d["category"] == category)
+                and (exclude_category is None or d["category"] != exclude_category)]
         return copy.deepcopy(sorted(rows, key=lambda d: d["created_at"])[:limit])
+
+    def insert_draft_if_new(self, row: dict) -> bool:
+        if row["id"] in self.drafts:
+            return False
+        self.drafts[row["id"]] = copy.deepcopy(row)
+        return True
+
+    def drafts_in_batch(self, batch_id: str) -> List[dict]:
+        rows = [d for d in self.drafts.values() if d.get("batch_id") == batch_id]
+        return copy.deepcopy(sorted(rows, key=lambda d: (d.get("due_at") or "", d["id"])))
+
+    def followups_for(self, statuses: Iterable[str], phone: str = "", email: str = "") -> List[dict]:
+        wanted = tuple(statuses)
+        rows = [d for d in self.drafts.values() if d["category"] == "followup" and d["status"] in wanted
+                and ((phone and d["phone"] == phone) or (email and (d.get("email_to") or "").lower() == email))]
+        return copy.deepcopy(rows)
+
+    def latest_outbound(self, phone: str) -> Optional[dict]:
+        rows = [m for m in self.messages.values() if m["phone"] == phone and m["direction"] == "out"]
+        return copy.deepcopy(max(rows, key=lambda m: m["created_at"])) if rows else None
+
+    def messages_for_phones(self, phones: Iterable[str], limit: int = 2000) -> List[dict]:
+        want = set(phones)
+        rows = sorted((m for m in self.messages.values() if m["phone"] in want),
+                      key=lambda m: m["created_at"], reverse=True)
+        return copy.deepcopy(rows[:limit])
+
+    def dnc_phones(self, phones: Iterable[str]) -> List[str]:
+        return [p for p in phones if self.is_dnc(p)]
+
+    def get_batch(self, batch_id: str) -> Optional[dict]:
+        b = self.batches.get(batch_id)
+        return dict(b) if b else None
+
+    def save_batch(self, batch_id: str, fields: dict) -> None:
+        self.batches.setdefault(batch_id, {"id": batch_id}).update(fields)
 
     def mark_reported(self, ids: Iterable[str], at: str) -> None:
         for i in ids:
@@ -266,9 +306,57 @@ class SupabaseStore:
         rows = self._call("GET", f"drafts?tg_prompt_id=eq.{int(prompt_id)}&limit=1")
         return rows[0] if rows else None
 
-    def unreported_outcomes(self, limit: int = 20) -> List[dict]:
-        return self._call("GET", f"drafts?status={_in_list(FINISHED)}&reported_at=is.null"
-                                 f"&order=created_at.asc&limit={int(limit)}")
+    def unreported_outcomes(self, limit: int = 20, category: Optional[str] = None,
+                            exclude_category: Optional[str] = None) -> List[dict]:
+        path = f"drafts?status={_in_list(FINISHED)}&reported_at=is.null"
+        if category:
+            path += f"&category=eq.{_q(category)}"
+        if exclude_category:
+            path += f"&category=neq.{_q(exclude_category)}"
+        return self._call("GET", path + f"&order=created_at.asc&limit={int(limit)}")
+
+    def insert_draft_if_new(self, row: dict) -> bool:
+        out = self._call("POST", "drafts?on_conflict=id", [row],
+                         prefer="resolution=ignore-duplicates,return=representation")
+        return bool(out)
+
+    def drafts_in_batch(self, batch_id: str) -> List[dict]:
+        return self._call("GET", f"drafts?batch_id=eq.{_q(batch_id)}&order=due_at.asc,id.asc&limit=200")
+
+    def followups_for(self, statuses: Iterable[str], phone: str = "", email: str = "") -> List[dict]:
+        rows: List[dict] = []
+        base = f"drafts?category=eq.followup&status={_in_list(statuses)}"
+        if phone:
+            rows += self._call("GET", base + f"&phone=eq.{_q(phone)}")
+        if email:
+            seen = {r["id"] for r in rows}
+            rows += [r for r in self._call("GET", base + f"&email_to=eq.{_q(email.lower())}") if r["id"] not in seen]
+        return rows
+
+    def latest_outbound(self, phone: str) -> Optional[dict]:
+        rows = self._call("GET", f"messages?phone=eq.{_q(phone)}&direction=eq.out&order=created_at.desc&limit=1")
+        return rows[0] if rows else None
+
+    def messages_for_phones(self, phones: Iterable[str], limit: int = 2000) -> List[dict]:
+        phones = list(phones)
+        if not phones:
+            return []
+        return self._call("GET", f"messages?phone={_in_list(phones)}&order=created_at.desc&limit={int(limit)}")
+
+    def dnc_phones(self, phones: Iterable[str]) -> List[str]:
+        phones = list(phones)
+        if not phones:
+            return []
+        rows = self._call("GET", f"contacts?phone={_in_list(phones)}&do_not_contact=is.true&select=phone")
+        return [r["phone"] for r in rows]
+
+    def get_batch(self, batch_id: str) -> Optional[dict]:
+        rows = self._call("GET", f"batches?id=eq.{_q(batch_id)}&limit=1")
+        return rows[0] if rows else None
+
+    def save_batch(self, batch_id: str, fields: dict) -> None:
+        self._call("POST", "batches?on_conflict=id", [dict(fields, id=batch_id)],
+                   prefer="resolution=merge-duplicates,return=minimal")
 
     def mark_reported(self, ids: Iterable[str], at: str) -> None:
         ids = list(ids)
