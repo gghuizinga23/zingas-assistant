@@ -56,7 +56,7 @@ SUBS = {"subscriptions": [
      "receipts": [{"date": "2026-10-21", "amount": 29}], "lastUsed": "2026-10-24"},
     {"id": "nous", "name": "Nous Portal", "cost": 20, "cycle": "month", "plan": "plus", "nextRenewal": "2026-11-21"},
     {"id": "quo", "name": "Quo", "cost": 23, "cycle": "month", "nextRenewal": "2026-09-30"},
-    {"id": "plaud", "name": "Plaud Unlimited", "cost": 240, "cycle": "year", "nextRenewal": "2027-10-21",
+    {"id": "plaud", "name": "Plaud Unlimited", "cost": 240, "cycle": "year", "nextRenewal": "2027-09-21",
      "personal": True},
     {"name": "ChatGPT", "cost": 20, "personal": True, "lastUsed": "2026-08-01"},
     {"id": "Bad Id!", "name": "", "cost": 5},
@@ -138,9 +138,16 @@ class Subscriptions(unittest.TestCase):
         self.assertNotIn("nous", lines)                    # inside the AI line, never counted twice
         self.assertEqual((lines["orgo"]["billed"], lines["orgo"]["basis"]), (29.0, "receipt"))
         self.assertEqual((lines["quo"]["billed"], lines["quo"]["basis"]), (23.0, "estimate"))
-        self.assertEqual(lines["plaud"]["billed"], 0.0)    # yearly, renews next October
+        self.assertEqual(lines["plaud"]["billed"], 0.0)    # yearly, paid Sept 2026, renews Sept 2027
         self.assertTrue(lines["plaud"]["personal"])
         self.assertNotIn("personal", lines["orgo"])
+
+    def test_yearly_plan_counts_in_the_month_it_was_paid(self):
+        subs = zm.load_subscriptions({"subscriptions": [
+            {"id": "plaud", "name": "Plaud", "cost": 240, "cycle": "year", "nextRenewal": "2027-10-21"}]}, NOW.date())
+        self.assertEqual(zm.subscription_lines(subs, "2026-10", skip=set())[0]["billed"], 240.0)   # bought Oct 21
+        self.assertEqual(zm.subscription_lines(subs, "2026-11", skip=set())[0]["billed"], 0.0)
+        self.assertEqual(zm.subscription_lines(subs, "2027-10", skip=set())[0]["billed"], 240.0)   # renews
 
     def test_list_rolls_renewals_forward_and_marks_unused(self):
         rows = {r["id"]: r for r in zm.subscriptions_list(self.subs)}

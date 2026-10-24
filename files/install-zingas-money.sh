@@ -49,6 +49,7 @@ finish() {     # the programs in /usr/local/bin are copies of the ones just put 
   echo "echo 'Saved the old files in $B'"
   echo 'mkdir -p /root/Documents/ZingasVault/money && chmod 700 /root/Documents/ZingasVault/money'
   echo 'supervisorctl reread | tail -2; supervisorctl update | tail -2'
+  echo 'supervisorctl restart zingas-money | tail -1   # an already-running counter picks up the new code'
   echo 'supervisorctl restart zingas-backup >/dev/null 2>&1 || true'
   echo 'sleep 5; supervisorctl status zingas-money | awk "{print \$1, \$2}"'
   echo 'zingas-money show | grep -E "^The website" || true'

@@ -357,8 +357,11 @@ def subscription_lines(subs: List[dict], month: str, skip: set) -> List[dict]:
         elif s["cycle"] == "month":
             billed, basis = s["cost"], "estimate"
         else:
-            renews_now = s["nextRenewal"] is not None and s["nextRenewal"].strftime("%Y-%m") == month
-            billed, basis = (s["cost"] if renews_now else 0.0), "estimate"
+            # Charged in the month it renews, or the month it was last paid (a year before the next renewal).
+            nr = s["nextRenewal"]
+            last_paid = nr.replace(year=nr.year - 1, day=min(nr.day, 28)) if nr else None
+            charged = any(d is not None and d.strftime("%Y-%m") == month for d in (nr, last_paid))
+            billed, basis = (s["cost"] if charged else 0.0), "estimate"
         line = {"id": s["id"], "name": s["name"], "kind": s["kind"], "billed": cents(billed), "basis": basis}
         if s["personal"]:
             line["personal"] = True
