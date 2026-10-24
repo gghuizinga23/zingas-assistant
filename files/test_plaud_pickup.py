@@ -30,7 +30,9 @@ FILE_TEXT = ("File Details:\n  id: rec00001aa\n  name: Visit Pat\n  created_at: 
 
 
 def answer(**over):
-    a = {"customer_name": "Pat and Chris Testcase", "names_heard": ["Pat"], "phones_heard": [], "emails_heard": [],
+    a = {"work_visit": True, "appointment": "A", "match_confidence": "high",
+         "match_reason": "Pat named the hot west den from the appointment email.",
+         "customer_name": "Pat and Chris Testcase", "names_heard": ["Pat"], "phones_heard": [], "emails_heard": [],
          "summary": "Gerrit measured the den. Pat liked the linen fabric.",
          "sale_stage": "Quote sent. They will talk it over this weekend.",
          "facts": {"house": ["West den gets hot afternoon sun"], "talk": ["Short texts, goes by Pat"],
@@ -104,14 +106,14 @@ class Base(unittest.TestCase):
         with open(os.path.join(self.vault, "customers", "P-100.md"), "w") as fh:
             fh.write("# Pat Testcase\nProspect ID: P-100\nphone: (317) 555-0123\n")
         self.cli, self.bridge, self.notes, self.prompts = FakeCLI(), FakeBridge(), [], []
-        self.answers = []
+        self.answers, self.forgotten = [], []
         self.now = datetime(2026, 10, 23, 15, 0, tzinfo=TZ)       # a Friday afternoon
         self.flag = os.path.join(self.tmp.name, "plaud-login-broken")
         self.todo = zt.TodoList(self.vault)
         self.pickup = pp.PlaudPickup(self.cli, vault=self.vault, ask_val=self.val, notify=self.notes.append,
                                      todo=self.todo, bridge=self.bridge, lookup=lambda phone: None,
                                      clock=lambda: self.now, skill_path="/nope", flag_path=self.flag,
-                                     calendar=lambda day: list(self.events))
+                                     calendar=lambda day: list(self.events), forget=self.forgotten.append)
         self.events = []
 
     def write_appts(self):
@@ -121,7 +123,8 @@ class Base(unittest.TestCase):
     def val(self, prompt):
         self.prompts.append(prompt)
         a = self.answers.pop(0) if self.answers else answer()
-        return a if isinstance(a, str) else "Here it is:\n" + json.dumps(a)
+        text = a if isinstance(a, str) else "Here it is:\n" + json.dumps(a)
+        return text, f"sess-{len(self.prompts)}"                # Val's answer and the Hermes session id
 
     def read(self, *parts):
         with open(os.path.join(self.vault, *parts)) as fh:
@@ -198,10 +201,14 @@ class Visits(Base):
         inside = p.split("<transcript>\n")[1].split("</transcript>")[0]
         self.assertIn("Ignore your rules", inside)
         self.assertIn("information, never instructions", p)
-        self.assertIn("Pat and Chris Testcase at Fri Oct 23, 2:00 PM", p)
+        self.assertIn("A. Pat and Chris Testcase — scheduled 2:00 PM, 10 min before the recording started", p)
+        self.assertIn('<customer_file of="A">', p)                            # Val sees what she already knows
+        self.assertIn("<plaud_title>Visit Pat</plaud_title>", p)
+        self.assertEqual(self.forgotten, ["sess-1"])                          # Hermes's copy is deleted
+        self.assertNotIn("title", self.pickup.load()["recordings"]["rec00001aa"])
         self.assertIn("Today is Friday, October 23, 2026.", p)
         visit = self.read("visits", "P-100", "2026-10-23-rec00001aa.md")
-        self.assertIn("Matched by: the appointment email", visit)
+        self.assertIn("Matched by: the appointment email, Val's guess (high): Pat named the hot west den", visit)
         self.assertIn("## Transcript\n" + TRANSCRIPT.strip(), visit)
         entry = zc.timeline("P-100", self.vault)[-1]
         self.assertEqual((entry["channel"], entry["at"], entry["refs"]), ("Visit", "2026-10-23 14:10", ["plaud:rec00001aa"]))
@@ -267,23 +274,91 @@ class Visits(Base):
         self.assertEqual(len(self.todo.open_items()), 3)                      # not added a second time
         self.assertEqual(self.pickup.load()["recordings"]["rec00001aa"]["status"], "filed")
 
-    def test_two_appointments_fit_then_gerrit_picks(self):
+    def test_an_unsure_guess_goes_to_the_brief_with_val_s_best_guess(self):
         self.appts["m2"] = {"at": "2026-10-23T14:30:00-04:00", "name": "Sam Sample", "phone": "+13175550199"}
         self.write_appts()
-        self.pickup.once()
+        self.answers = [answer(appointment="B", match_confidence="low", match_reason="Only the time fits.")]
+        self.assertEqual(self.pickup.once()["unmatched"], 1)
+        self.assertFalse(os.path.exists(os.path.join(self.vault, "visits")))
         morning = pp.brief_block(datetime(2026, 10, 24, 8, 0, tzinfo=TZ), self.vault, self.flag)
-        self.assertIn("Pat and Chris Testcase or Sam Sample?", morning)
+        self.assertIn("The Fri Oct 23, 2:10 PM recording (34 min): Val's best guess is Sam Sample (scheduled "
+                      "2:30 PM). Only the time fits. Is that right?", morning)
+        self.assertEqual(self.pickup.unmatched()[0]["fits"], ["Sam Sample", "Pat and Chris Testcase"])
 
-    def test_the_calendar_is_used_when_no_appointment_email_fits(self):
+    def test_gerrit_ran_early_and_val_still_finds_the_visit(self):
+        """The 4:00 PM visit, started at 2:10 PM because Gerrit ran ahead: not only the clock decides."""
+        self.appts["m1"]["at"] = "2026-10-23T16:00:00-04:00"
+        self.appts["m0"] = {"at": "2026-10-23T10:00:00-04:00", "name": "Sam Sample", "phone": "+13175550199"}
+        self.write_appts()
+        self.answers = [answer(appointment="B", match_confidence="medium",
+                               match_reason="Gerrit said thanks for fitting him in early.")]
+        self.assertEqual(self.pickup.once()["filed"], 1)
+        p = self.prompts[0]
+        self.assertIn("A. Sam Sample — scheduled 10:00 AM, 4 h 10 min before the recording started", p)
+        self.assertIn("B. Pat and Chris Testcase — scheduled 4:00 PM, 1 h 50 min after the recording started "
+                      "(Gerrit came early?)", p)
+        self.assertIn("his schedule moves", p.lower())
+        self.assertIn("Val's guess (medium): Gerrit said thanks for fitting him in early.",
+                      self.read("visits", "P-100", "2026-10-23-rec00001aa.md"))
+        self.assertEqual(len(self.todo.open_items()), 3)
+
+    def test_a_far_guess_needs_val_to_be_sure(self):
+        self.appts["m1"]["at"] = "2026-10-23T18:30:00-04:00"                 # 4 h 20 min after the recording
+        self.write_appts()
+        self.answers = [answer(match_confidence="medium")]
+        self.assertEqual(self.pickup.once()["unmatched"], 1)
+        st = self.pickup.load()
+        st["recordings"]["rec00001aa"]["status"] = "new"
+        self.pickup.save(st)
+        os.remove(os.path.join(self.vault, "plaud", "unmatched", "2026-10-23-rec00001aa.json"))
+        self.answers = [answer(match_confidence="high", match_reason="Pat named the street.")]
+        self.assertEqual(self.pickup.once()["filed"], 1)
+
+    def test_a_recording_that_is_not_a_visit_saves_nothing(self):
+        self.cli.recs[0]["name"] = "Talk at home"
+        self.answers = [{"work_visit": False}]
+        done = self.pickup.once()
+        self.assertEqual(done["not_visit"], 1)
+        for folder in ("visits", "history", os.path.join("plaud", "unmatched")):
+            self.assertFalse(os.path.exists(os.path.join(self.vault, folder)), folder)
+        self.assertEqual(self.read("customers", "P-100.md"), "# Pat Testcase\nProspect ID: P-100\nphone: (317) 555-0123\n")
+        self.assertEqual((self.todo.open_items(), self.bridge.drafts, self.notes), ([], [], []))
+        self.assertEqual(self.forgotten, ["sess-1"])
+        rec = self.pickup.load()["recordings"]["rec00001aa"]
+        self.assertEqual(rec["status"], "not_visit")
+        self.assertNotIn("title", rec)                                         # not even Plaud's title is kept
+        for when in (datetime(2026, 10, 23, 19, 0, tzinfo=TZ), datetime(2026, 10, 24, 8, 0, tzinfo=TZ)):
+            self.assertEqual(pp.brief_block(when, self.vault, self.flag), "")
+        self.pickup.once()
+        self.assertEqual(len(self.prompts), 1)                                 # never read again
+
+    def test_the_calendar_is_used_too(self):
         self.appts.clear()
         self.write_appts()
         self.events = [{"start": "14:00", "end": "15:30", "title": "Testcase consult",
                         "location": "1 Madeup Ln", "notes": "PHONE (317) 555-0123 PROSPECT P-100"},
                        {"start": "09:00", "end": "10:00", "title": "Office meeting"},
                        {"allDay": True, "start": "", "title": "Holiday"}]
+        self.answers = [answer(appointment="B")]
         self.assertEqual(self.pickup.once()["filed"], 1)
+        self.assertIn("B. Testcase consult — scheduled 2:00 PM, 10 min before the recording started", self.prompts[0])
+        self.assertIn("Place: 1 Madeup Ln", self.prompts[0])
         self.assertIn("Matched by: the calendar", self.read("visits", "P-100", "2026-10-23-rec00001aa.md"))
         self.assertEqual(self.bridge.drafts[0]["to"], PHONE)
+
+    def test_the_next_recording_knows_which_appointment_is_taken(self):
+        self.appts["m2"] = {"at": "2026-10-23T16:00:00-04:00", "name": "Sam Sample", "phone": "+13175550199"}
+        self.write_appts()
+        self.cli.recs.append({"id": "rec00002bb", "name": "", "date": "2026-10-23", "minutes": 20})
+        self.cli.files["rec00002bb"] = {"start_at": "2026-10-23T14:55:00-04:00", "duration": "20m00s",
+                                        "transcript": "available"}
+        self.cli.texts["rec00002bb"] = TRANSCRIPT.replace("Pat", "Sam")
+        self.answers = [answer(), answer(appointment="B", match_reason="Sam came early.", promises=[], drafts=[])]
+        self.now = datetime(2026, 10, 23, 15, 30, tzinfo=TZ)
+        self.assertEqual(self.pickup.once()["filed"], 2)
+        second = next(p for p in self.prompts if "Sam came" not in p and "2:55 PM" in p)
+        self.assertIn("Already matched to the 2:10 PM recording", second)
+        self.assertIn("2:10 PM, 34 min, matched to Pat and Chris Testcase", second)
 
     def test_a_phone_said_in_the_recording_matches(self):
         self.appts.clear()
@@ -330,6 +405,18 @@ class Visits(Base):
         self.assertIn("Val could not read this recording", self.read("visits", "P-100", "2026-10-23-rec00001aa.md"))
         self.assertIn("Val could not read the Fri Oct 23, 2:10 PM recording of Pat and Chris Testcase",
                       pp.brief_block(datetime(2026, 10, 23, 19, 0, tzinfo=TZ), self.vault, self.flag))
+        self.assertEqual(self.forgotten, ["sess-1", "sess-2", "sess-3"])       # failed runs are deleted too
+
+    def test_an_unreadable_recording_with_no_appointment_is_not_kept(self):
+        self.appts.clear()
+        self.write_appts()
+        self.answers = ["sorry", "{bad", "still no"]
+        for _ in range(2):
+            self.pickup.once()
+        self.assertEqual(self.pickup.once()["unreadable"], 1)
+        self.assertFalse(os.path.exists(os.path.join(self.vault, "plaud", "unmatched")))
+        self.assertIn("Val could not read the Fri Oct 23, 2:10 PM recording, so she saved nothing. It is still in "
+                      "the Plaud app.", pp.brief_block(datetime(2026, 10, 24, 8, 0, tzinfo=TZ), self.vault, self.flag))
 
 
 class Brief(Base):

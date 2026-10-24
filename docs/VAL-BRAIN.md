@@ -284,9 +284,22 @@ sends Plaud anonymous usage counts (PostHog); no customer data goes there from V
 server was not needed.
 
 **Differences from the plan above**
-- Matching uses F0's appointment emails first, then the calendar through the website (see Part 2). Window:
-  the appointment time is 75 minutes before to 45 minutes after the recording's start. An appointment with a phone but no customer file yet is
-  kept under `unmatched-<digits>` and moves to the Prospect ID when the number is matched.
+- Matching uses F0's appointment emails and the calendar through the website (see Part 2). Changed with
+  Gerrit 2026-10-24: **an educated guess, not a time window.** Gerrit's visits move (early when he runs
+  ahead, late when he runs behind), so Val sees every appointment that day (up to 8, closest first), each
+  with its time difference, a short look at the customer file, and whether another recording already
+  matched it, plus the day's other recordings. She gives a letter, a confidence and a reason. High files it;
+  medium files it when the scheduled time is within 3 hours; low goes to the morning brief as "Val's best
+  guess is X. Is that right?". Only when Val cannot answer at all does the old window count (75 minutes
+  before to 45 minutes after the recording's start, and only one appointment). An appointment with a phone
+  but no customer file yet is kept under `unmatched-<digits>` and moves to the Prospect ID when the number
+  is matched.
+- **Not work, nothing saved** (Gerrit 2026-10-24). Val first says whether the recording is a Zinga's customer
+  visit. When it is not (Gerrit's private life), the program saves nothing: no file, fact, to-do, text or
+  brief line; state.json keeps only the id with `not_visit`, without Plaud's title. A recording Val cannot
+  read and no appointment fits is not kept either (a problem line says it is still in the Plaud app).
+  Every Hermes session of a recording run is deleted after the answer (`hermes sessions delete`), because
+  Hermes keeps a copy of each prompt.
 - Unmatched recordings are kept in `plaud/unmatched/` (not under any customer). Their promises still become
   to-dos (who = the name Val heard). Gerrit's answer to the morning-brief line is filed with
   `zingas-plaud match <id> --prospect-id | --phone`.
