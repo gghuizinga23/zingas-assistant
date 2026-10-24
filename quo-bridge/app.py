@@ -12,6 +12,12 @@
   GET  /api/val/followups/outcomes  what happened to each follow-up
   POST /api/val/followups/pause     a customer wrote back: hold their follow-ups
   POST /api/val/followups/contacts  last text in/out and do-not-contact, for a list of phones
+  Zinga's OS (the company website), only with ZINGAS_OS_TOKEN:
+  GET  /api/os/drafts    drafts waiting on Gerrit, read-only, last 4 digits of the phone only
+
+Optional: with ZINGAS_OS_URL and ZINGAS_OS_TOKEN both set, every do-not-contact
+check also asks the website's shared list, and a STOP adds the number to it
+(os_link.py). Without them nothing changes.
 
 Anything that can't be checked fails closed: a missing secret means 401 or 503,
 never "let it through".
@@ -28,6 +34,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from bridge import Bridge, Config, bearer_ok  # noqa: E402
 from clients import ComposioGmail, QuoClient, TelegramClient  # noqa: E402
+from os_link import OsLink, SharedDncStore, drafts_for_os  # noqa: E402
 from store import SupabaseStore  # noqa: E402
 
 MAX_BODY = 64 * 1024
@@ -47,8 +54,11 @@ def build_bridge(env=os.environ) -> Bridge:
     # follow-ups send their texts and say the email isn't set up.
     email = (ComposioGmail(env["COMPOSIO_API_KEY"], env["COMPOSIO_GMAIL_ACCOUNT_ID"])
              if env.get("COMPOSIO_API_KEY") and env.get("COMPOSIO_GMAIL_ACCOUNT_ID") else None)
-    return Bridge(Config.from_env(env),
-                  SupabaseStore(env["SUPABASE_URL"], env["SUPABASE_SERVICE_KEY"]),
+    store = SupabaseStore(env["SUPABASE_URL"], env["SUPABASE_SERVICE_KEY"])
+    # The website's shared do-not-contact list: only when both settings are there.
+    if env.get("ZINGAS_OS_URL") and env.get("ZINGAS_OS_TOKEN"):
+        store = SharedDncStore(store, OsLink(env["ZINGAS_OS_URL"], env["ZINGAS_OS_TOKEN"]))
+    return Bridge(Config.from_env(env), store,
                   QuoClient(env["QUO_API_KEY"], env["QUO_PHONE_NUMBER_ID"]),
                   TelegramClient(env["APPROVALS_BOT_TOKEN"]), email=email)
 
@@ -81,7 +91,8 @@ def make_app(get_bridge):
         routes = {("POST", "/api/quo"), ("GET", "/api/val/updates"), ("POST", "/api/val/ack"),
                   ("POST", "/api/val/drafts"), ("POST", "/api/telegram"), ("GET", "/api/tick"),
                   ("POST", "/api/val/followups"), ("GET", "/api/val/followups/outcomes"),
-                  ("POST", "/api/val/followups/pause"), ("POST", "/api/val/followups/contacts")}
+                  ("POST", "/api/val/followups/pause"), ("POST", "/api/val/followups/contacts"),
+                  ("GET", "/api/os/drafts")}
         if (method, path) not in routes:
             known = {p for _, p in routes}
             return _reply(start_response, 405 if path in known else 404, {"error": "no such door"})
@@ -110,6 +121,10 @@ def make_app(get_bridge):
                 if not bearer_ok(headers, bridge.cfg.cron_secret):
                     return _reply(start_response, 401, {"error": "bad code"})
                 status, body = bridge.tick()
+            elif path == "/api/os/drafts":   # the website's read-only door
+                if not bearer_ok(headers, bridge.cfg.os_token):
+                    return _reply(start_response, 401, {"error": "bad code"})
+                status, body = 200, drafts_for_os(bridge.store)
             else:   # Val's doors
                 if not bearer_ok(headers, bridge.cfg.val_token):
                     return _reply(start_response, 401, {"error": "bad code"})

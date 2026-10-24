@@ -24,7 +24,9 @@ The full plan is in `docs/PLAN.md`. What Gerrit has to sign up for is in
   - money, complaints, cancellations or "is this a real person?" in the
     customer's message always go to Gerrit
   - between 8am and 8pm in the customer's time zone
-  - not on the do-not-contact list
+  - not on the do-not-contact list (and, once `ZINGAS_OS_URL` and
+    `ZINGAS_OS_TOKEN` are set, not on the company website's shared list either;
+    if the website can't be reached, no text goes out)
   - no prices, discounts or dollar amounts in anything that sends by itself
   - never an appointment confirmation (corporate already sends those)
 - **Email:** the assistant can read mail and create Gmail drafts. It cannot

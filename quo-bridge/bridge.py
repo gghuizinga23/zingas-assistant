@@ -49,6 +49,7 @@ class Config:
     cron_secret: str
     gerrit_cell: str = ""
     auto_send_enabled: bool = False
+    os_token: str = ""          # the website's (Zinga's OS) code for GET /api/os/drafts
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> "Config":
@@ -60,6 +61,7 @@ class Config:
             cron_secret=env.get("CRON_SECRET", ""),
             gerrit_cell=env.get("GERRIT_CELL", ""),
             auto_send_enabled=env.get("AUTO_SEND_ENABLED", "").lower() == "true",
+            os_token=env.get("ZINGAS_OS_TOKEN", ""),
         )
 
 
