@@ -45,6 +45,17 @@ def followups_block(now) -> str:
         return ""
 
 
+def numbers_block(now) -> str:
+    """Gerrit's numbers from the company website, Monday mornings only (plan F7); "" otherwise."""
+    if now.weekday() != 0 or now.hour >= 12:
+        return ""
+    try:
+        import zingas_os as zo
+        return zo.monday_block(now)
+    except Exception:  # the brief must never fail because of this block
+        return ""
+
+
 def main(vault: str = zt.VAULT, now=None) -> str:
     now = now or zt.now_local()
     todo = zt.TodoList(vault)
@@ -62,6 +73,9 @@ def main(vault: str = zt.VAULT, now=None) -> str:
     block = followups_block(now)
     if block:
         out.append(block)
+    numbers = numbers_block(now)
+    if numbers:
+        out.append(numbers)
     warning = backup_warning(now)
     if warning:
         out.insert(2, warning)

@@ -25,6 +25,8 @@ Right before you start, a program puts Gerrit's to-do list in your instructions,
 
 <Email: only if something isn't on the list yet, see below>
 
+<the Monday numbers block, as written, Monday mornings only>
+
 Idea: <at most 2 ideas, each on its own line>
 ```
 
@@ -55,6 +57,14 @@ Skip this part when there's nothing. Never quote an email. Say what is needed in
 ## Follow-ups (both briefs)
 Once quote follow-ups are on (F0), your instructions also have a block between `--- FOLLOW-UPS STARTS` and `--- FOLLOW-UPS ENDS`. Put the lines between them in the brief **as written**, right after the to-do list block (never the two marker lines). In the morning it is today's follow-ups (Friday: the weekend too) and the customers whose appointment Val could not find. In the evening it is what got sent, paused or removed. The program `zingas-followups` does all the work: never approve, change or send a follow-up yourself, and never ask Gerrit "Sold, Quoted or Lost?". When there is no such block, say nothing about follow-ups.
 
+## Monday numbers (Monday morning brief only)
+On Monday mornings your instructions also have a block between `--- MONDAY NUMBERS STARTS` and `--- MONDAY NUMBERS ENDS`.
+It is Gerrit's month so far from the company website (the same numbers as the Numbers tab), and in the first week of a
+month last month's final numbers too. Put the lines between the markers in the brief **exactly as written**, right
+before the ideas (never the two marker lines). This block is the one exception to "no prices or amounts": these are
+Gerrit's own sales numbers. Don't add, round, compare or explain them, and never use them in anything else (a
+customer text, an email, an idea). If the block says the website did not answer, copy that line as is.
+
 ## Backup warning (both briefs)
 If your instructions have a line that starts with `BACKUP WARNING:`, add one line right before the ideas: "⚠️ Backup: the last good backup was <when>. <the problem, in a few plain words>." Skip this when there is no such line. Never try to fix it yourself.
 
@@ -65,6 +75,6 @@ Only here, at the end, each line starting with "Idea:". At most 2. Only facts yo
 - Write the brief in ASD-STE100 (skill `ste-writing`). The to-do list block is copied as is.
 - Plain words, short lines. A 6th grader reads it at a glance.
 - Synopses, never pasted customer words.
-- No prices or amounts. No day counts you typed yourself (the list shows due dates).
+- No prices or amounts (the Monday numbers block is the one exception). No day counts you typed yourself (the list shows due dates).
 - About 25 lines at most. If the list is long, it's still copied in full; keep everything else shorter.
 - You can't send anything to a customer from a brief. Drafts still go through Gerrit's Approve tap.
