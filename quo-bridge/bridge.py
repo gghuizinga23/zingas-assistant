@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from typing import Callable, Dict, List, Mapping, Optional, Tuple
 from zoneinfo import ZoneInfo
 
+import cost_count
 import send_gate
 from clients import QuoError, TelegramError, verify_quo_signature
 from followups import FollowupMixin
@@ -50,6 +51,7 @@ class Config:
     gerrit_cell: str = ""
     auto_send_enabled: bool = False
     os_token: str = ""          # the website's (Zinga's OS) code for GET /api/os/drafts
+    os_url: str = ""            # the website's address (ZINGAS_OS_URL), for the hourly cost count
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> "Config":
@@ -62,6 +64,7 @@ class Config:
             gerrit_cell=env.get("GERRIT_CELL", ""),
             auto_send_enabled=env.get("AUTO_SEND_ENABLED", "").lower() == "true",
             os_token=env.get("ZINGAS_OS_TOKEN", ""),
+            os_url=env.get("ZINGAS_OS_URL", ""),
         )
 
 
@@ -95,9 +98,10 @@ def _local(dt: datetime, tz_name: str) -> str:
 
 class Bridge(FollowupMixin):
     def __init__(self, config: Config, store, quo, telegram,
-                 now: Callable[[], datetime] = lambda: datetime.now(timezone.utc), email=None):
+                 now: Callable[[], datetime] = lambda: datetime.now(timezone.utc), email=None, cost=None):
         self.cfg = config
         self.email = email          # ComposioGmail for F0 follow-up emails, or None
+        self.cost = cost            # cost_count.CostPoster for the website's Cost tab, or None
         self.store = store
         self.quo = quo
         self.tg = telegram
@@ -602,4 +606,5 @@ class Bridge(FollowupMixin):
                         self.store.update_draft(d["id"], {"escalated_at": None})
                     self._log("escalate_failed", None, str(e))
         done["followups_expired"] = self._fu_tick()
+        done["cost_count"] = cost_count.hourly(self.store, self.cost, now)   # last: it never raises
         return 200, done

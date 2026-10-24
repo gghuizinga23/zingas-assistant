@@ -195,6 +195,15 @@ class MemoryStore:
     def log(self, kind: str, draft_id: Optional[str], detail: str, at: str) -> None:
         self.events.append({"at": at, "kind": kind, "draft_id": draft_id, "detail": detail})
 
+    def last_event_at(self, kind: str) -> Optional[str]:
+        return max((e["at"] for e in self.events if e["kind"] == kind), default=None)
+
+    # cost count (cost_count.py)
+    def sent_drafts_since(self, since: str) -> List[dict]:
+        rows = [{k: d.get(k) for k in ("phone", "body", "final_body", "sent_at")} for d in self.drafts.values()
+                if d.get("sent_at") and parse_time(d["sent_at"]) >= parse_time(since)]
+        return sorted(rows, key=lambda d: d["sent_at"])
+
 
 class StoreError(RuntimeError):
     pass
@@ -386,3 +395,17 @@ class SupabaseStore:
     def log(self, kind: str, draft_id: Optional[str], detail: str, at: str) -> None:
         self._call("POST", "events", [{"at": at, "kind": kind, "draft_id": draft_id, "detail": detail[:2000]}],
                    prefer="return=minimal")
+
+    def last_event_at(self, kind: str) -> Optional[str]:
+        rows = self._call("GET", f"events?kind=eq.{_q(kind)}&select=at&order=at.desc&limit=1")
+        return rows[0]["at"] if rows else None
+
+    # cost count (cost_count.py): only what a count needs, never names
+    def sent_drafts_since(self, since: str, page: int = 1000) -> List[dict]:
+        out: List[dict] = []
+        while True:
+            rows = self._call("GET", f"drafts?sent_at=gte.{_q(since)}&select=phone,body,final_body,sent_at"
+                                     f"&order=sent_at.asc,id.asc&limit={page}&offset={len(out)}")
+            out += rows
+            if len(rows) < page:
+                return out

@@ -17,7 +17,8 @@
 
 Optional: with ZINGAS_OS_URL and ZINGAS_OS_TOKEN both set, every do-not-contact
 check also asks the website's shared list, and a STOP adds the number to it
-(os_link.py). Without them nothing changes.
+(os_link.py). Once an hour the tick also posts this month's text count to the
+website's Cost tab (cost_count.py). Without them nothing changes.
 
 Anything that can't be checked fails closed: a missing secret means 401 or 503,
 never "let it through".
@@ -34,6 +35,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from bridge import Bridge, Config, bearer_ok  # noqa: E402
 from clients import ComposioGmail, QuoClient, TelegramClient  # noqa: E402
+from cost_count import CostPoster  # noqa: E402
 from os_link import OsLink, SharedDncStore, drafts_for_os  # noqa: E402
 from store import SupabaseStore  # noqa: E402
 
@@ -55,12 +57,14 @@ def build_bridge(env=os.environ) -> Bridge:
     email = (ComposioGmail(env["COMPOSIO_API_KEY"], env["COMPOSIO_GMAIL_ACCOUNT_ID"])
              if env.get("COMPOSIO_API_KEY") and env.get("COMPOSIO_GMAIL_ACCOUNT_ID") else None)
     store = SupabaseStore(env["SUPABASE_URL"], env["SUPABASE_SERVICE_KEY"])
-    # The website's shared do-not-contact list: only when both settings are there.
+    # The website's shared do-not-contact list and the hourly cost count: only when both settings are there.
+    cost = None
     if env.get("ZINGAS_OS_URL") and env.get("ZINGAS_OS_TOKEN"):
         store = SharedDncStore(store, OsLink(env["ZINGAS_OS_URL"], env["ZINGAS_OS_TOKEN"]))
+        cost = CostPoster(env["ZINGAS_OS_URL"], env["ZINGAS_OS_TOKEN"])
     return Bridge(Config.from_env(env), store,
                   QuoClient(env["QUO_API_KEY"], env["QUO_PHONE_NUMBER_ID"]),
-                  TelegramClient(env["APPROVALS_BOT_TOKEN"]), email=email)
+                  TelegramClient(env["APPROVALS_BOT_TOKEN"]), email=email, cost=cost)
 
 
 def _headers(environ) -> dict:
