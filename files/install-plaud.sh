@@ -105,7 +105,7 @@ remote() {
   echo "  npm install -g --no-fund --no-audit '$PLAUD_CLI' >/dev/null && echo \"plaud program: \$(plaud version 2>/dev/null | head -1)\""
   echo 'fi'
   echo 'supervisorctl reread >/dev/null && supervisorctl update | tail -3'
-  echo 'supervisorctl restart zingas-quo-pickup zingas-inbox zingas-followups zingas-heartbeat zingas-backup | tail -5'
+  echo 'supervisorctl restart zingas-plaud zingas-quo-pickup zingas-inbox zingas-followups zingas-heartbeat zingas-backup | tail -6'
   echo 'supervisorctl restart hermes-gateway | tail -1'
   echo 'sleep 20; supervisorctl status zingas-plaud zingas-quo-pickup zingas-inbox hermes-gateway | awk "{print \$1, \$2}"'
   echo 'zingas-plaud check || true'
