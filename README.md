@@ -60,10 +60,16 @@ lets only the folders above into git. Keep it that way.
 | `files/zingas_backup.py` | `/usr/local/bin/zingas-backup` (nightly backup, run by supervisord) |
 | `files/zingas_followups.py` | `/usr/local/bin/zingas-followups` (F0 quote follow-ups, run by supervisord) |
 | `files/followup_wording.py` | `/usr/local/lib/zingas/followup_wording.py` (the fixed follow-up wordings) |
+| `files/zingas_customer.py` | `/usr/local/lib/zingas/zingas_customer.py` (one file per customer: profile, timeline, visits; used by every pickup) |
+| `files/plaud_pickup.py` | `/usr/local/bin/zingas-plaud` and `/usr/local/lib/zingas/` (Plaud visit recordings into customer memory and to-dos, run by supervisord). Installed by `files/install-plaud.sh` |
 | `files/zingas_os.py` | `/usr/local/lib/zingas/zingas_os.py` and `/usr/local/bin/zingas-os` (Val's read-only line to the company website: customer lookup, Monday numbers). Installed by `files/install-zingas-os.sh` |
 
 ## Tests
 
 ```bash
 python3 -m unittest discover -s quo-bridge -v
+```
+
+```bash
+cd files && for t in test_*.py; do python3 -m unittest "${t%.py}" || exit 1; done
 ```

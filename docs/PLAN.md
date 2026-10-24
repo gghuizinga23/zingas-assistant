@@ -54,7 +54,7 @@ healthchecks.io ◄── ping every 10 min└───────────�
   - Copy in `files/` from nicks-stack: `config.yaml`, `gateway-run.sh`, `onboard.sh`, `telegram-pair.py`, the skills layout and `build_template.py`.
   - Port the prototype's cadence rules, voice rules and promise tracker as Hermes skills.
   - Real customer data never goes in git.
-- **New skills** under `files/skills/zingas/`: `voice`, `email-triage`, `followup-cadence`, `briefs`, `customer-memory`, `quo-texting`, `estimator-followups`, `plaud-visits` (was `truck-debrief`), `scheduling-handoff`.
+- **New skills** under `files/skills/zingas/`: `voice`, `email-triage`, `followup-cadence`, `briefs`, `customer-memory`, `quo-texting`, `estimator-followups`, `plaud-visits` (was `truck-debrief`; built 2026-10-24 as a section of `customer-memory`, run by `zingas-plaud`), `scheduling-handoff`.
 - **`mail-bridge/`** (small, same idea as quo-bridge): holds the Composio key and opens a Composio session limited to read mail, search mail, create draft and read calendar (`SESSION_PRESET_DIRECT_TOOLS` with an allowlist). Val reaches Gmail only through it.
 - **`quo-bridge/`** is modeled on Nick's `agentphone_bridge.py` (HMAC check, dedupe, ordering). It points at Quo's API and is the **only path to customers**. **It runs on Vercel, not on Val's computer** (2026-10-21): Quo keys can't be limited and Val can read every file on her computer. Val holds only a drafts-only code, and a no-AI poller on her computer picks up new texts, so her computer stays closed to the internet. Its records live in a separate free Supabase project. It enforces in code:
   - approval required unless that category has earned auto-send, and then a 5-minute Stop countdown
@@ -164,9 +164,10 @@ Highest priority first. Each step comes after what it needs. **Gerrit:** marks h
    everything costs, sends the Monday money block and the monthly statement, warns before Nous credits run
    out (no auto top-up), and tracks her ROI. The numbers show in a new Assistant tab in the Sales Dashboard
    (Gerrit only). Gerrit: SETUP-VAL C1 (the receipts filter in personal Gmail) and C2 (one new code).
-6. **Plaud memory** (Phase 4, `docs/VAL-BRAIN.md` Parts 1–4). Before it, Gerrit: Plaud P1 (AutoFlow, speaker
-   labels, product words, record every visit). Phase 4 has nothing to read without recordings. Then P2
-   (`plaud login`) and P3 (a test recording).
+6. **Plaud memory** (Phase 4, `docs/VAL-BRAIN.md` Parts 1–4). **Built 2026-10-24** (`zingas-plaud`, the
+   customer file `zingas_customer.py`). Before it, Gerrit: Plaud P1 (AutoFlow, speaker labels, product words,
+   record every visit). Then, after his yes: `files/install-plaud.sh`, P2 (`plaud login` on Val's screen) and
+   P3 (a test recording).
 7. **Val's brain B1–B3.** B3 needs Calendar.
 8. **F2 missed-call text-back.** Ahead of F1: it needs only Calendar, it is small, and a missed call is a
    lead lost that day.
@@ -200,7 +201,7 @@ Highest priority first. Each step comes after what it needs. **Gerrit:** marks h
 | 1.5 | Estimator read access + event webhooks | None | A proposal view or question produces a correct draft in Telegram |
 | 2 | Morning and evening briefs | None | Both briefs arrive for a week straight |
 | 3 | Quo texting: bridge, cadence, quiet hours, DNC, money check, 10-minute escalation, scheduling handoff | Put the new number on cards and proposals | Texts in and out with the gate enforced |
-| 4 | Plaud memory + one file per customer, right after F0 (`docs/VAL-BRAIN.md` Parts 1–4; replaces the truck debrief; Salesforce write on hold) (consent already collected up front at every appointment, as with Rilla) | Record every visit; review the first 10 visit notes | A follow-up uses a recording detail; the note is ready to paste (or shows in Salesforce once write access is on) |
+| 4 | Plaud memory + one file per customer, right after F0 (`docs/VAL-BRAIN.md` Parts 1–4, **built 2026-10-24**, not on Val's computer yet; replaces the truck debrief; Salesforce write on hold) (consent already collected up front at every appointment, as with Rilla) | Record every visit; review the first 10 visit notes | A follow-up uses a recording detail; the note is ready to paste (or shows in Salesforce once write access is on) |
 | 5 | Team rollout 1 → 5 → 15: one Orgo computer per rep from the template, per-rep voice, Quo numbers, a manager view | Pick the first 4 reps | 5 reps live |
 | 6 | Dashboard merge: the "Assistant" tab inside `PageShell` using `src/components/ui.tsx` (its money and stats part starts early, Build order step 5). Comes after the Estimator → dashboard merge. Only Val's screens (drafts, approvals, to-dos, customer notes) move in; Val's agent and quo-bridge stay separate | None | It appears in the dashboard |
 
@@ -294,11 +295,13 @@ key that can send email.
 times") and a fresh reason in each touch.
 
 ## Plaud memory and Val's brain (added 2026-10-23, right after F0)
-Gerrit approved the plan in `docs/VAL-BRAIN.md`. **Not started.** Build order:
+Gerrit approved the plan in `docs/VAL-BRAIN.md`. **Parts 1–4 built 2026-10-24** (not on Val's computer yet).
+Build order:
 1. **Right after F0: Phase 4, Parts 1–4.** Every visit recording, text, call, voicemail and email lands in
    one file per customer, and Val reads it before every draft. Promises from a visit become to-dos a few
    minutes after the recording stops. **Every new to-do alerts Gerrit at any hour** (Gerrit, 2026-10-23;
-   all other Val messages keep quiet hours). Waits on Calendar access (still blocked).
+   all other Val messages keep quiet hours). Built without Calendar: recordings are matched with the
+   "Appt on ..." emails F0 already reads.
 2. **Next: Val's brain, steps B1–B5** (Part 5): the search index, "the story so far", think before writing,
    a self-check before each Approve card, a nightly review, and 32 kinds of context in all.
    B4 and B5 wait on F1, Estimator Phase 1.5 and weeks of recordings.

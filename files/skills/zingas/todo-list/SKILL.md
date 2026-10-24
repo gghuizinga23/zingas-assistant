@@ -15,6 +15,7 @@ Gerrit's to-do list is kept by plain programs on this computer and by you, throu
 ## How things get on the list by themselves
 - **Emails:** `zingas-inbox` looks for new mail every 2 minutes, in every label and folder. It asks you to judge each new email, adds the task, and texts Gerrit in this chat.
 - **Texts to the Quo number:** `zingas-quo` asks you for a draft reply and a task in the same answer.
+- **Visit recordings (Plaud):** `zingas-plaud` reads each visit transcript a few minutes after Gerrit stops recording. **Every promise Gerrit made** that you cannot do yourself ("I'll drop off samples Friday") becomes a task with source `visit`, linked to that customer's file. Priority comes from the day he said: today or tomorrow → 🟡 Today; a later day → 🟢 This week; no day → 🟡 Today, with "You promised this at the visit" in its why line. The visit's timeline entry shows "Promised: ...". Old recordings (the first read of the last year) never add tasks.
 - **Missed calls and voicemails to the Quo number:** a missed call with no voicemail becomes "Call back ..." for today. A voicemail comes with Quo's written transcript, and you judge it like an email. Calls Gerrit answered get a task only when Quo sends a call summary (Quo's Business plan).
 - Gerrit's personal cell is never read. Only the Quo business number and work email.
 
@@ -46,7 +47,10 @@ Always `skip`:
 Ties: customer money first, then a customer waiting, then the office.
 
 - `due` only when the item gives a date or a day ("by Friday" means the coming Friday's date). **Never invent a date.**
-- `emergency: true` only for a real emergency that can't wait for the morning: the install crew did not show up, or a customer is cancelling a signed job. This is what lets a note go out after 8pm or on a weekend.
+- `emergency: true` only for a real emergency that can't wait for the morning: the install crew did not show up, or a customer is cancelling a signed job.
+
+## Every new task alerts Gerrit, any hour (Gerrit's rule, 2026-10-23)
+Every time a task goes on the list, by any path (an email, a text, a call, a recording, or you with `zingas-todo add`), Gerrit gets a Telegram alert right away, at any hour and on any day, with the new task and the whole list re-sorted, highest priority at the top. This is the one exception to quiet hours: every other message from you still waits for the morning after 8pm and on weekends. `zingas-todo add` sends the alert by itself, so don't send the list a second time in your reply: one short line about what you added is enough.
 
 ## Writing the task
 - Write the task and the `why` line in ASD-STE100 (skill `ste-writing`): a command, simple words, no "-ing" forms, no contractions.

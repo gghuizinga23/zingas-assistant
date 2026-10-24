@@ -45,6 +45,11 @@ sys.path.insert(1, os.path.dirname(os.path.abspath(__file__)))
 import followup_wording as fw  # noqa: E402
 import zingas_todo as zt  # noqa: E402
 
+try:   # the customer file (docs/VAL-BRAIN.md Part 1); a follow-up never waits on it
+    import zingas_customer as zc  # noqa: E402
+except ImportError:      # pragma: no cover
+    zc = None
+
 TZ = zt.TZ
 HERMES_HOME = os.environ.get("HERMES_HOME", "/root/.hermes")
 VAULT = os.environ.get("ZINGAS_VAULT", "/root/Documents/ZingasVault")
@@ -626,6 +631,7 @@ class Followups:
             s = o.get("status")
             if s == "sent":
                 t.update(state="sent", sent_at=o.get("sent_at") or iso(self.clock()))
+                self._timeline(c, o)
                 if o.get("email_status") and o["email_status"] != "sent":
                     t["email"] = o["email_status"]
                 self.event(c, "sent" + ("" if o.get("email_status") in ("", "sent") else
@@ -653,6 +659,20 @@ class Followups:
         if done:
             self.bridge.ack(done)
         return len(done)
+
+    def _timeline(self, c: dict, o: dict) -> None:
+        """A sent follow-up text goes in the customer's timeline (the email shows up from Gerrit's Sent mail)."""
+        if zc is None or not (c.get("phone") or c.get("email")):
+            return
+        try:
+            key = zc.key_for(phone=c.get("phone") or "", email=c.get("email") or "",
+                             vault=os.path.dirname(self.p["dir"]))
+            zc.log(key, "text_out", o.get("sent_at") or iso(self.clock()),
+                   (o.get("final_text") or "") or f"Quote follow-up ({o.get('touch')}).",
+                   ref="fu-out:" + str(o.get("draft_id")), who=f"Gerrit (follow-up, {o.get('touch')})",
+                   vault=os.path.dirname(self.p["dir"]))
+        except Exception as e:
+            log(f"customer file: {type(e).__name__}")
 
     # the loop ---------------------------------------------------------
     def step(self) -> dict:

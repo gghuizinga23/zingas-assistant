@@ -13,7 +13,10 @@ import zingas_todo as zt
 
 class FakeGmail:
     def __init__(self):
-        self.mail, self.bodies, self.broken = [], {}, set()
+        self.mail, self.bodies, self.broken, self.sent_mail = [], {}, set(), []
+
+    def sent(self, after_epoch, limit=25):
+        return [m for m in self.sent_mail if m["_ts"] >= after_epoch]
 
     def recent(self, after_epoch, limit=25):
         return [m for m in self.mail if m["_ts"] >= after_epoch]
@@ -32,7 +35,7 @@ def email(mid, ts, sender="Pat Lee <pat@example.com>", subject="Shades", labels=
 
 class InboxTests(unittest.TestCase):
     def setUp(self):
-        d = tempfile.mkdtemp()
+        d = self.vault = tempfile.mkdtemp()
         self.gmail, self.todo, self.sent, self.prompts = FakeGmail(), zt.TodoList(d), [], []
         self.answer = lambda ids: {"results": [{"id": i, "action": "add", "task": "Call back about shades",
                                                 "priority": "today"} for i in ids]}
@@ -123,14 +126,66 @@ class InboxTests(unittest.TestCase):
         self.inbox.once()
         self.assertIn("preview text", self.prompts[0])
 
-    def test_quiet_hours_hold_the_note_but_keep_the_task(self):
+    def test_a_new_task_alerts_gerrit_even_in_quiet_hours(self):
+        """Gerrit's rule (2026-10-23): every new to-do alerts him right away, any hour."""
         self.inbox.once()
         self.gmail.mail = [email("m1", self.now + 1)]
         self.now += 120
         with mock.patch.object(zt, "quiet_hours", lambda at=None: True):
             self.inbox.once()
         self.assertEqual(len(self.todo.open_items()), 1)
-        self.assertEqual(self.sent, [])
+        self.assertEqual(len(self.sent), 1)
+
+    def customer(self):
+        os.makedirs(os.path.join(self.vault, "customers"), exist_ok=True)
+        with open(os.path.join(self.vault, "customers", "P-100.md"), "w") as fh:
+            fh.write("# Pat Lee\nProspect ID: P-100\nemail: pat@example.com\nLikes linen.\n")
+
+    def test_a_customer_email_is_judged_with_the_file_and_logged(self):
+        import zingas_customer as zc
+        self.customer()
+        self.inbox.once()
+        self.gmail.mail = [email("m1", self.now + 30, subject="Colors")]
+        self.gmail.bodies["m1"] = "We're back from Florida the 15th. Can we see the gray samples?"
+        self.answer = lambda ids: {"results": [{"id": i, "action": "add", "task": "Bring the gray samples",
+                                                "priority": "today", "summary": "Pat asks to see gray samples.",
+                                                "facts": {"life_events": [{"what": "Back from Florida",
+                                                                           "date": "2026-11-15"}]}}
+                                               for i in ids]}
+        self.now += 120
+        self.inbox.once()
+        p = self.prompts[0]
+        self.assertIn('<item id="m1" kind="email" customer="yes">', p)
+        self.assertIn("Likes linen.", p)
+        entry = zc.timeline("P-100", self.vault)[-1]
+        self.assertEqual((entry["channel"], entry["lines"], entry["refs"]),
+                         ("Email in", ["Pat asks to see gray samples."], ["gmail:m1"]))
+        with open(os.path.join(self.vault, "customers", "P-100.md")) as fh:
+            self.assertIn("- Back from Florida (2026-11-15) (email ", fh.read())
+
+    def test_strangers_and_office_mail_are_not_logged(self):
+        self.customer()
+        self.inbox.once()
+        self.gmail.mail = [email("m1", self.now + 30, sender="Beth <beth@zingashome.com>"),
+                           email("m2", self.now + 31, sender="Vendor <sales@vendor.example>")]
+        self.now += 120
+        self.inbox.once()
+        self.assertNotIn('customer="yes"', self.prompts[0])
+        self.assertFalse(os.path.exists(os.path.join(self.vault, "history", "P-100.md")))
+
+    def test_gerrits_sent_email_to_a_customer_is_logged_once(self):
+        import zingas_customer as zc
+        self.customer()
+        self.inbox.once()
+        self.gmail.sent_mail = [dict(email("s1", self.now + 10, subject="Your quote"), to="Pat <PAT@example.com>",
+                                     preview={"body": "Here is your quote. Gerrit"}),
+                                dict(email("s2", self.now + 11, subject="Office"), to="beth@zingashome.com")]
+        self.now += 120
+        self.inbox.once()
+        self.now += 120
+        self.inbox.once()
+        got = [(e["channel"], e["lines"]) for e in zc.timeline("P-100", self.vault)]
+        self.assertEqual(got, [("Email out", ["Subject: Your quote", "Here is your quote. Gerrit"])])
 
 
 class Helpers(unittest.TestCase):

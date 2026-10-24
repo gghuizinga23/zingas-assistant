@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """zingas-todo: Gerrit's running to-do list. Plain code, no AI of its own.
 
-Runs on Val's computer. Three things write to the list:
+Runs on Val's computer. Four things write to the list:
   - zingas-inbox (new emails), and zingas-quo (texts, missed calls, voicemails),
     which ask Val to judge each new thing and then add it here themselves;
+  - zingas-plaud (visit recordings): every promise Gerrit made at a visit;
   - Val, in Telegram, when Gerrit says "add ...", "done 3" or "move 4 to later".
+
+Every new task alerts Gerrit in Telegram right away, any hour, any day, with the whole
+re-sorted list (Gerrit's rule, 2026-10-23). All other Val messages keep quiet hours.
 
 The list lives in the vault: todo/todo.json (the record) and To-Do.md (a view
 to read, rebuilt on every change). Open tasks are renumbered 1, 2, 3... in the order
@@ -49,7 +53,7 @@ PRIORITIES = {
     "week": (2, "🟢", "This week"),
     "later": (3, "⚪", "Later"),
 }
-SOURCES = ("email", "text", "call", "voicemail", "gerrit", "val")
+SOURCES = ("email", "text", "call", "voicemail", "visit", "gerrit", "val")
 # Gerrit's hard rule (2026-10-21): every email, text, call and voicemail gets an
 # answer within 24 hours of coming in. Tasks from them carry a reply_by time and
 # never sit lower than "today".
@@ -152,7 +156,9 @@ class TodoList:
 
     # writing
     def add(self, task: str, priority: str = "today", who: str = "", source: str = "val", ref: str = "",
-            due: str = "", why: str = "", link: str = "", auto_done: str = "", received=None) -> dict:
+            due: str = "", why: str = "", link: str = "", auto_done: str = "", received=None,
+            customer: str = "") -> dict:
+        """customer: the Prospect ID (or unmatched-<digits> key) of the customer file the task belongs to."""
         task = clean(task, 160)
         if not task:
             raise ValueError("a task needs words")
@@ -169,7 +175,8 @@ class TodoList:
                     "source": source, "ref": clean(ref, 200), "reply_by": by,
                     "due": due if _DATE.match(due or "") else "", "why": clean(why, 200),
                     "link": link if str(link).startswith("https://") else "", "auto_done": auto_done,
-                    "status": "open", "added_at": stamp(), "closed_at": None}
+                    "status": "open", "added_at": stamp(), "closed_at": None,
+                    "customer": customer if re.match(r"^[A-Za-z0-9][A-Za-z0-9_-]{2,60}$", customer or "") else ""}
             box["items"].append(item)
         return dict(item)
 
@@ -373,9 +380,10 @@ def tell_gerrit(text: str) -> None:
 
 def announce(added: List[dict], todo: TodoList, notify: Callable[[str], None] = tell_gerrit,
              emergency: bool = False, at: Optional[datetime] = None) -> bool:
-    """Tell Gerrit about new tasks, unless it's quiet hours (then the morning
-    brief shows them, marked new). A real emergency is told right away."""
-    if not added or (quiet_hours(at) and not emergency):
+    """Tell Gerrit about new tasks right away, with the whole re-sorted list. Any hour, any day:
+    Gerrit's rule (2026-10-23) for to-do alerts only; every other Val message keeps quiet hours.
+    (emergency and at are kept so older callers still work; they no longer change anything.)"""
+    if not added:
         return False
     items = todo.open_items()
     where = {i["n"]: k + 1 for k, i in enumerate(items)}
@@ -419,12 +427,23 @@ def _read(path: str, limit: int) -> str:
         return ""
 
 
+FACTS_ASK = ('Only for an item marked customer="yes", also fill "summary" (one line: what the customer says '
+             'or asks, no prices) and "facts": new facts this item shows about the customer, short, each list '
+             'empty when there is none: {"talk": ["how they write: short or long, emojis, the name they go by, '
+             'the best time they answer"], "life_events": [{"what": "...", "date": "YYYY-MM or YYYY-MM-DD or '
+             'empty"}], "house": ["rooms, sun, pets or kids, the problem to solve"], "gerrit_said": ["a promise '
+             'or answer Gerrit gave"], "mood": "warm | cooling | quiet | unhappy, a few words why, or empty"}. '
+             'Never a price or an amount in a fact.')
+
+
 def judge_prompt(things: List[dict], open_items: List[dict], skill_path: str = SKILL) -> str:
-    """things: [{"id", "kind": email|voicemail|call_summary, "from", "subject", "text", "label", "note"}]"""
+    """things: [{"id", "kind": email|voicemail|call_summary, "from", "subject", "text", "label", "note",
+    "customer": the customer file key when the sender is a known customer}]"""
     listed = "\n".join(line(i) for i in open_items) or "(empty)"
     blocks = []
     for t in things:
-        blocks.append(f'<item id="{t["id"]}" kind="{t["kind"]}">\nFrom: {t.get("from", "")}\n'
+        mark = ' customer="yes"' if t.get("customer") else ""
+        blocks.append(f'<item id="{t["id"]}" kind="{t["kind"]}"{mark}>\nFrom: {t.get("from", "")}\n'
                       + (f"Subject: {t['subject']}\n" if t.get("subject") else "")
                       + (f"Folder/label: {t['label']}\n" if t.get("label") else "")
                       + (f"What we know about them: {t['note']}\n" if t.get("note") else "")
@@ -447,8 +466,9 @@ def judge_prompt(things: List[dict], open_items: List[dict], skill_path: str = S
         '"task": "starts with a verb, 12 words or less", "who": "name and role/company, short", '
         '"priority": "now" | "today" | "week" | "later", "due": "YYYY-MM-DD only if the item gives a date, '
         'else empty", "why": "one short line, only if the priority needs a reason, else empty", '
-        '"update_number": "for update: the open task number it belongs to", "emergency": true | false}]}',
-    ])
+        '"update_number": "for update: the open task number it belongs to", "emergency": true | false'
+        + (', "summary": "...", "facts": {...}' if any(t.get("customer") for t in things) else "") + '}]}',
+    ] + ([FACTS_ASK] if any(t.get("customer") for t in things) else []))
 
 
 def parse_judgement(raw: str, ids: Iterable[str]) -> dict:
@@ -543,6 +563,7 @@ def main(argv=None) -> int:
             print(f"I did not add the task: {e}")
             return 1
         print("Added: " + line(item) + "\n\n" + render_list(todo.open_items()))
+        announce([item], todo, tell_gerrit)     # every path that adds a task alerts the same way
     elif args.cmd in ("done", "drop"):
         closed = todo.close(args.numbers, status="done" if args.cmd == "done" else "dropped")
         missing = sorted(set(args.numbers) - {c["n"] for c in closed})

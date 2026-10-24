@@ -312,6 +312,9 @@ class FollowupTests(unittest.TestCase):
         self.assertEqual(self.b.acked, ["f0"])
         self.assertEqual(self.customer(f)["touches"]["48 hours"]["state"], "sent")
         self.assertIn("Follow-ups today: 1 sent", zf.brief_block(self.now, self.tmp.name))
+        import zingas_customer as zc                       # the sent text is in the customer's timeline
+        entry = zc.timeline("unmatched-3175550142", self.tmp.name)[-1]
+        self.assertEqual((entry["channel"], entry["refs"]), ("Text out", ["fu-out:f0"]))
 
     def test_not_approved_comes_back_next_day(self):
         f = self.make(live=True)
