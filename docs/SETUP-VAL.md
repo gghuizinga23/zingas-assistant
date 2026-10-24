@@ -219,23 +219,57 @@ Val's programs. Then the keys come back from 1Password: `files/save-op-token.sh`
 
 **Cost:** free under 10 GB. Every backup is kept for now (about 1 GB a year at today's size).
 
-## Money tracker (planned 2026-10-23; built at Build order step 5)
+## Money tracker (planned 2026-10-23; cost count built 2026-10-24)
 Val keeps a running total of everything you pay for: her own costs and your own AI and tool sign-ups. She
 counts her use every hour, reads the receipts herself, and checks her numbers against them each month. You
 get a money block in the Monday brief, a statement each month, alerts (for example "Nous credits stop in
-4 days"), and her ROI. It all shows in the Assistant tab of the Sales Dashboard too, for you only. The plan
-is in `docs/PLAN.md`, "Money: costs and ROI". **Not built yet.** These steps come when it is built.
+4 days"), and her ROI. It all shows on the website's **Assistant > Cost** tab, for you only. The plan is in
+`docs/PLAN.md`, "Money: costs and ROI".
+
+**Built 2026-10-24 (step C1), not switched on yet:**
+- **Val's counter** (`zingas-money`, `files/zingas_money.py`) runs on her computer and, about every hour, sends
+  the website one count: AI use (from the token counts Hermes already keeps), your fixed plans, Backblaze,
+  how much Nous use is left and for how many days, and follow-ups sent. It uses the website key Val already
+  has in 1Password (`ASSISTANT_API_TOKEN`), so **no new code is needed** (the old step "one new code for the
+  Assistant tab" is gone).
+- **quo-bridge** sends its own count of the texts it sent this month, once an hour, with the key it already
+  has (`ZINGAS_OS_TOKEN`).
+- A test run on Val's real numbers (nothing sent) on 2026-10-24: Nous $20 so far (the plan; her use, about
+  $4, is still inside the $22 included), a pace of about $41 a month, $17.68 of included use left, which lasts
+  about 23 days at this pace. The website's check took the count.
+
+**Your plans and amounts stay in the vault, never in git** (this repo is public). The list is
+`money/subscriptions.json` in Val's vault. Val keeps it up to date from receipts. A line is marked "receipt"
+when this month's receipt is in it, otherwise "estimate". Example of the shape (made-up numbers):
+
+```json
+{"subscriptions": [
+  {"id": "orgo", "name": "Orgo", "cost": 29, "cycle": "month", "nextRenewal": "2026-11-21",
+   "receipts": [{"date": "2026-10-21", "amount": 29}]},
+  {"id": "nous", "name": "Nous Portal", "cost": 20, "cycle": "month", "plan": "plus"},
+  {"id": "chatgpt", "name": "ChatGPT", "cost": 20, "cycle": "month", "personal": true, "lastUsed": "2026-10-20"}
+]}
+```
+
+`personal: true` marks your own sign-ups (only admins see them). The Nous line already includes the $20 plan,
+so it is never counted twice. If you ever buy Nous credits, Val writes `money/credits.json`
+(`{"left": 25, "asOf": "2026-11-02T09:00:00-05:00"}`), and the "days left" then counts them too.
 
 Receipts that come to your work Gmail need nothing. Receipts that come to your personal Gmail reach Val
 only through the filter in C1. She never reads anything else there.
 
 | Step | What to do | Who | Time |
 |---|---|---|---|
+| M1 | **Say go** to switch on Val's counter. I run `files/install-zingas-money.sh` from this laptop (the Orgo helper is already signed in). It copies the counter to Val's computer, starts it, sends the first count, and tells us whether the website took it. Then the Cost tab shows Val's numbers | Gerrit says go, I do the rest | 2 min |
+| M2 | **Starting list of your plans.** I write `money/subscriptions.json` in Val's vault from the plans in `docs/PHASE-0-CHECKLIST.md` (Orgo, Nous, Quo, Plaud and others). Look at it once on the Cost tab and tell me anything that is wrong. After that Val keeps it up to date from receipts | I write it, Gerrit checks | 3 min |
+| M3 | **Put the new quo-bridge online,** so it sends its text count. Make a Vercel token (vercel.com → Account Settings → **Tokens**, your Pro team, expires in 1 day). I start `files/quo-redeploy.sh`; you paste the token into its hidden prompt. It uploads the code only: no settings or keys change, and nobody gets a text. Then delete the token in Vercel | Gerrit makes and pastes the token, I do the rest | 5 min |
 | C1 | **Forward receipts from personal Gmail.** In personal Gmail on a computer: Settings → **Forwarding and POP/IMAP** → **Add a forwarding address** → your zingashome.com address. Gmail sends a code to your work Gmail: confirm it. Then make a filter with the search text I give you (the billing senders, for example Orgo, Nous, Plaud, Claude, ChatGPT) → **Forward it to** your work address. In work Gmail, the label **Val Receipts** catches them. Don't turn on forwarding for all mail | Gerrit | 5 min |
-| C2 | **One new code for the Assistant tab:** I make it. You paste it into Vercel (the Sales Dashboard project, `ASSISTANT_INGEST_TOKEN`) and into 1Password (**Zingas Assistant → Assistant Secrets**, same name), the same way as earlier codes. A setup script does the rest | Gerrit pastes, I do the rest | 5 min |
 | C3 | *Optional:* read the first monthly statement. Tell Val only if something is wrong (a service that isn't yours, a price that is off) | Gerrit | 2 min |
 
-**Cost:** nothing new. It runs on Val's computer and the dashboard you already pay for.
+**If the Cost tab says "over 3 hours old":** Val's counter or quo-bridge stopped sending. On Val's computer,
+`zingas-money status` shows the last error (for example the website's reason for refusing a count).
+
+**Cost:** nothing new. It runs on Val's computer and the website you already pay for.
 
 **Rules that hold the whole way:**
 - Nothing goes to GitHub or anywhere else; files go straight from this laptop to Val's computer.

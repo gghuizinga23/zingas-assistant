@@ -21,9 +21,43 @@ takes quo-bridge's own key `QUO_BRIDGE_TOKEN`. Two keys, so neither program can 
 | `GET /api/assistant/contact?phone=` (key: `QUO_BRIDGE_TOKEN`) | quo-bridge, before every customer text | `{ doNotContact, sendWindow: {startHour: 8, endHour: 20} }`. An error means "don't text". | `src/app/api/assistant/contact/route.ts` |
 | `POST /api/assistant/contact` `{phone}` (writes; key: `QUO_BRIDGE_TOKEN`) | quo-bridge, when a customer texts STOP to Val's number | Puts them on the shared do-not-contact list, so the estimator never texts them either. | same |
 | `GET /api/assistant/appointments?day=YYYY-MM-DD&rep=` | Val's briefs | One day of the rep's Google Calendar (Indianapolis time): start, end, all-day, title, place, short note. Cancelled and declined entries left out, dollar amounts taken out. `{connected: false}` until the rep taps "Connect my calendar" (Assistant > Calendar); `reconnect: true` when Google stopped the link. | `src/app/api/assistant/appointments/route.ts`, `src/modules/assistant/calendar.ts`, `calendarStore.ts` |
+| `POST /api/assistant/cost` (writes; Val's key, or `QUO_BRIDGE_TOKEN` for quo-bridge) | Val's cost counter (`zingas_money.py`, plan C1) and quo-bridge, about every hour | Saves this month's cost count for the Assistant > Cost tab. Who sent it comes from the key. Each count replaces that sender's last one for the month. Only this month, and last month during the first 7 days. Answers `{ok, month, source}`; nothing to read back. 60 posts per 10 minutes. The shape is below. | `src/app/api/assistant/cost/route.ts`, `src/modules/assistant/cost.ts` |
 
 The estimator's older routes for Val (`/api/estimator/assistant/*`, the signed webhook to quo-bridge) still
 work as documented in `docs/ESTIMATOR.md`.
+
+## Val's cost count (`POST /api/assistant/cost`)
+
+Dollars as plain numbers (`18.4`), `null` for "don't know" (shown as —, never $0). Everything but `month` may
+be left out. A count with anything wrong is refused whole with a 400 and the reason, so it never half-replaces
+a good one. Val's own costs only: no customer, quote or sale goes in it.
+
+```json
+{
+  "month": "2026-10",
+  "services": [
+    { "id": "nous", "name": "Nous Portal", "kind": "ai", "billed": 18.4, "runRate": 23.75, "basis": "estimate" },
+    { "id": "orgo", "name": "Orgo", "kind": "plan", "billed": 29, "basis": "receipt" },
+    { "id": "chatgpt", "name": "ChatGPT", "kind": "ai", "billed": 20, "basis": "receipt", "personal": true }
+  ],
+  "subscriptions": [
+    { "id": "orgo", "name": "Orgo", "cost": 29, "cycle": "month", "nextRenewal": "2026-11-03", "unused": false }
+  ],
+  "credits": { "name": "Nous credits", "left": 6.5, "daysLeft": 9 },
+  "limits": [{ "name": "Composio", "used": 12000, "limit": 100000, "unit": "actions" }],
+  "results": { "texts": 347, "draftsApproved": 40, "followUps": 22, "leadsAnswered": 5 }
+}
+```
+
+- `kind`: `ai`, `texts`, `plan`, `storage`, `tools` or `other`. `basis`: `receipt` (the real bill), `count`
+  (counted exactly, like texts sent × price) or `estimate` (use × a price table, checked against the receipt
+  each month).
+- `billed`: charged so far this month. `runRate`: a full month at this pace (left out: `billed` stands in).
+- `personal: true`: one of Gerrit's own sign-ups, not Val's stack. Shown to admins only.
+- `id`s: short, lower case, unique in their list. When Val and quo-bridge both send a line with the same `id`
+  (the texts, `quo-texts`), quo-bridge's wins.
+- quo-bridge sends only its own lines, for example
+  `{"month": "2026-10", "services": [{"id": "quo-texts", "name": "Quo texts", "kind": "texts", "billed": 3.47, "runRate": 4.48, "basis": "count"}], "results": {"texts": 347}}`.
 
 ## Shared rules
 

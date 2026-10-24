@@ -163,7 +163,9 @@ Highest priority first. Each step comes after what it needs. **Gerrit:** marks h
 5. **Money tracker and the Assistant tab** (C1–C5, see "Money: costs and ROI" below). Val counts what
    everything costs, sends the Monday money block and the monthly statement, warns before Nous credits run
    out (no auto top-up), and tracks her ROI. The numbers show in a new Assistant tab in the Sales Dashboard
-   (Gerrit only). Gerrit: SETUP-VAL C1 (the receipts filter in personal Gmail) and C2 (one new code).
+   (Gerrit only). **C1 built 2026-10-24** (not switched on); the website half of C4 is live. Gerrit:
+   SETUP-VAL M1 (say go), M2 (check the starting plan list), M3 (Vercel token for the quo-bridge upload) and C1
+   (the receipts filter in personal Gmail). No new code is needed.
 6. **Plaud memory** (Phase 4, `docs/VAL-BRAIN.md` Parts 1–4). Before it, Gerrit: Plaud P1 (AutoFlow, speaker
    labels, product words, record every visit). Phase 4 has nothing to read without recordings. Then P2
    (`plaud login`) and P3 (a test recording).
@@ -325,9 +327,10 @@ customer text still waits for Gerrit's tap (for F0, the one morning tap above).
 
 ## Money: costs and ROI (added 2026-10-23, Build order step 5)
 Gerrit wants one running total of everything he pays for, live and correct, with a weekly brief, a monthly
-statement and an ROI for the jobs Val helps close. **Not started.** Today no code counts tokens or cost. The
-only usage data is the Quo send counts in quo-bridge's Supabase (`drafts`, `events`) and the backup size in
-`zingas_backup.py`'s state.
+statement and an ROI for the jobs Val helps close. **Status 2026-10-24:** C1 (the hourly cost count, Val's
+side and quo-bridge's) is built on branch `claude/laughing-yalow-f0baef`, tested, not switched on yet. The
+website half of C4 is live (app `main` b85fa89): the Assistant > Cost tab and its door `POST /api/assistant/cost`.
+C2, C3 and C5 onward are not started.
 
 Most services (Nous Portal, Quo, Orgo) give no way for a program to read the bill. So **"live" means Val
 counts her own use × known prices**, and **"correct" means Val checks that count against the real receipts**
@@ -356,11 +359,11 @@ every month.
 **How the numbers are made:**
 | Source | How Val gets it | How close |
 |---|---|---|
-| AI tokens (Nous, and the Orgo Anthropic backup) | Every hour, read Hermes's `~/.hermes/state.db` / `sessions/` (the gateway, the crons and every `hermes chat --oneshot` call) × a model price table. **First check that state.db keeps token counts.** If not, log usage around the oneshot calls (`zingas_todo.run_val`, `quo_pickup.py`) and take the gateway and cron share from the Nous receipt | Estimate, checked monthly against the Nous receipt |
+| AI tokens (Nous, and the Orgo Anthropic backup) | Every hour, read Hermes's `~/.hermes/state.db` / `sessions/` (the gateway, the crons and every `hermes chat --oneshot` call) × a model price table. **Checked 2026-10-24: it does.** Table `session_model_usage` (Hermes schema 30) keeps input, output, cache-read and cache-write tokens per session and model, with first and last use, for the gateway, crons, oneshot calls and title making. So the fallback (logging around the oneshot calls) isn't needed. A session's tokens are spread evenly from its first to its last use | Estimate, checked monthly against the Nous receipt |
 | Nous Plus | $20 a month. The first $22 of use is included; after that, prepaid credits (seen as receipts) | Exact from receipts |
 | Quo texts | Count `drafts.sent_at` in Supabase. Segments = length ÷ 160 (÷ 70 with emoji), rounded up, × $0.01. Plus the plan price | Near exact |
 | Backblaze | `last_ok_bytes` from the backup state. Free under 10 GB | Exact |
-| Composio | Count actions from the program logs against the free 100,000 a month | Estimate |
+| Composio | Count actions from the program logs against the free 100,000 a month. **Not counted yet:** nothing logs Composio actions today, so the limit is left out (unknown, not 0) | Estimate |
 | Fixed subscriptions (Orgo, Vercel Pro, Quo plan, 1Password, Plaud, Claude, ChatGPT and others) | `money/subscriptions.json` in the vault: name, price, cycle, next renewal, which Gmail. **Val fills it** from these docs and from receipts in work Gmail and the **Val Receipts** label | Exact once a receipt matches |
 | New sign-ups | A receipt from an unknown sender adds a row, and Val tells Gerrit: "Val found a new charge: X, $Y each month." | — |
 
@@ -430,14 +433,26 @@ the reply), **missed calls recovered** (after F2), **promises kept** (Plaud to-d
 reply rate** to Val's drafts, and **open-quote $ under follow-up** (waits on the Estimator link, because
 Salesforce leaves `Total Price Quoted` empty on unsold quotes).
 
-How the data gets there (Val's agent and quo-bridge stay separate services):
-- A new dashboard route, `POST /api/assistant/ingest`, checks a Bearer `ASSISTANT_INGEST_TOKEN` (the same
-  check as `CRON_SECRET` in `src/app/api/nudges/run/route.ts`). It can only add rows. It can't read or delete.
-- Val (`zingas_money.py`) posts a snapshot every hour: money, work counts, health and ROI. quo-bridge posts its
-  draft and send counts once an hour from its minute cron. No dashboard key is ever on Val's computer.
-- A new Supabase schema, `assistant`: `snapshots` (`at`, `source`, `kind`, `data jsonb`), `statements`,
-  `wins`. RLS on with no policies, as the dashboard does now; reads go only through server code
-  (`src/lib/db.ts`).
+How the data gets there (Val's agent and quo-bridge stay separate services). **As built 2026-10-24** (the
+first plan, an `/api/assistant/ingest` route with a new `ASSISTANT_INGEST_TOKEN` and an `assistant` schema of
+snapshots, was replaced by this):
+- The website's door `POST /api/assistant/cost` (`docs/CONNECTIONS.md`, "Val's cost count") takes one count per
+  month per sender. Who sent it comes from the key: Val's `ASSISTANT_API_TOKEN` saves as "val", quo-bridge's
+  `ZINGAS_OS_TOKEN` (the website's `QUO_BRIDGE_TOKEN`) as "quo-bridge". Each count replaces that sender's last
+  one. Only this month, and last month during the first 7 days. Write-only; table `assistant_cost_counts`.
+- Val (`files/zingas_money.py`, supervisord `zingas-money`) posts about every hour: the AI line (Nous plan + use
+  over the $22 included; the Orgo backup brain at $0 when used), one line per plan in `money/subscriptions.json`
+  ("receipt" when this month's receipt is listed, else "estimate"), Backblaze (from the backup's running
+  `stored_bytes` total), the subscription list, Nous use left with days of runway (last 7 days' pace; prepaid
+  credits from `money/credits.json` when Val has written it), the Backblaze limit and `results.followUps`. It
+  checks every count with the website's own rules first (`check_count`), so a count is never refused. In the
+  first days of a month it also sends last month's final count once.
+- quo-bridge (`quo-bridge/cost_count.py`) posts `quo-texts` once an hour from its minute tick: drafts with
+  `sent_at` this month and a phone and text, segments = length ÷ 160 (÷ 70 with an emoji or any other
+  non-plain character, counted the way phones count it), rounded up, × $0.01; run-rate = that scaled to a full
+  month; plus `results.texts`. The last post is kept in its `events` table. A failure never stops the tick.
+- Not counted yet: `results.draftsApproved` and `results.leadsAnswered` (no source yet; left out, not 0),
+  Composio actions, Supabase's free-plan limits, and Gerrit's short "a text is waiting" texts (not drafts).
 - `assistantEnabledFor(email)` reads `ASSISTANT_USERS` (like `estimatorEnabledFor`); today only Gerrit. The
   tab uses the `extraTabs` pattern only for those users. Personal-subscription rows are filtered on the server
   to the admin (`isAdminEmail`).
@@ -451,10 +466,10 @@ How the data gets there (Val's agent and quo-bridge stay separate services):
 **Build steps (C):**
 | Step | What | Waits on |
 |---|---|---|
-| C1 | Meter and ledger: `files/zingas_money.py` (hourly supervisord program `zingas-money`, the `zingas_backup.py` pattern), `files/money_prices.json` (public prices only), subscriptions filled from receipts | The state.db check |
+| C1 | Meter and ledger: `files/zingas_money.py` (hourly supervisord program `zingas-money`, the `zingas_backup.py` pattern), `files/money_prices.json` (public prices only), subscriptions filled from receipts. **Built 2026-10-24** with quo-bridge's `cost_count.py`; tests `files/test_zingas_money.py`, `quo-bridge/test_cost_count.py`. Left: switch on (SETUP-VAL M1–M3). Val filling `subscriptions.json` from receipts by herself comes with C3's money skill; until then the starting list from M2 | ~~The state.db check~~ done |
 | C2 | Alerts: run-out, spike, limits, renewals, new charge, price change, unused | C1 |
 | C3 | Ask any time (`files/skills/zingas/money/SKILL.md`), the Monday block and the monthly statement through `money_block(now)` in `files/zingas_brief_data.py` (like `followups_block` and `backup_warning`), and the briefs-skill exception | C1 |
-| C4 | Assistant tab, first part: ingest route, `assistant` schema, `/assistant` with the ROI scorecard, Money and Health. Val and quo-bridge post snapshots | C1; the Estimator merge (or new files only) |
+| C4 | Assistant tab, first part: ingest route, `assistant` schema, `/assistant` with the ROI scorecard, Money and Health. Val and quo-bridge post snapshots. **Website half live 2026-10-24** (app `main` b85fa89): the Assistant > Cost tab, the door `POST /api/assistant/cost` instead of an ingest route, table `assistant_cost_counts`. Val's and quo-bridge's posts are C1. Left: the ROI scorecard (needs C5) | C1; ~~the Estimator merge~~ done |
 | C4b | Tab sections Val's work, Follow-up pipeline, Voice and trust | C4; F0 sending |
 | C5 | ROI, first part: wins log, touched and revived, time saved, payback day, cost per result | F0 sending |
 | C6 | ROI, second part: sale amounts from F1 or F7 (Build order step 18) | F1 or F7 |
