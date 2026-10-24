@@ -107,6 +107,8 @@ secrets:
     env:
       HEALTHCHECKS_PING_URL: op://Zingas Assistant/Assistant Secrets/HEALTHCHECKS_PING_URL
       COMPOSIO_VAL_KEY: op://Zingas Assistant/Assistant Secrets/COMPOSIO_VAL_KEY
+      ASSISTANT_API_TOKEN: op://Zingas Assistant/Assistant Secrets/ASSISTANT_API_TOKEN
+      ZINGAS_OS_URL: op://Zingas Assistant/Assistant Secrets/ZINGAS_OS_URL
     binary_path: /usr/bin/op
 _config_version: 33
 # Briefs at 8:00am and 7:00pm and quiet hours use Gerrit's time, not the server's (UTC).
