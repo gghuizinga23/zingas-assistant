@@ -219,6 +219,24 @@ Val's programs. Then the keys come back from 1Password: `files/save-op-token.sh`
 
 **Cost:** free under 10 GB. Every backup is kept for now (about 1 GB a year at today's size).
 
+## Money tracker (planned 2026-10-23; built at Build order step 5)
+Val keeps a running total of everything you pay for: her own costs and your own AI and tool sign-ups. She
+counts her use every hour, reads the receipts herself, and checks her numbers against them each month. You
+get a money block in the Monday brief, a statement each month, alerts (for example "Nous credits stop in
+4 days"), and her ROI. It all shows in the Assistant tab of the Sales Dashboard too, for you only. The plan
+is in `docs/PLAN.md`, "Money: costs and ROI". **Not built yet.** These steps come when it is built.
+
+Receipts that come to your work Gmail need nothing. Receipts that come to your personal Gmail reach Val
+only through the filter in C1. She never reads anything else there.
+
+| Step | What to do | Who | Time |
+|---|---|---|---|
+| C1 | **Forward receipts from personal Gmail.** In personal Gmail on a computer: Settings → **Forwarding and POP/IMAP** → **Add a forwarding address** → your zingashome.com address. Gmail sends a code to your work Gmail: confirm it. Then make a filter with the search text I give you (the billing senders, for example Orgo, Nous, Plaud, Claude, ChatGPT) → **Forward it to** your work address. In work Gmail, the label **Val Receipts** catches them. Don't turn on forwarding for all mail | Gerrit | 5 min |
+| C2 | **One new code for the Assistant tab:** I make it. You paste it into Vercel (the Sales Dashboard project, `ASSISTANT_INGEST_TOKEN`) and into 1Password (**Zingas Assistant → Assistant Secrets**, same name), the same way as earlier codes. A setup script does the rest | Gerrit pastes, I do the rest | 5 min |
+| C3 | *Optional:* read the first monthly statement. Tell Val only if something is wrong (a service that isn't yours, a price that is off) | Gerrit | 2 min |
+
+**Cost:** nothing new. It runs on Val's computer and the dashboard you already pay for.
+
 **Rules that hold the whole way:**
 - Nothing goes to GitHub or anywhere else; files go straight from this laptop to Val's computer.
 - No passwords or keys in chat.

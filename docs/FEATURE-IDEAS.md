@@ -46,3 +46,12 @@ The amounts quoted help Val understand the deal, but they never go into a text.
 **Build order:** this is in `docs/PLAN.md`, under "New features", as F1 to F11: know the customer, missed-call text-back,
 end-of-day wrap-up, after-install program, neighbor effect, price and competitor answers, Monday numbers,
 quiet-quote rescue, weather nudge, spouse pack, coaching. Not started.
+
+**Added 2026-10-23 (Gerrit's idea): money tracker, ROI and the Assistant tab.**
+A running total of everything Gerrit pays for (Val's stack and his own AI and tool sign-ups), live from
+Val's own use and checked against the real receipts. A Monday money block, a monthly statement, alerts
+(credits about to run out, a cost spike, renewals, free-plan limits, unused services), and an ROI with two
+numbers: jobs Val touched and jobs Val revived, valued at the sale amount plus time saved at $40/hour.
+Later: cost per rep, a cheaper-model check and a year-end tax export. It all shows in a new Assistant tab in
+the Sales Dashboard (Gerrit only), with Val's work, the follow-up pipeline, voice and trust, and health.
+Details and build steps C1–C7 are in `docs/PLAN.md`, "Money: costs and ROI" (Build order step 5).
