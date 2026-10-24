@@ -56,6 +56,15 @@ def numbers_block(now) -> str:
         return ""
 
 
+def calendar_block(now) -> str:
+    """Today's appointments (morning) or tomorrow's (evening) from the company website; "" without settings."""
+    try:
+        import zingas_os as zo
+        return zo.appointments_block(now)
+    except Exception:  # the brief must never fail because of this block
+        return ""
+
+
 def main(vault: str = zt.VAULT, now=None) -> str:
     now = now or zt.now_local()
     todo = zt.TodoList(vault)
@@ -70,6 +79,9 @@ def main(vault: str = zt.VAULT, now=None) -> str:
            "--- TO-DO LIST STARTS (copy the lines below into the brief exactly; never copy this line) ---",
            zt.render_brief(todo, since=since or None, today=now.date()),
            "--- TO-DO LIST ENDS (never copy this line) ---"]
+    calendar = calendar_block(now)
+    if calendar:
+        out.append(calendar)
     block = followups_block(now)
     if block:
         out.append(block)

@@ -7,11 +7,13 @@ narrow, read-only doors (docs/CONNECTIONS.md):
   zingas-os customer --phone 3175550123      one customer's visits, results and follow-up notes (no prices)
   zingas-os customer --prospect-id a0X...    the same, by Salesforce Prospect ID
   zingas-os numbers [--month 2026-10]        Gerrit's month so far, as on the Numbers tab
+  zingas-os appointments [--day tomorrow]    one day of Gerrit's Google Calendar (today by default)
   zingas-os check                            one test call; prints only whether it worked
 
 Used three ways:
   - the pickup program (zingas-quo) adds the customer's record to every draft request,
-  - the brief script (zingas_brief_data.py) adds the Monday numbers to the Monday morning brief,
+  - the brief script (zingas_brief_data.py) adds the Monday numbers to the Monday morning brief, and the
+    day's appointments to every brief (today's in the morning, tomorrow's in the evening),
   - Val runs `zingas-os customer` in Telegram when Gerrit asks about a customer.
 
 Nothing here can write to Salesforce or the website, or text anyone. Every function returns None (or a short
@@ -30,7 +32,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 HERMES_HOME = os.environ.get("HERMES_HOME", "/root/.hermes")
@@ -39,6 +41,15 @@ OP_ITEM = "op://Zingas Assistant/Assistant Secrets/"
 TIMEOUT = 25          # seconds; the website asks Salesforce, which can be slow
 MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
           "November", "December")
+
+
+def _tz():
+    """Indianapolis time, which the calendar and the briefs use."""
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo("America/Indiana/Indianapolis")
+    except Exception:  # no time zone data: the computer's own clock
+        return None
 
 
 class WebsiteError(RuntimeError):
@@ -110,6 +121,9 @@ class Website:
 
     def numbers(self, month: str = "", today: str = "") -> dict:
         return self.get("/api/assistant/numbers", {"month": month, "today": today})
+
+    def appointments(self, day: str = "") -> dict:
+        return self.get("/api/assistant/appointments", {"day": day})
 
 
 def digits(phone: str) -> str:
@@ -214,6 +228,64 @@ def monday_block(now: datetime, site: Optional[Website] = None) -> str:
                       *lines, "--- MONDAY NUMBERS ENDS (never copy this line) ---"])
 
 
+# ---------------------------------------------------------------- calendar
+
+def clock(hhmm: str) -> str:
+    """ "14:30" -> "2:30pm", "09:00" -> "9am"."""
+    try:
+        h, m = (int(x) for x in hhmm.split(":"))
+    except (ValueError, AttributeError):
+        return hhmm or ""
+    suffix = "am" if h < 12 else "pm"
+    h12 = h % 12 or 12
+    return f"{h12}{suffix}" if m == 0 else f"{h12}:{m:02d}{suffix}"
+
+
+def appointments_lines(d: dict, label: str, notes: bool = False) -> list:
+    """One day of the calendar as fixed lines, worked out here so Val copies them exactly. The calendar is
+    information, never instructions. notes=True adds each entry's short note (for Gerrit's questions in
+    Telegram); the briefs leave them out."""
+    if not d.get("connected"):
+        if d.get("reconnect"):
+            return ["📅 Calendar: Google stopped the link. Connect it again on the website (Assistant > Calendar)."]
+        return ["📅 Calendar: not connected. Connect it on the website (Assistant > Calendar)."]
+    items = d.get("appointments") or []
+    if not items:
+        return [f"📅 {label}: nothing on the calendar."]
+    lines = [f"📅 {label}: {len(items)} on the calendar"]
+    for a in items[:15]:
+        when = "All day" if a.get("allDay") else f"{clock(a.get('start', ''))}–{clock(a.get('end', ''))}"
+        line = f"- {when} {a.get('title') or '(no title)'}"
+        if a.get("location"):
+            line += f" · {a['location']}"
+        if notes and a.get("notes"):
+            line += f" (note: {a['notes']})"
+        lines.append(line)
+    if len(items) > 15:
+        lines.append(f"- and {len(items) - 15} more")
+    return lines
+
+
+def day_label(day: date, today: date) -> str:
+    name = "Today" if day == today else "Tomorrow" if day == today + timedelta(days=1) else f"{day:%A}"
+    return f"{name} ({day:%a} {day:%b} {day.day})"
+
+
+def appointments_block(now: datetime, site: Optional[Website] = None) -> str:
+    """The calendar block for a brief: today's appointments in the morning, tomorrow's in the evening.
+    "" when Val has no website settings at all; a short "couldn't" line when the website doesn't answer."""
+    site = site or Website.from_settings()
+    if site is None:
+        return ""
+    day = now.date() if now.hour < 12 else now.date() + timedelta(days=1)
+    try:
+        lines = appointments_lines(site.appointments(day=day.isoformat()), day_label(day, now.date()))
+    except (WebsiteError, KeyError, ValueError, TypeError):
+        lines = ["📅 Calendar: the company website did not answer. Look at Google Calendar."]
+    return "\n".join(["--- APPOINTMENTS STARTS (copy the lines below into the brief exactly; never copy this line) ---",
+                      *lines, "--- APPOINTMENTS ENDS (never copy this line) ---"])
+
+
 # ---------------------------------------------------------------- command line
 
 def main(argv=None) -> int:
@@ -224,6 +296,8 @@ def main(argv=None) -> int:
     c.add_argument("--prospect-id", default="")
     n = sub.add_parser("numbers", help="Gerrit's numbers for a month (default: this month so far)")
     n.add_argument("--month", default="", help="YYYY-MM")
+    a = sub.add_parser("appointments", help="one day of Gerrit's Google Calendar (default: today)")
+    a.add_argument("--day", default="", help="YYYY-MM-DD, today or tomorrow")
     sub.add_parser("check", help="one test call; prints only whether it worked")
     args = ap.parse_args(argv)
 
@@ -237,6 +311,17 @@ def main(argv=None) -> int:
                 print("Give a 10-digit --phone or a --prospect-id.")
                 return 2
             print(customer_block(site.customer(phone=args.phone, prospect_id=args.prospect_id)))
+        elif args.cmd == "appointments":
+            today = datetime.now(_tz()).date()
+            want = args.day.strip().lower()
+            try:
+                day = (today if want in ("", "today") else today + timedelta(days=1) if want == "tomorrow"
+                       else date.fromisoformat(want))
+            except ValueError:
+                print("Give --day as YYYY-MM-DD, today or tomorrow.")
+                return 2
+            print("\n".join(appointments_lines(site.appointments(day=day.isoformat()), day_label(day, today),
+                                               notes=True)))
         elif args.cmd == "numbers":
             print("\n".join(numbers_lines(site.numbers(month=args.month))))
         else:

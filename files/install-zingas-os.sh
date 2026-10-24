@@ -6,8 +6,8 @@
 # file in /root/.hermes/backups/pre-zingas-os-<time>/ first:
 #   zingas_os.py          -> /usr/local/lib/zingas/zingas_os.py and /usr/local/bin/zingas-os
 #   quo_pickup.py         -> /usr/local/bin/zingas-quo           (adds the Salesforce record to each draft)
-#   zingas_brief_data.py  -> /root/.hermes/scripts/              (Monday numbers in the Monday morning brief)
-#   skills briefs, customer-memory, quo-texting -> /root/.hermes/skills/zingas/
+#   zingas_brief_data.py  -> /root/.hermes/scripts/              (Monday numbers, and the calendar in every brief)
+#   skills briefs, customer-memory, quo-texting, scheduling-handoff -> /root/.hermes/skills/zingas/
 # Then restarts the text pickup and Val, and asks the website once (prints only whether it worked).
 # No keys are copied: Val already reads hers from 1Password.
 set -euo pipefail
@@ -24,6 +24,7 @@ FILES=(
   "skills/zingas/briefs/SKILL.md|/root/.hermes/skills/zingas/briefs/SKILL.md|644"
   "skills/zingas/customer-memory/SKILL.md|/root/.hermes/skills/zingas/customer-memory/SKILL.md|644"
   "skills/zingas/quo-texting/SKILL.md|/root/.hermes/skills/zingas/quo-texting/SKILL.md|644"
+  "skills/zingas/scheduling-handoff/SKILL.md|/root/.hermes/skills/zingas/scheduling-handoff/SKILL.md|644"
 )
 
 remote() {
@@ -42,6 +43,7 @@ remote() {
   echo 'supervisorctl restart hermes-gateway | tail -1'
   echo 'sleep 20; supervisorctl status zingas-quo-pickup hermes-gateway | awk "{print \$1, \$2}"'
   echo 'zingas-os check'
+  echo 'zingas-os appointments | head -4'
 }
 
 if [ "${DRY_RUN:-}" = 1 ]; then    # show what would run on Val's computer; changes nothing

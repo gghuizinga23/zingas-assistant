@@ -20,7 +20,7 @@ takes quo-bridge's own key `QUO_BRIDGE_TOKEN`. Two keys, so neither program can 
 | `GET /api/assistant/numbers?rep=&month=YYYY-MM&today=` | Val's Monday brief (F7) | Revenue, goal, sold, close rate, average sale, appointments, demos, revenue per lead, cancel rate. Same maths as the Numbers tab. | `src/app/api/assistant/numbers/route.ts` |
 | `GET /api/assistant/contact?phone=` (key: `QUO_BRIDGE_TOKEN`) | quo-bridge, before every customer text | `{ doNotContact, sendWindow: {startHour: 8, endHour: 20} }`. An error means "don't text". | `src/app/api/assistant/contact/route.ts` |
 | `POST /api/assistant/contact` `{phone}` (writes; key: `QUO_BRIDGE_TOKEN`) | quo-bridge, when a customer texts STOP to Val's number | Puts them on the shared do-not-contact list, so the estimator never texts them either. | same |
-| `GET /api/assistant/appointments?day=` | Val's daily brief | Not built yet: waits on the Google Calendar check (go-live list). | |
+| `GET /api/assistant/appointments?day=YYYY-MM-DD&rep=` | Val's briefs | One day of the rep's Google Calendar (Indianapolis time): start, end, all-day, title, place, short note. Cancelled and declined entries left out, dollar amounts taken out. `{connected: false}` until the rep taps "Connect my calendar" (Assistant > Calendar); `reconnect: true` when Google stopped the link. | `src/app/api/assistant/appointments/route.ts`, `src/modules/assistant/calendar.ts`, `calendarStore.ts` |
 
 The estimator's older routes for Val (`/api/estimator/assistant/*`, the signed webhook to quo-bridge) still
 work as documented in `docs/ESTIMATOR.md`.
