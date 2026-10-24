@@ -94,17 +94,19 @@ INCLUDE = [
     "/usr/local/bin/zingas-backup",
     "/usr/local/bin/zingas-inbox",
     "/usr/local/bin/zingas-money",
+    "/usr/local/bin/zingas-plaud",
     "/usr/local/bin/zingas-quo",
     "/usr/local/bin/zingas-todo",
     "/etc/supervisor/conf.d/zingas-backup.conf",
     "/etc/supervisor/conf.d/zingas-heartbeat.conf",
     "/etc/supervisor/conf.d/zingas-inbox.conf",
     "/etc/supervisor/conf.d/zingas-money.conf",
+    "/etc/supervisor/conf.d/zingas-plaud.conf",
     "/etc/supervisor/conf.d/zingas-quo-pickup.conf",
 ]
 
 # Never in the backup: keys and passwords (1Password has them), locks, caches.
-SECRET_NAMES = {".env", ".op.env", "auth.json", "quo-bridge.env", "token.json", "credentials.json"}
+SECRET_NAMES = {".env", ".op.env", "auth.json", "quo-bridge.env", "token.json", "tokens.json", "credentials.json"}
 SKIP_DIRS = {"__pycache__", ".git", "node_modules"}
 
 
