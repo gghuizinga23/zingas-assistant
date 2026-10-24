@@ -7,8 +7,8 @@
 #   zingas_money.py             -> /usr/local/lib/zingas/zingas_money.py and /usr/local/bin/zingas-money
 #   money_prices.json           -> /usr/local/lib/zingas/money_prices.json   (public prices only)
 #   zingas-money.supervisor.conf -> /etc/supervisor/conf.d/zingas-money.conf  (runs it all the time)
-#   zingas_backup.py            -> /usr/local/lib/zingas/ and /usr/local/bin/zingas-backup
-#                                  (the nightly backup now keeps a running total of what Backblaze stores)
+# It never touches the nightly backup program (zingas-backup): other installs change that one too, and
+# copying this branch's copy would undo theirs. The backup goes in with its own install.
 # Then makes the vault's money/ folder, starts the counter, sends one count and prints only whether it worked.
 # No keys are copied: Val already reads her website key and address from 1Password.
 set -euo pipefail
@@ -22,7 +22,6 @@ FILES=(
   "zingas_money.py|/usr/local/lib/zingas/zingas_money.py|644"
   "money_prices.json|/usr/local/lib/zingas/money_prices.json|644"
   "zingas-money.supervisor.conf|/etc/supervisor/conf.d/zingas-money.conf|644"
-  "zingas_backup.py|/usr/local/lib/zingas/zingas_backup.py|644"
 )
 STAMP="$(date +%Y%m%d-%H%M%S)"
 B="/root/.hermes/backups/pre-zingas-money-$STAMP"
@@ -41,16 +40,12 @@ copy_one() {   # $1 = "src|dst|mode": keep the old file, then put the new one in
 
 finish() {     # the programs in /usr/local/bin are copies of the ones just put in /usr/local/lib/zingas
   echo 'set -e'
-  for bin in zingas-money zingas-backup; do
-    echo "[ -f /usr/local/bin/$bin ] && cp -p /usr/local/bin/$bin '$B/bin_$bin' || true"
-  done
+  echo "[ -f /usr/local/bin/zingas-money ] && cp -p /usr/local/bin/zingas-money '$B/bin_zingas-money' || true"
   echo 'install -m 755 /usr/local/lib/zingas/zingas_money.py /usr/local/bin/zingas-money'
-  echo 'install -m 755 /usr/local/lib/zingas/zingas_backup.py /usr/local/bin/zingas-backup'
   echo "echo 'Saved the old files in $B'"
   echo 'mkdir -p /root/Documents/ZingasVault/money && chmod 700 /root/Documents/ZingasVault/money'
   echo 'supervisorctl reread | tail -2; supervisorctl update | tail -2'
   echo 'supervisorctl restart zingas-money | tail -1   # an already-running counter picks up the new code'
-  echo 'supervisorctl restart zingas-backup >/dev/null 2>&1 || true'
   echo 'sleep 5; supervisorctl status zingas-money | awk "{print \$1, \$2}"'
   echo 'zingas-money show | grep -E "^The website" || true'
   echo 'if zingas-money now >/dev/null; then echo "The website took Val'"'"'s first cost count."; else zingas-money status | grep last_error; fi'
