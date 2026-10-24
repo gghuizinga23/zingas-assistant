@@ -1,6 +1,7 @@
 """Tests for zingas_followups.py and followup_wording.py. Every name, email and
 phone here is made up. Run: python3 -m unittest files/test_zingas_followups.py"""
 
+import json
 import os
 import re
 import sys
@@ -361,6 +362,33 @@ class FollowupTests(unittest.TestCase):
         plan = f.make_plan()
         self.assertEqual(plan["items"], [])
         self.assertEqual((c["status"], c["why"]), ("stopped", "they chose another company"))
+
+    def test_a_reply_on_gerrits_cell_counts_and_val_sees_it(self):
+        f = self.make(live=True)
+        f.scan()
+        cell = {"pat.testerson@example.com": {
+            "last_in": z(at(2026, 10, 21, 9)), "last_out": z(at(2026, 10, 21, 9, 5)),
+            "thread": [{"at": "2026-10-21 09:00", "from": "customer", "text": "Can the screen go inside the tracks?"},
+                       {"at": "2026-10-21 09:05", "from": "Gerrit", "text": "Absolutely!"}]}}
+        with open(os.path.join(self.tmp.name, "followups", "cell-texts.json"), "w") as fh:
+            json.dump(cell, fh)
+        self.now = at(2026, 10, 24, 11)                 # read 3 days late: already quiet long enough
+        f.reply_check()
+        c = self.customer(f)
+        self.assertEqual(c["status"], "paused")
+        f.reply_check()
+        self.assertEqual((c["status"], c["mode"]), ("active", "conversation"))
+        self.reply = '{"action": "write", "text": "Hey Pat! Any other questions?", "email_body": "Hi Pat,\\nThanks!"}'
+        plan = f.make_plan()
+        self.assertEqual([i["touch"] for i in plan["items"]], ["after reply 1"])
+        self.assertIn("inside the tracks", self.written[0])
+
+    def test_no_cell_file_changes_nothing(self):
+        f = self.make(live=True)
+        f.scan()
+        self.now = at(2026, 10, 21, 10)
+        f.reply_check()
+        self.assertEqual(self.customer(f)["status"], "active")
 
     def test_texts_count_as_a_reply_and_dnc_stops(self):
         f = self.make(live=True)

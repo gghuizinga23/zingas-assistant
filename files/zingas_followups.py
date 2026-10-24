@@ -80,7 +80,20 @@ def log(msg: str) -> None:
 
 def paths(vault: str = VAULT) -> Dict[str, str]:
     d = os.path.join(vault, "followups")
-    return {"dir": d, "state": os.path.join(d, "state.json"), "live": os.path.join(d, "LIVE")}
+    return {"dir": d, "state": os.path.join(d, "state.json"), "live": os.path.join(d, "LIVE"),
+            "cell": os.path.join(d, "cell-texts.json")}
+
+
+def cell_texts(vault: str = VAULT) -> Dict[str, dict]:
+    """Texts on Gerrit's own cell (iMessage), keyed by customer email. Val never reads his phone:
+    this file is written on his Mac, only for customer numbers, when he asks for it
+    (docs/PLAN.md, "Personal cell"). {email: {"last_in", "last_out", "thread": [{"at", "from", "text"}]}}"""
+    try:
+        with open(paths(vault)["cell"]) as fh:
+            got = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    return {str(k).lower(): v for k, v in got.items() if isinstance(v, dict)} if isinstance(got, dict) else {}
 
 
 def iso(dt: Optional[datetime]) -> str:
@@ -282,6 +295,7 @@ class Followups:
     def __init__(self, gmail, bridge=None, vault: str = VAULT, writer: Optional[Callable[[str], str]] = None,
                  clock: Callable[[], datetime] = lambda: datetime.now(TZ)):
         self.gmail, self.bridge, self.p, self.clock = gmail, bridge, paths(vault), clock
+        self.vault = vault
         self.writer = writer or zt.run_val
         os.makedirs(self.p["dir"], mode=0o700, exist_ok=True)
         self.st = self._load()
@@ -445,10 +459,14 @@ class Followups:
                 texts = self.bridge.contacts(phones) if phones else {}
             except Exception as e:
                 log(f"text history: {type(e).__name__}")
+        cell = cell_texts(self.vault)
         for c in open_:
             est = parse_iso(c["est_sent_at"])
             ins = [last_in.get(c["email"])]
             outs = [last_out.get(c["email"])]
+            on_cell = cell.get(c["email"]) or {}
+            ins.append(parse_iso(on_cell.get("last_in")))
+            outs.append(parse_iso(on_cell.get("last_out")))
             t = texts.get(c.get("phone") or "") or {}
             if t.get("dnc"):
                 self.stop(c, "do not contact")
@@ -466,7 +484,7 @@ class Followups:
             resumed = parse_iso(c.get("resumed_at"))
             wrote = newest_in and (not resumed or newest_in > resumed)
             if c["status"] == "active" and wrote:
-                c.update(status="paused", why="they wrote back", paused_at=iso(now))
+                c.update(status="paused", why="they wrote back", paused_at=iso(min(now, newest_in)))
                 self.event(c, "paused: they wrote back")
                 if self.live():
                     self._pause_at_bridge(c, "They wrote back.")
@@ -580,7 +598,9 @@ class Followups:
                 voice = fh.read()[:5000]
         except OSError:
             pass
-        convo = json.dumps({"texts": texts, "emails": sorted(mails, key=lambda m: str(m.get("at")))}, indent=1)
+        on_cell = (cell_texts(self.vault).get(c["email"]) or {}).get("thread") or []
+        convo = json.dumps({"texts": texts, "texts_on_gerrits_cell": on_cell[-20:],
+                            "emails": sorted(mails, key=lambda m: str(m.get("at")))}, indent=1)
         return "\n\n".join([
             "You are Val, Gerrit's assistant at Zinga's. Write one follow-up touch for a customer who got a quote, "
             "talked with Gerrit, and then went quiet for 3 days. Gerrit approves it before anything sends.",
