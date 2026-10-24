@@ -70,6 +70,10 @@ sign-in shows up in Google as a separate app entry, or the trust Delisa set cove
    or "Limited". If there are two, trust both.
 2. If Calendar's entry isn't listed: on Google's blocked page, Gerrit clicks **error details** and sends
    Delisa the **client ID**. Delisa clicks **Configure new app**, pastes that ID, and picks **Trusted**.
+**2026-10-22: still blocked.** Calendar's sign-in uses Google client ID
+`126612815146-pkbs6vs1rqbvpknnim0hbt847cpp9ecu.apps.googleusercontent.com` (scopes: calendar.readonly,
+userinfo.email). A reply to Delisa with this ID and the "Configure new app → Trusted" steps is in Gerrit's
+Gmail Drafts. Once she says done: `bash files/gmail-setup.sh` again, then G4 with Calendar.
 Meanwhile Gmail goes live alone: `GMAIL_ONLY=1 bash files/gmail-setup.sh`. Later, run
 `bash files/gmail-setup.sh` once more to add Calendar. It skips Gmail and makes a new locked link.
 
@@ -146,7 +150,15 @@ could do is put a draft in front of you.
 
 **Cost:** Vercel Pro $20 a month, Quo texts about 1 cent each, Supabase free.
 
-**Later (not today):** Plaud once it arrives.
+## Plaud (device here 2026-10-23; the build comes right after F0)
+The plan is in `docs/VAL-BRAIN.md`. Do P1 now, so every visit from today is saved. Val reads all past
+recordings when P2 is done.
+
+| Step | What to do | Who | Time |
+|---|---|---|---|
+| P1 | **Now.** In the Plaud phone app: turn on **AutoFlow** (automatic transcripts) and speaker labels. Add product words to the custom vocabulary: PowerView, Silhouette, Pirouette, Duette, pergola, and others you say often. Then record every appointment: press record when the visit starts, stop when it ends. Don't connect Plaud to Zapier or anything else | Gerrit | 10 min |
+| P2 | **After F0.** On Val's computer I run `plaud login`. It prints a link: open it, sign in to Plaud, click **Authorize**. No key to copy | Gerrit signs in, I do the rest | 5 min |
+| P3 | **After F0.** Test: a 2-minute role-play recording during a test calendar event, with one promise ("I'll drop off samples Friday"). A few minutes after it syncs, the to-do and its alert show in Telegram | Gerrit records, I check | 10 min |
 
 **Rules that hold the whole way:**
 - Nothing goes to GitHub or anywhere else; files go straight from this laptop to Val's computer.
