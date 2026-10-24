@@ -226,7 +226,7 @@ get a money block in the Monday brief, a statement each month, alerts (for examp
 4 days"), and her ROI. It all shows on the website's **Assistant > Cost** tab, for you only. The plan is in
 `docs/PLAN.md`, "Money: costs and ROI".
 
-**Built 2026-10-24 (step C1), not switched on yet:**
+**Built 2026-10-24 (step C1). Val's counter is on since 2026-10-24 (M1); quo-bridge's text count waits on M3:**
 - **Val's counter** (`zingas-money`, `files/zingas_money.py`) runs on her computer and, about every hour, sends
   the website one count: AI use (from the token counts Hermes already keeps), your fixed plans, Backblaze,
   how much Nous use is left and for how many days, and follow-ups sent. It uses the website key Val already
@@ -263,7 +263,7 @@ only through the filter in C1. She never reads anything else there.
 
 | Step | What to do | Who | Time |
 |---|---|---|---|
-| M1 | **Say go** to switch on Val's counter. I run `files/install-zingas-money.sh` from this laptop (the Orgo helper is already signed in). It copies the counter to Val's computer, starts it, sends the first count, and tells us whether the website took it. Then the Cost tab shows Val's numbers | Gerrit says go, I do the rest | 2 min |
+| M1 | ✅ **Done 2026-10-24 (1:23 PM), with Gerrit's go.** The installer ran from `main` 020249e: `zingas-money` is RUNNING on Val's computer, the website took her first count, and Assistant > Cost shows her numbers. Old files kept in `/root/.hermes/backups/pre-zingas-money-20261024-132324`. To run it again: `files/install-zingas-money.sh` from this laptop (the Orgo helper is already signed in). It copies the counter to Val's computer, starts it, sends the first count, and tells us whether the website took it. Then the Cost tab shows Val's numbers | Gerrit says go, I do the rest | 2 min |
 | M2 | **Starting list of your plans.** I write `money/subscriptions.json` in Val's vault from the plans in `docs/PHASE-0-CHECKLIST.md` (Orgo, Nous, Quo, Plaud and others). Look at it once on the Cost tab and tell me anything that is wrong. After that Val keeps it up to date from receipts | I write it, Gerrit checks | 3 min |
 | M3 | **Put the new quo-bridge online,** so it sends its text count. Make a Vercel token (vercel.com → Account Settings → **Tokens**, your Pro team, expires in 1 day). I start `files/quo-redeploy.sh`; you paste the token into its hidden prompt. It uploads the code only: no settings or keys change, and nobody gets a text. Then delete the token in Vercel | Gerrit makes and pastes the token, I do the rest | 5 min |
 | C1 | **Forward receipts from personal Gmail.** In personal Gmail on a computer: Settings → **Forwarding and POP/IMAP** → **Add a forwarding address** → your zingashome.com address. Gmail sends a code to your work Gmail: confirm it. Then make a filter with the search text I give you (the billing senders, for example Orgo, Nous, Plaud, Claude, ChatGPT) → **Forward it to** your work address. In work Gmail, the label **Val Receipts** catches them. Don't turn on forwarding for all mail | Gerrit | 5 min |
