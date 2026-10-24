@@ -27,6 +27,7 @@ and events also need the rep on `VAL_FOLLOWUP_USERS` (403 for anyone else; all f
 | `POST /api/assistant/followups/update` (writes) | Val | A note entry, the follow-up date, temperature, waiting on, next step, last contact. The shape and rules are below. | `src/app/api/assistant/followups/update/route.ts`, `src/modules/followups/rules.ts` |
 | `POST /api/assistant/followups/touch` (writes) | Val | Logs one touch (text, email, call, visit, note; planned or done). Always allowed. Shape below. | `src/app/api/assistant/followups/touch/route.ts` |
 | `GET /api/assistant/events?after=<id>&types=&limit=100` | Val | What happened since `after` (her own place, the last id she handled), oldest first: `{events, last}`. She may read `followup_rep_changed`, `customer_stopped_texts`, `proposal_viewed`, `proposal_signed`, `order_stage_changed`; asking for anything else is a 400. Follow-up events come only for her reps on `VAL_FOLLOWUP_USERS`. | `src/app/api/assistant/events/route.ts`, `src/core/events/store.ts` |
+| `POST /api/assistant/upcoming` (writes; Val's key) | Val's follow-ups program (`zingas_followups.py`), about every 15 minutes and right after the day's list is made or sent | Saves the follow-ups the coming weekday lists will hold (14 days ahead), for the Assistant > Drafts tab's "Coming up". Each list replaces the last, so a reply, a sale or a new estimate shows on the next one. Sends nothing: each follow-up still reaches Telegram on its day and needs Gerrit's tap. Answers `{ok, drafts}`; nothing to read back. 30 posts per 10 minutes. The shape is below. | `src/app/api/assistant/upcoming/route.ts`, `src/modules/assistant/upcoming.ts` |
 
 The estimator's older routes for Val (`/api/estimator/assistant/*`, the signed webhook to quo-bridge) still
 work as documented in `docs/ESTIMATOR.md`.
@@ -160,3 +161,32 @@ when unsure), for 30 seconds before trying again.
 | `APP_URL` | quo-bridge: `ZINGAS_OS_URL` | Yes |
 | `ASSISTANT_REP_EMAILS` | (none) | |
 | `VAL_FOLLOWUP_USERS` | (none) | Whose follow-ups Val keeps (Gerrit first). Also needs the rep in `ASSISTANT_REP_EMAILS`. |
+
+## Val's coming follow-ups (`POST /api/assistant/upcoming`)
+
+Val works these out with the same rule as the day's real list (missed touches fold into the newest one; a
+Friday list holds the weekend), from the next list day (tomorrow once today's list is made) for `days_ahead`
+days. Today's list is left out: it shows under "Waiting" once quo-bridge has it. A list with anything wrong is
+refused whole with a 400 and the reason, so it never replaces a good one. Dollar amounts are taken out.
+
+```json
+{
+  "made_at": "2026-10-24T16:15:00+00:00",
+  "days_ahead": 14,
+  "items": [
+    { "list_day": "2026-10-26", "send_at": "2026-10-26T12:05:00+00:00", "customer_name": "Pat Testerson",
+      "touch": "7 days", "written_by": "fixed", "text": "Hey Pat! ...", "email_subject": "...", "email_body": "...", "note": "" },
+    { "list_day": "2026-10-26", "send_at": "2026-10-26T12:05:00+00:00", "customer_name": "Sam Example",
+      "touch": "after reply 1", "written_by": "val", "text": "", "email_subject": "", "email_body": "",
+      "note": "Val couldn't write this one yet; she tries again shortly." }
+  ],
+  "held": [{ "customer_name": "Cy Sample", "why": "they wrote back", "back_on": "2026-10-27" }]
+}
+```
+
+- `list_day`: the morning it reaches Telegram. `send_at`: when it goes out once approved.
+- `written_by`: `fixed` (Gerrit's standard wording) or `val` (Val wrote it from the conversation). Val writes a
+  personal one ahead once and keeps it until the conversation changes, so the preview is what gets posted.
+- `note`: why there's no text yet, or that Val would close the customer instead. Each item needs a text or a note.
+- `held`: customers paused because they wrote back; follow-ups start again after 3 quiet days (`back_on`).
+- At most 300 items and 200 held.
