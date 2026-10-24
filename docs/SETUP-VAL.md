@@ -164,14 +164,14 @@ remove each, or "No more follow-ups for them"). Approved ones send at their time
 time: a text from the Quo number and an email reply in the estimate's thread. Not approved by 8 PM:
 nothing sends, and they come back the next morning.
 
-**Status:** Val's program `zingas-followups` is installed and running, in **list-only** mode: it makes the
-lists in her vault and sends nothing to quo-bridge or the brief. A look at your real Gmail on 2026-10-23
-found 10 customers since Monday 10/19 (1 skipped as sold, 9 on Friday's list, every visit found).
-quo-bridge's new code passed its tests (134) but is not online yet. F1 turns it all on.
+**Status (2026-10-24): on.** F1 ran on Saturday 10/24: the follow-up tables are in quo-bridge's Supabase,
+the new quo-bridge is online (follow-up doors locked: no code 401, Val's code can't run the timer), and
+Val's program `zingas-followups` is live. The first list comes Monday 10/26: 7:40 AM list, 8:00 brief,
+8:01 Approve all card. Nothing sends before Gerrit's tap.
 
 | Step | What to do | Who | Time |
 |---|---|---|---|
-| F1 | **Vercel token (for this run only):** https://vercel.com/account/tokens, name `f0-setup`, scope your Pro team, expiry 1 day. Then run `bash files/f0-setup.sh` and paste the **Composio main key** (1Password: Zingas Bridge → Bridge Secrets → COMPOSIO_API_KEY) and the Vercel token. It checks the Gmail connection can read your Sent mail, adds the follow-up tables to Supabase, puts the key in quo-bridge's locked settings, puts the new quo-bridge online, checks the locks, and turns F0 on. Delete the Vercel token afterwards | Gerrit pastes, I do the rest | 5 min |
+| F1 | ✅ **Done 2026-10-24.** **Vercel token (for this run only):** https://vercel.com/account/tokens, name `f0-setup`, scope your Pro team, expiry 1 day. Then run `bash files/f0-setup.sh` and paste the **Composio main key** (1Password: Zingas Bridge → Bridge Secrets → COMPOSIO_API_KEY) and the Vercel token. It checks the Gmail connection can read your Sent mail, adds the follow-up tables to Supabase, puts the key in quo-bridge's locked settings, puts the new quo-bridge online, checks the locks, and turns F0 on. Delete the Vercel token afterwards | Gerrit pastes, I do the rest | 5 min |
 | F2 | The next weekday morning: read the follow-ups in the 8:00 brief and tap **Approve all** (or review them) in Val Approvals | Gerrit | 2 min |
 
 **Why the Composio main key goes to quo-bridge:** Val can only draft email, on purpose. quo-bridge (on
