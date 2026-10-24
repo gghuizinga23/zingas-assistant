@@ -163,9 +163,8 @@ Highest priority first. Each step comes after what it needs. **Gerrit:** marks h
 5. **Money tracker and the Assistant tab** (C1–C5, see "Money: costs and ROI" below). Val counts what
    everything costs, sends the Monday money block and the monthly statement, warns before Nous credits run
    out (no auto top-up), and tracks her ROI. The numbers show in a new Assistant tab in the Sales Dashboard
-   (Gerrit only). **C1 built 2026-10-24**; Val's counter is on (M1, 2026-10-24); the website half of C4 is live. Gerrit:
-   SETUP-VAL M2 (check the starting plan list), M3 (Vercel token for the quo-bridge upload) and C1
-   (the receipts filter in personal Gmail). No new code is needed.
+   (Gerrit only). **C1 built 2026-10-24**; Val's counter and quo-bridge's text count are on, and the plans list is checked (M1-M3, 2026-10-24); the website half of C4 is live. Gerrit:
+   only C1 (the receipts filter in personal Gmail). No new code is needed.
 6. **Plaud memory** (Phase 4, `docs/VAL-BRAIN.md` Parts 1–4). Before it, Gerrit: Plaud P1 (AutoFlow, speaker
    labels, product words, record every visit). Phase 4 has nothing to read without recordings. Then P2
    (`plaud login`) and P3 (a test recording).
@@ -328,7 +327,7 @@ customer text still waits for Gerrit's tap (for F0, the one morning tap above).
 ## Money: costs and ROI (added 2026-10-23, Build order step 5)
 Gerrit wants one running total of everything he pays for, live and correct, with a weekly brief, a monthly
 statement and an ROI for the jobs Val helps close. **Status 2026-10-24:** C1 (the hourly cost count, Val's
-side and quo-bridge's) is built and tested; Val's counter is on since 2026-10-24 (SETUP-VAL M1), quo-bridge's waits on M3. The
+side and quo-bridge's) is built and tested; both counts are on since 2026-10-24 (SETUP-VAL M1-M3). The
 website half of C4 is live (app `main` b85fa89): the Assistant > Cost tab and its door `POST /api/assistant/cost`.
 C2, C3 and C5 onward are not started.
 
@@ -466,7 +465,7 @@ snapshots, was replaced by this):
 **Build steps (C):**
 | Step | What | Waits on |
 |---|---|---|
-| C1 | Meter and ledger: `files/zingas_money.py` (hourly supervisord program `zingas-money`, the `zingas_backup.py` pattern), `files/money_prices.json` (public prices only), subscriptions filled from receipts. **Built 2026-10-24** with quo-bridge's `cost_count.py`; tests `files/test_zingas_money.py`, `quo-bridge/test_cost_count.py`. Val's counter on 2026-10-24 (M1). Left: SETUP-VAL M2–M3. Val filling `subscriptions.json` from receipts by herself comes with C3's money skill; until then the starting list from M2 | ~~The state.db check~~ done |
+| C1 | Meter and ledger: `files/zingas_money.py` (hourly supervisord program `zingas-money`, the `zingas_backup.py` pattern), `files/money_prices.json` (public prices only), subscriptions filled from receipts. **Built 2026-10-24** with quo-bridge's `cost_count.py`; tests `files/test_zingas_money.py`, `quo-bridge/test_cost_count.py`. On since 2026-10-24 (SETUP-VAL M1–M3). Val filling `subscriptions.json` from receipts by herself comes with C3's money skill; until then the starting list from M2 | ~~The state.db check~~ done |
 | C2 | Alerts: run-out, spike, limits, renewals, new charge, price change, unused | C1 |
 | C3 | Ask any time (`files/skills/zingas/money/SKILL.md`), the Monday block and the monthly statement through `money_block(now)` in `files/zingas_brief_data.py` (like `followups_block` and `backup_warning`), and the briefs-skill exception | C1 |
 | C4 | Assistant tab, first part: ingest route, `assistant` schema, `/assistant` with the ROI scorecard, Money and Health. Val and quo-bridge post snapshots. **Website half live 2026-10-24** (app `main` b85fa89): the Assistant > Cost tab, the door `POST /api/assistant/cost` instead of an ingest route, table `assistant_cost_counts`. Val's and quo-bridge's posts are C1. Left: the ROI scorecard (needs C5) | C1; ~~the Estimator merge~~ done |
