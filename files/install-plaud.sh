@@ -126,4 +126,4 @@ done < <(stage_calls)
 echo "Sent $n pieces. Putting them in place..."
 remote | "$ORGO" computers bash "$COMPUTER"
 echo
-echo "Done. Next is step P2 (the Plaud sign-in on Val's screen). Tell Claude."
+echo "Done. If the check above says the Plaud sign-in does NOT work, do step P2 (docs/SETUP-VAL.md)."
