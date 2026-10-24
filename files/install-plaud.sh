@@ -50,19 +50,52 @@ FILES=(
   "skills/zingas/quo-texting/SKILL.md|/root/.hermes/skills/zingas/quo-texting/SKILL.md|644"
 )
 
+STAGE=/root/.hermes/plaud-stage
+CHUNK=40000   # Orgo sends each command as one argument; Linux allows at most 128 KB per argument
+
+stage_name() { echo "$1" | tr '/' '_'; }
+
+# Step 1, one small call per piece: the new files wait in $STAGE. Nothing that runs is touched yet.
+stage_calls() {
+  local src seen=" "
+  for f in "${FILES[@]}"; do
+    IFS='|' read -r src _ _ <<<"$f"
+    case "$seen" in *" $src "*) continue ;; esac
+    seen="$seen$src "
+    local b64 name
+    b64=$(base64 < "$HERE/$src" | tr -d '\n')
+    name=$(stage_name "$src")
+    for ((i = 0; i < ${#b64}; i += CHUNK)); do
+      printf "mkdir -p %s && printf '%%s' '%s' >> %s/%s.b64\n" "$STAGE" "${b64:i:CHUNK}" "$STAGE" "$name"
+      printf '\0'
+    done
+  done
+}
+
+# Step 2, one call: keep a copy of each old file, then put each new file in place.
 remote() {
   echo 'set -e'
   echo 'B=/root/.hermes/backups/pre-plaud-$(date +%Y%m%d-%H%M%S); mkdir -p "$B"; chmod 700 "$B"'
   echo 'mkdir -p /usr/local/lib/zingas /root/.hermes/scripts'
+  # First check that every file arrived whole. Stop before changing anything if one did not.
+  local seen=" " src dst mode name want
+  for f in "${FILES[@]}"; do
+    IFS='|' read -r src _ _ <<<"$f"
+    case "$seen" in *" $src "*) continue ;; esac
+    seen="$seen$src "
+    name=$(stage_name "$src")
+    want=$(shasum -a 256 < "$HERE/$src" | cut -d' ' -f1)
+    echo "base64 -d < '$STAGE/$name.b64' > '$STAGE/$name'"
+    echo "[ \"\$(sha256sum < '$STAGE/$name' | cut -d' ' -f1)\" = '$want' ] || { echo 'STOP: $src arrived damaged. Nothing was changed.'; rm -rf '$STAGE'; exit 1; }"
+  done
   for f in "${FILES[@]}"; do
     IFS='|' read -r src dst mode <<<"$f"
+    name=$(stage_name "$src")
     echo "[ -f '$dst' ] && cp -p '$dst' \"\$B/\$(basename '$(dirname "$dst")')_$(basename "$dst")\" || true"
     echo "mkdir -p '$(dirname "$dst")'"
-    echo "base64 -d > '$dst.new' <<'ZINGAS_B64'"
-    base64 < "$HERE/$src"
-    echo "ZINGAS_B64"
-    echo "chmod $mode '$dst.new' && mv '$dst.new' '$dst'"
+    echo "cp '$STAGE/$name' '$dst.new' && chmod $mode '$dst.new' && mv '$dst.new' '$dst'"
   done
+  echo "rm -rf '$STAGE'"
   echo 'echo "Saved the old files in $B"'
   # The official Plaud program needs Node.js 18 or newer. Stop with a clear line if it is missing.
   echo 'NODE_MAJOR=$(node -v 2>/dev/null | sed -E "s/^v([0-9]+).*/\1/" || true)'
@@ -79,10 +112,18 @@ remote() {
 }
 
 if [ "${DRY_RUN:-}" = 1 ]; then
+  stage_calls | tr '\0' '\n' | cut -c1-120
   remote
   exit 0
 fi
-echo "Putting Plaud memory and the customer file on Val's computer..."
+echo "Sending the new files to Val's computer (nothing changes yet)..."
+"$ORGO" computers bash "$COMPUTER" -c "rm -rf '$STAGE'" >/dev/null
+n=0
+while IFS= read -r -d '' call; do
+  out=$("$ORGO" computers bash "$COMPUTER" -c "$call" 2>&1) || { echo "STOP: sending a file failed. Nothing was changed."; echo "$out"; exit 1; }
+  n=$((n + 1))
+done < <(stage_calls)
+echo "Sent $n pieces. Putting them in place..."
 remote | "$ORGO" computers bash "$COMPUTER"
 echo
 echo "Done. Next is step P2 (the Plaud sign-in on Val's screen). Tell Claude."
