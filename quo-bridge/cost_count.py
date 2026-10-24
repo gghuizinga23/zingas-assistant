@@ -6,15 +6,18 @@ The website knows it is quo-bridge by that key, and for the line both senders ma
 quo-bridge's count wins. Shape: docs/CONNECTIONS.md, "Val's cost count".
 
   {"month": "2026-10",
-   "services": [{"id": "quo-texts", "name": "Quo texts", "kind": "texts", "billed": 3.47, "runRate": 4.48,
-                 "basis": "count"}],
+   "services": [{"id": "quo-texts", "name": "Quo texts ($3.47 so far, paid from prepaid credits)",
+                 "kind": "texts", "billed": 0, "runRate": 0, "basis": "count"}],
    "results": {"texts": 347}}
+
+Quo takes texts out of prepaid credits. The cash is the credit top-up, which Val counts from its receipt
+(her line "quo-credits"). So the texts line adds $0 to the month (no text is counted twice) and its name
+says what the texts used of the credits.
 
 How a text is counted (docs/PLAN.md, "Money: costs and ROI"): every draft with a `sent_at` this month
 (Indianapolis time) and a phone and text, so email-only follow-ups are left out. A text is billed in
 segments: up to 160 plain characters each, or 70 when it has an emoji or any other character outside the
-plain text-message alphabet (even a curly quote). Rounded up, x $0.01. The run-rate is that scaled to a
-full month. Nothing about a customer goes in the count.
+plain text-message alphabet (even a curly quote). Rounded up, x $0.01. Nothing about a customer goes in the count.
 
 The last post is kept in the `events` table ("cost_posted" / "cost_failed"), so it works across Vercel's
 separate runs. A failed post is tried again after 10 minutes. Standard library only.
@@ -106,11 +109,10 @@ def make_count(rows: List[dict], month: str, now: datetime) -> dict:
             continue
         texts += 1
         parts += segments(text)
-    billed = round(parts * PRICE_PER_SEGMENT, 2)
+    used = round(parts * PRICE_PER_SEGMENT, 2)
     return {"month": month,
-            "services": [{"id": "quo-texts", "name": "Quo texts", "kind": "texts", "billed": billed,
-                          "runRate": round(parts * PRICE_PER_SEGMENT / month_share(month, now), 2),
-                          "basis": "count"}],
+            "services": [{"id": "quo-texts", "name": f"Quo texts (${used:.2f} so far, paid from prepaid credits)",
+                          "kind": "texts", "billed": 0.0, "runRate": 0.0, "basis": "count"}],
             "results": {"texts": texts}}
 
 

@@ -149,6 +149,25 @@ class Subscriptions(unittest.TestCase):
         self.assertEqual(zm.subscription_lines(subs, "2026-11", skip=set())[0]["billed"], 0.0)
         self.assertEqual(zm.subscription_lines(subs, "2027-10", skip=set())[0]["billed"], 240.0)   # renews
 
+    def test_one_time_charges_count_only_in_the_month_paid(self):
+        subs = zm.load_subscriptions({"subscriptions": [
+            {"id": "quo-a2p-setup", "name": "Quo sign-up fee", "cost": 19.5, "cycle": "once",
+             "nextRenewal": "2027-10-21", "receipts": [{"date": "2026-10-20", "amount": 19.5}]},
+            {"id": "quo-credits", "name": "Quo text credits", "cost": 20, "cycle": "once", "kind": "texts",
+             "receipts": [{"date": "2026-10-21", "amount": 20}, {"date": "2026-11-02", "amount": 20}]},
+            {"id": "quo", "name": "Quo Business", "cost": 299.14, "cycle": "year", "nextRenewal": "2027-10-21",
+             "receipts": [{"date": "2026-10-20", "amount": 299.14}]}]}, NOW.date())
+        oct_ = {l["id"]: l for l in zm.subscription_lines(subs, "2026-10", skip=set())}
+        self.assertEqual({k: (l["billed"], l["basis"]) for k, l in oct_.items()},
+                         {"quo-a2p-setup": (19.5, "receipt"), "quo-credits": (20.0, "receipt"),
+                          "quo": (299.14, "receipt")})
+        self.assertEqual(oct_["quo-credits"]["kind"], "texts")
+        nov = {l["id"]: l["billed"] for l in zm.subscription_lines(subs, "2026-11", skip=set())}
+        self.assertEqual(nov, {"quo-credits": 20.0, "quo": 0.0})       # a second top-up; no fee again
+        self.assertEqual([r["id"] for r in zm.subscriptions_list(subs)], ["quo"])   # nothing renews
+        self.assertIsNone(zm.check_count({"month": "2026-10", "services": list(oct_.values()),
+                                          "subscriptions": zm.subscriptions_list(subs)}, ["2026-10"]))
+
     def test_list_rolls_renewals_forward_and_marks_unused(self):
         rows = {r["id"]: r for r in zm.subscriptions_list(self.subs)}
         self.assertEqual(rows["quo"]["nextRenewal"], "2026-10-30")     # Sept 30 has passed
@@ -192,7 +211,7 @@ class Credits(unittest.TestCase):
     def test_plan_only_when_no_credits_on_file(self):
         rows = [usage(first=ts(2026, 10, 17, 12), last=ts(2026, 10, 24, 11), output=1_400_000)]   # $14 in 7 days
         c = zm.credits(rows, PRICES, [], None, NOW)
-        self.assertIn("no credits on file", c["name"])
+        self.assertEqual(c["name"], "Nous use left")
         self.assertEqual(c["left"], 8.0)                                        # $22 - $14
         self.assertEqual(c["daysLeft"], 4)                                      # $2 a day
 
@@ -200,7 +219,7 @@ class Credits(unittest.TestCase):
         rows = [usage(first=ts(2026, 10, 1), last=ts(2026, 10, 20), output=2_000_000),          # $20
                 usage(first=ts(2026, 10, 21), last=ts(2026, 10, 24, 11), output=700_000)]       # $7 after
         c = zm.credits(rows, PRICES, [], {"left": 10, "asOf": "2026-10-20T23:00:00-04:00"}, NOW)
-        self.assertEqual(c["name"], "Nous use left (plan + credits)")
+        self.assertEqual(c["name"], "Nous use left")
         self.assertEqual(c["left"], 5.0)              # included $22 used up; $10 credits - $5 over
         self.assertIsInstance(c["daysLeft"], int)
 

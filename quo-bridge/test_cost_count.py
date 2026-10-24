@@ -73,8 +73,9 @@ class Count(unittest.TestCase):
         count = cc.make_count(rows, "2026-10", NOW)
         self.assertEqual(count["results"], {"texts": 2})
         line = count["services"][0]
-        self.assertEqual(line["billed"], 0.03)
-        self.assertEqual(line["runRate"], round(0.03 / ((NOW - cc.month_start("2026-10")) / timedelta(days=31)), 2))
+        # Paid from the prepaid credits (Val counts the top-up), so it adds nothing; the name says what was used.
+        self.assertEqual((line["billed"], line["runRate"]), (0.0, 0.0))
+        self.assertEqual(line["name"], "Quo texts ($0.03 so far, paid from prepaid credits)")
         self.assertEqual(cc.make_count(rows, "2026-09", NOW)["results"], {"texts": 1})
 
     def test_matches_the_connections_example_exactly(self):
@@ -85,8 +86,11 @@ class Count(unittest.TestCase):
         count = cc.make_count([], "2026-10", NOW)
         self.assertEqual(set(count), set(example))
         self.assertEqual(set(count["services"][0]), set(example["services"][0]))
-        self.assertEqual({k: count["services"][0][k] for k in ("id", "name", "kind", "basis")},
-                         {k: example["services"][0][k] for k in ("id", "name", "kind", "basis")})
+        self.assertEqual({k: count["services"][0][k] for k in ("id", "kind", "billed", "runRate", "basis")},
+                         {k: example["services"][0][k] for k in ("id", "kind", "billed", "runRate", "basis")})
+        self.assertEqual(cc.make_count([{"phone": "+1", "body": "x" * 160 * 347, "final_body": None,
+                                         "sent_at": "2026-10-10T12:00:00Z"}], "2026-10", NOW)["services"][0]["name"],
+                         example["services"][0]["name"])
         self.assertEqual(set(count["results"]), set(example["results"]))
         self.assertEqual(count["services"][0]["billed"], 0)          # none sent is a real zero, not unknown
 

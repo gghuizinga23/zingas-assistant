@@ -56,8 +56,10 @@ a good one. Val's own costs only: no customer, quote or sale goes in it.
 - `personal: true`: one of Gerrit's own sign-ups, not Val's stack. Shown to admins only.
 - `id`s: short, lower case, unique in their list. When Val and quo-bridge both send a line with the same `id`
   (the texts, `quo-texts`), quo-bridge's wins.
+- Texts are paid from Quo's prepaid credits. Val counts the cash from the top-up receipt (her line
+  `quo-credits`), so quo-bridge's `quo-texts` line adds $0 and its name says what the texts used of the credits.
 - quo-bridge sends only its own lines, for example
-  `{"month": "2026-10", "services": [{"id": "quo-texts", "name": "Quo texts", "kind": "texts", "billed": 3.47, "runRate": 4.48, "basis": "count"}], "results": {"texts": 347}}`.
+  `{"month": "2026-10", "services": [{"id": "quo-texts", "name": "Quo texts ($3.47 so far, paid from prepaid credits)", "kind": "texts", "billed": 0, "runRate": 0, "basis": "count"}], "results": {"texts": 347}}`.
 
 ## Shared rules
 

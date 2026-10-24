@@ -12,7 +12,8 @@ Where the numbers come from (docs/PLAN.md, "Money: costs and ROI"):
     the briefs and every oneshot call). Tokens x the public prices in money_prices.json. Nous Plus is $20 a
     month with $22 of use included, so the Nous line is the plan plus any use over $22.
   - Fixed plans: money/subscriptions.json in the vault. Val fills it from receipts. A receipt this month
-    makes the line "receipt"; without one the plan price stands in as an "estimate".
+    makes the line "receipt"; without one the plan price stands in as an "estimate". A "once" row (a sign-up
+    fee, a prepaid credit top-up) is a line only in a month it has a receipt, and is not on the plans list.
   - Backblaze: the size of what the nightly backup has stored (backup-state.json). Free under 10 GB.
   - Credits: how much Nous use Val has left (this month's included use, plus prepaid credits from
     money/credits.json when Val has written it) and how many days that lasts at the last 7 days' pace.
@@ -26,7 +27,7 @@ Never sent: customers, quotes, sales, keys. Unknown is null (shown as "—"), ne
   zingas-money status   when the last post worked
 
 Vault files Val keeps (never in git; examples in docs/SETUP-VAL.md, "Money tracker"):
-  money/subscriptions.json   {"subscriptions": [{"id", "name", "cost", "cycle", "nextRenewal", "kind",
+  money/subscriptions.json   {"subscriptions": [{"id", "name", "cost", "cycle" (month|year|once), "nextRenewal", "kind",
                               "personal", "plan", "receipts": [{"date", "amount"}], "lastUsed"}]}
   money/credits.json         {"left": 12.5, "asOf": "2026-10-20T10:00:00-04:00"}   (optional)
 """
@@ -283,7 +284,7 @@ def load_subscriptions(data, today: date) -> List[dict]:
         if sid in seen:
             continue
         seen.add(sid)
-        cycle = s.get("cycle") if s.get("cycle") in ("month", "year") else "month"
+        cycle = s.get("cycle") if s.get("cycle") in ("month", "year", "once") else "month"
         receipts = []
         for r in s.get("receipts") or []:
             d, amt = (parse_day(r.get("date")), money_amount(r.get("amount"))) if isinstance(r, dict) else (None, None)
@@ -294,7 +295,7 @@ def load_subscriptions(data, today: date) -> List[dict]:
             "id": sid, "name": name, "cost": cost, "cycle": cycle,
             "kind": s.get("kind") if s.get("kind") in SERVICE_KINDS else "plan",
             "personal": s.get("personal") is True, "plan": str(s.get("plan") or ""),
-            "nextRenewal": roll_forward(parse_day(s.get("nextRenewal")), cycle, today),
+            "nextRenewal": None if cycle == "once" else roll_forward(parse_day(s.get("nextRenewal")), cycle, today),
             "receipts": receipts,
             "unused": bool(last_used and (today - last_used).days > UNUSED_DAYS),
         })
@@ -346,7 +347,8 @@ def ai_lines(rows: Optional[List[dict]], prices: dict, subs: List[dict], month: 
 
 def subscription_lines(subs: List[dict], month: str, skip: set) -> List[dict]:
     """A line for each fixed plan. Receipts this month: what was charged ("receipt"). None yet: a monthly
-    plan's price stands in ("estimate"); a yearly plan costs nothing in a month it doesn't renew."""
+    plan's price stands in ("estimate"); a yearly plan costs nothing in a month it doesn't renew. A one-time
+    charge ("once") is a line only in a month it has a receipt."""
     out = []
     for s in subs:
         if s["id"] in skip:
@@ -354,6 +356,8 @@ def subscription_lines(subs: List[dict], month: str, skip: set) -> List[dict]:
         paid = [amt for d, amt in s["receipts"] if d.strftime("%Y-%m") == month]
         if paid:
             billed, basis = sum(paid), "receipt"
+        elif s["cycle"] == "once":
+            continue
         elif s["cycle"] == "month":
             billed, basis = s["cost"], "estimate"
         else:
@@ -372,6 +376,8 @@ def subscription_lines(subs: List[dict], month: str, skip: set) -> List[dict]:
 def subscriptions_list(subs: List[dict]) -> List[dict]:
     out = []
     for s in subs:
+        if s["cycle"] == "once":      # nothing renews, so it isn't a plan
+            continue
         row = {"id": s["id"], "name": s["name"], "cost": cents(s["cost"]), "cycle": s["cycle"],
                "nextRenewal": s["nextRenewal"].isoformat() if s["nextRenewal"] else None, "unused": s["unused"]}
         if s["personal"]:
@@ -437,7 +443,7 @@ def runway(included_left: float, credits_left: float, daily: float, today: date,
 
 def credits(rows: Optional[List[dict]], prices: dict, subs: List[dict], credit_file, now: datetime) -> Optional[dict]:
     """How much Nous use Val has left this month (included use plus prepaid credits) and how many days it
-    lasts at the last 7 days' pace. Without money/credits.json, credits count as none (the name says so)."""
+    lasts at the last 7 days' pace. Without money/credits.json, credits count as none."""
     if rows is None:
         return None
     month = month_of(now)
@@ -453,9 +459,9 @@ def credits(rows: Optional[List[dict]], prices: dict, subs: List[dict], credit_f
     if left is not None and as_of is not None and as_of <= now:
         spent = nous_overage_after(rows, prices, as_of, now, included)
         credits_left = None if spent is None else max(0.0, left - spent)
-        name = "Nous use left (plan + credits)"
     else:
-        credits_left, name = 0.0, "Nous use left (plan only; no credits on file)"
+        credits_left = 0.0      # no credits on file: only this month's included use
+    name = "Nous use left"
     if credits_left is None:
         return {"name": name, "left": None, "daysLeft": None}
 

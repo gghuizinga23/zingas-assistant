@@ -251,6 +251,9 @@ when this month's receipt is in it, otherwise "estimate". Example of the shape (
 ]}
 ```
 
+`cycle` is `month`, `year` or `once`. A `once` row is a one-time charge, like a sign-up fee or a top-up of
+Quo's prepaid text credits: it counts only in the month of its receipt and is not on the plans list. Texts
+are paid from those credits, so the top-up (`quo-credits`) is the cash and quo-bridge's texts line adds $0.
 `personal: true` marks your own sign-ups (only admins see them). The Nous line already includes the $20 plan,
 so it is never counted twice. If you ever buy Nous credits, Val writes `money/credits.json`
 (`{"left": 25, "asOf": "2026-11-02T09:00:00-05:00"}`), and the "days left" then counts them too.
