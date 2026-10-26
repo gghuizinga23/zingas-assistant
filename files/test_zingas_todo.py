@@ -365,5 +365,76 @@ class WebsiteTests(unittest.TestCase):
         self.assertIn("not set up", zt.post_list({"items": []}, settings=lambda: ("", "")))
 
 
+class WebsiteClickTests(unittest.TestCase):
+    """Gerrit's clicks on the website's To-do tab, made on Val's list (2026-10-26)."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.todo = zt.TodoList(self.dir)
+        self.msg = self.todo.add("Call back Pat", who="Pat Lee", source="text", ref="+13175550100")
+        self.own = self.todo.add("Order samples", priority="week")
+
+    def click(self, item, action, value=""):
+        return zt.apply_change(self.todo, {"id": "c1", "itemId": item["id"], "action": action, "value": value})
+
+    def get(self, item):
+        return next(i for i in self.todo.all_items() if i["id"] == item["id"])
+
+    def test_done_remove_and_undo(self):
+        self.assertEqual(self.click(self.own, "done"), (True, "Done."))
+        self.assertEqual(self.get(self.own)["status"], "done")
+        self.assertFalse(self.click(self.own, "done")[0])            # already done (say, in Telegram)
+        self.assertEqual(self.click(self.own, "undo"), (True, "Back on the list."))
+        self.assertEqual(self.get(self.own)["status"], "open")
+        self.assertEqual(self.click(self.msg, "drop"), (True, "Removed."))
+        self.assertEqual(self.get(self.msg)["status"], "dropped")
+        self.assertEqual([i["n"] for i in self.todo.open_items()], [1])  # numbers stay 1, 2, 3...
+
+    def test_priority_due_and_words(self):
+        self.assertEqual(self.click(self.own, "priority", "now"), (True, "Priority changed."))
+        self.assertEqual(self.get(self.own)["priority"], "now")
+        ok, why = self.click(self.msg, "priority", "later")         # a message can't wait past Today
+        self.assertTrue(ok)
+        self.assertIn("Today", why)
+        self.assertEqual(self.get(self.msg)["priority"], "today")
+        self.assertFalse(self.click(self.own, "priority", "urgent")[0])
+        self.assertEqual(self.click(self.own, "due", "2026-10-30"), (True, "Due date changed."))
+        self.assertEqual(self.get(self.own)["due"], "2026-10-30")
+        self.assertEqual(self.click(self.own, "due", ""), (True, "Due date cleared."))
+        self.assertEqual(self.get(self.own)["due"], "")
+        self.assertFalse(self.click(self.own, "due", "Friday")[0])
+        self.assertEqual(self.click(self.own, "task", "Order the grey samples"), (True, "Words changed."))
+        self.assertEqual(self.get(self.own)["task"], "Order the grey samples")
+        self.assertFalse(self.click(self.own, "task", "  ")[0])
+        self.assertFalse(zt.apply_change(self.todo, {"itemId": "nope", "action": "done"})[0])
+        self.assertFalse(self.click(self.own, "explode")[0])
+
+    def test_the_done_list_carries_ids_for_undo(self):
+        self.click(self.own, "done")
+        self.assertEqual(zt.website_list(self.todo)["done"][0]["id"], self.own["id"])
+
+    def test_changer_makes_each_click_once_and_reports(self):
+        waiting = [{"id": "c1", "itemId": self.own["id"], "action": "done", "value": ""}]
+        reports = []
+        answers = ["no answer from the website (URLError)", ""]
+        changer = zt.Changer(self.todo, fetch=lambda: (list(waiting), ""),
+                             report=lambda r: reports.append(r) or answers.pop(0))
+        self.assertEqual(changer.step(), (1, "no answer from the website (URLError)"))
+        self.assertEqual(changer.step(), (0, ""))                   # report again; not made twice
+        self.assertEqual(reports[0], reports[1])
+        self.assertEqual(reports[1], [{"id": "c1", "ok": True, "message": "Done."}])
+        self.assertEqual(changer.made, {})
+
+    def test_changer_waits_quietly_with_no_clicks_or_no_website(self):
+        changer = zt.Changer(self.todo, fetch=lambda: ([], ""), report=lambda r: self.fail("nothing to report"))
+        self.assertEqual(changer.step(), (0, ""))
+        changer = zt.Changer(self.todo, fetch=lambda: ([], "the website answered 503: not set up"))
+        self.assertEqual(changer.step(), (0, "the website answered 503: not set up"))
+
+    def test_no_key_means_no_clicks_read(self):
+        self.assertEqual(zt.fetch_changes(settings=lambda: ("", ""))[0], [])
+        self.assertIn("not set up", zt.fetch_changes(settings=lambda: ("", ""))[1])
+
+
 if __name__ == "__main__":
     unittest.main()

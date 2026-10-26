@@ -43,7 +43,7 @@ import urllib.error
 import urllib.request
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Iterable, List, Optional
+from typing import Callable, Iterable, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 VAULT = os.environ.get("ZINGAS_VAULT", "/root/Documents/ZingasVault")
@@ -230,6 +230,24 @@ class TodoList:
                     item["status"], item["closed_at"] = status, stamp()
                     closed.append(dict(item))
         return closed
+
+    def close_id(self, item_id: str, status: str = "done") -> Optional[dict]:
+        """Close an open task by its id (a click on the website). None when it isn't open any more."""
+        with self._locked() as box:
+            item = next((i for i in box["items"] if i.get("id") == item_id and i["status"] == "open"), None)
+            if not item:
+                return None
+            item["status"], item["closed_at"] = status, stamp()
+        return dict(item)
+
+    def reopen_id(self, item_id: str) -> Optional[dict]:
+        """Put a closed task back on the list by its id (Undo on the website)."""
+        with self._locked() as box:
+            item = next((i for i in box["items"] if i.get("id") == item_id and i["status"] != "open"), None)
+            if not item:
+                return None
+            item["status"], item["closed_at"] = "open", None
+        return dict(item)
 
     def reopen(self, n: int) -> Optional[dict]:
         """Reopen the last closed task that had number n when it was closed.
@@ -539,12 +557,14 @@ def apply_judgement(todo: TodoList, thing: dict, r: dict, source: str, ref: str 
 # ------------------------------------------------- the website's To-do tab
 
 # Val posts the open list to the company website (Assistant > To-do) with her own website key. The website
-# keeps only the newest list. It reads nothing back and changes nothing here: Gerrit still changes the list
-# through Val. Shape: assistant docs/CONNECTIONS.md, "Val's to-do list".
+# keeps only the newest list. Gerrit's clicks there (Done, priority, due date, words, remove, undo) wait on the
+# website until Val's sender reads them (CHANGES_DOOR), makes them here with plain code and says how each went.
+# Shape: assistant docs/CONNECTIONS.md, "Val's to-do list".
 DOOR = "/api/assistant/todo"
 POST_EVERY = timedelta(minutes=10)   # a fresh copy even with no change, so the page can tell Val is up
 WATCH_SLEEP = 15                     # seconds between looks at the list file
 DONE_SHOWN = timedelta(hours=24)     # finished tasks the page shows under "Done lately"
+CHANGES_DOOR = "/api/assistant/todo/changes"
 
 
 def website_list(todo: "TodoList", at: Optional[datetime] = None) -> dict:
@@ -561,7 +581,8 @@ def website_list(todo: "TodoList", at: Optional[datetime] = None) -> dict:
     done = sorted((i for i in todo.all_items() if i["status"] == "done" and (i.get("closed_at") or "") >= cutoff),
                   key=lambda i: i.get("closed_at") or "", reverse=True)[:30]
     return {"madeAt": at.astimezone(timezone.utc).isoformat(timespec="seconds"), "items": rows,
-            "done": [{"task": i["task"], "who": i.get("who") or "", "closedAt": i.get("closed_at")} for i in done]}
+            "done": [{"id": i["id"], "task": i["task"], "who": i.get("who") or "",
+                      "closedAt": i.get("closed_at")} for i in done]}
 
 
 def _website_settings():
@@ -613,9 +634,119 @@ class Poster:
         return problem
 
 
-def watch(todo: "TodoList") -> None:   # pragma: no cover (a loop; Poster.step is tested)
-    poster = Poster(todo)
+def _ask(method: str, path: str, body: Optional[dict], settings, timeout: float):
+    """One call to the website with Val's key. Returns (answer, "") or (None, a short reason, never the key)."""
+    url, token = settings()
+    if not url or not token:
+        return None, "the website key or address is not set up (1Password: ZINGAS_OS_URL, ASSISTANT_API_TOKEN)"
+    req = urllib.request.Request(url.rstrip("/") + path, method=method,
+                                 data=json.dumps(body).encode("utf-8") if body is not None else None,
+                                 headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json",
+                                          "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8") or "{}"), ""
+    except urllib.error.HTTPError as e:
+        return None, f"the website answered {e.code}: " + e.read().decode("utf-8", "replace")[:160].strip()
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        return None, f"no answer from the website ({type(e).__name__})"
+
+
+def fetch_changes(settings=_website_settings, timeout: float = 20):
+    """Gerrit's clicks Val hasn't made yet, oldest first. Returns (changes, "") or ([], reason)."""
+    answer, problem = _ask("GET", CHANGES_DOOR, None, settings, timeout)
+    if problem:
+        return [], problem
+    changes = answer.get("changes") if isinstance(answer, dict) else None
+    return ([c for c in changes if isinstance(c, dict)] if isinstance(changes, list) else []), ""
+
+
+def report_changes(results: List[dict], settings=_website_settings, timeout: float = 20) -> str:
+    """Tells the website how each click went. Returns "" or the reason it failed."""
+    return _ask("POST", CHANGES_DOOR, {"results": results}, settings, timeout)[1]
+
+
+def apply_change(todo: "TodoList", change: dict) -> Tuple[bool, str]:
+    """Makes one click from the website on the list, with the same rules as Telegram. Plain code, no AI.
+    The answer shows to Gerrit on the page when it didn't work; it never holds a phone number or a price."""
+    action, item_id, value = change.get("action"), str(change.get("itemId") or ""), str(change.get("value") or "")
+    gone = "That task isn't on the list any more (it may have been done in Telegram)."
+    if not item_id:
+        return False, "The change had no task."
+    if action in ("done", "drop"):
+        item = todo.close_id(item_id, status="done" if action == "done" else "dropped")
+        return (True, "Done." if action == "done" else "Removed.") if item else (False, gone)
+    if action == "undo":
+        item = todo.reopen_id(item_id)
+        return (True, "Back on the list.") if item else (False, "That task is already back on the list.")
+    if action == "priority":
+        if value not in PRIORITIES:
+            return False, "That isn't a priority Val uses."
+        item = todo.update_id(item_id, priority=value)
+        if not item:
+            return False, gone
+        if item["priority"] != value:
+            return True, "A message stays at Today or higher until it is answered, so it is at Today."
+        return True, "Priority changed."
+    if action == "due":
+        if value and not _DATE.match(value):
+            return False, "That isn't a date."
+        item = todo.update_id(item_id, due=value)
+        return (True, "Due date changed." if value else "Due date cleared.") if item else (False, gone)
+    if action == "task":
+        if not clean(value, 160):
+            return False, "The task needs words."
+        item = todo.update_id(item_id, task=value)
+        return (True, "Words changed.") if item else (False, gone)
+    return False, "That isn't a change Val knows."
+
+
+class Changer:
+    """Reads Gerrit's clicks from the website and makes them on the list. A click is made once even when the
+    report back fails: its answer is kept and sent again next time."""
+
+    def __init__(self, todo: "TodoList", fetch=fetch_changes, report=report_changes):
+        self.todo, self.fetch, self.report = todo, fetch, report
+        self.made: dict = {}   # change id -> (ok, message), until the website has the answer
+
+    def step(self) -> Tuple[int, str]:
+        """One look. Returns (clicks made now, "" or the reason something failed)."""
+        changes, problem = self.fetch()
+        if problem:
+            return 0, problem
+        results, new = [], 0
+        for c in changes:
+            cid = str(c.get("id") or "")
+            if not cid:
+                continue
+            if cid not in self.made:
+                try:
+                    self.made[cid] = apply_change(self.todo, c)
+                except Exception as e:   # one bad click must not stop the rest
+                    self.made[cid] = (False, f"Val couldn't make it ({type(e).__name__}).")
+                new += 1
+            ok, message = self.made[cid]
+            results.append({"id": cid, "ok": ok, "message": message})
+        if not results:
+            return 0, ""
+        problem = self.report(results)
+        if not problem:
+            for r in results:
+                self.made.pop(r["id"], None)
+        return new, problem
+
+
+def watch(todo: "TodoList") -> None:   # pragma: no cover (a loop; Changer.step and Poster.step are tested)
+    poster, changer = Poster(todo), Changer(todo)
     while True:
+        try:
+            made, problem = changer.step()
+            if made:
+                print(f"{stamp()} made {made} to-do change(s) from the website", flush=True)
+            if problem:
+                print(f"{stamp()} to-do changes: {problem}", file=sys.stderr, flush=True)
+        except Exception as e:   # the list still goes out when the clicks can't be read
+            print(f"{stamp()} to-do changes error: {type(e).__name__}", file=sys.stderr, flush=True)
         try:
             problem = poster.step()
             if problem:

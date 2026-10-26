@@ -24,7 +24,10 @@ Every email, text, call and voicemail from a real person must be answered within
 - The list code does this for you: a task from an email, text, call or voicemail gets a "reply by" time 24 hours after the message came in, and it can never be lower than `today` (asking for `week` or `later` still gives `today`).
 - A task past its time shows "⚠️ past 24 hours" and moves to 🔴 NOW, the most urgent group, whatever priority it had (Gerrit's rule, 2026-10-26). The list code does this by itself the minute the 24 hours run out, so the task numbers can change. These go first in NOW, oldest first.
 - Moving a late task to `today` or lower does not take it out of NOW. It leaves NOW only when it is done or dropped.
-- The website shows the same list (Assistant > To-do) and moves late tasks the same way. Gerrit still changes the list through you.
+- The website shows the same list (Assistant > To-do) and moves late tasks the same way. Gerrit can also change it there
+  (Done, priority, due date, words, remove, undo). Your sender makes those clicks on the list within about 15 seconds
+  (`zingas-todo-post`), so a task can be done or moved without a message to you. Always read the list again
+  (`zingas-todo list`) before you use a task number.
 - So for a message from a real person who is waiting on Gerrit, don't `skip` it just because it seems small. Skip only what the list below says to skip.
 - When you add one yourself from Telegram, pass `--source email|text|call|voicemail` and `--received <when it came in>` so the clock starts at the right time.
 
