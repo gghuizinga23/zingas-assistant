@@ -72,6 +72,9 @@ class InboxTests(unittest.TestCase):
         self.assertEqual((item["task"], item["who"], item["source"], item["ref"]),
                          ("Call back about shades", "Pat Lee", "email", "gmail:th-m1"))
         self.assertTrue(item["link"].startswith("https://mail.google.com/"))
+        # The email is kept on the task for the website's task view (Gerrit, 2026-10-26).
+        self.assertEqual([(s["kind"], s["from"], s["subject"], s["text"], s["link"]) for s in item["sources"]],
+                         [("email", "Pat Lee", "Shades", "Can you call me about the motorized shades?", item["link"])])
         self.assertIn("motorized shades", self.prompts[0])
         self.assertIn("📝 New task on your to-do list:\n🟡 1. Pat Lee: Call back about shades", self.sent[0])
         self.now += 120

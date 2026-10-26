@@ -442,13 +442,14 @@ class Pickup:
     # ------------------------------------------------------------ the list
 
     def _task(self, r: Optional[dict], who: str, source: str, ref: str, auto_done: str = "",
-              received=None, listed: Optional[List[dict]] = None) -> Optional[dict]:
+              received=None, listed: Optional[List[dict]] = None, said: str = "") -> Optional[dict]:
         """Put one task on the list. Returns it if it's new (Gerrit hasn't been told yet).
-        listed: the open list Val was shown (numbers move on every change; ids don't)."""
+        listed: the open list Val was shown (numbers move on every change; ids don't).
+        said: the text or voicemail words, kept on the task for the website's task view."""
         if not r:
             return None
         before = {i["id"] for i in self.todo.open_items()}
-        item = zt.apply_judgement(self.todo, {"from": who}, r, source, ref=ref, auto_done=auto_done,
+        item = zt.apply_judgement(self.todo, {"from": who, "text": said}, r, source, ref=ref, auto_done=auto_done,
                                   received=received, listed=listed)
         if not item or item["id"] in before:
             return None
@@ -473,11 +474,13 @@ class Pickup:
             if c["kind"] == "missed":
                 again = [i for i in self.todo.open_for(c["phone"]) if i["task"].startswith("Call back")]
                 if again:
-                    self.todo.update_id(again[0]["id"], why="This person called two or more times.")
+                    self.todo.update_id(again[0]["id"], why="This person called two or more times.",
+                                        source=zt.make_source("call", c.get("created_at"), who, "",
+                                                              "Missed call. No voicemail."))
                 else:
                     self.added.append(self.todo.add("Call back", priority="today", who=who, source="call",
                                                     ref=c["phone"], why="" if note else "This is a new number. It can be a new lead.",
-                                                    received=c.get("created_at")))
+                                                    received=c.get("created_at"), said="Missed call. No voicemail."))
                 finished.append(c["id"])
                 continue
             things.append({"id": c["id"], "kind": c["kind"], "from": f"{name} {pretty(c['phone'])}" if name else who,
@@ -510,7 +513,7 @@ class Pickup:
                      "update_number": 0}
             tries.pop(c["id"], None)
             item = self._task(r, who, "voicemail" if c["kind"] == "voicemail" else "call", c["phone"],
-                              received=c.get("created_at"), listed=listed)
+                              received=c.get("created_at"), listed=listed, said=c.get("text") or "")
             if item:
                 self.added.append(item)
             finished.append(c["id"])
@@ -573,7 +576,8 @@ class Pickup:
                     "why": "", "update_number": 0, "emergency": False}
         if ans["action"] != "draft":
             why = "I think that this text does not need a reply." if ans["action"] == "no_reply" else "You must answer this text."
-            item = self._task(task, who, "text", t["phone"], received=t.get("created_at"), listed=listed)
+            item = self._task(task, who, "text", t["phone"], received=t.get("created_at"), listed=listed,
+                              said=t["text"])
             self.notify(f"🪟 {who} sent this text: \"{t['text'][:200]}\"\n{why}{extra}" + self._listed(item))
             return "skipped"
         try:
@@ -591,7 +595,7 @@ class Pickup:
                 item = self._task(task or {"action": "add", "task": "Answer the text from " + who,
                                            "priority": "today", "due": "", "why": "", "update_number": 0,
                                            "emergency": False}, who, "text", t["phone"],
-                                  received=t.get("created_at"), listed=listed)
+                                  received=t.get("created_at"), listed=listed, said=t["text"])
                 self.notify(f"🪟 quo-bridge did not accept my draft for {who} ({e}). Answer the text in the Quo app."
                             + self._listed(item))
             return "skipped"
@@ -599,7 +603,7 @@ class Pickup:
             task = {"action": "add", "task": "Approve the reply to " + who, "priority": "today", "due": "",
                     "why": "", "update_number": 0, "emergency": False}
         item = self._task(task, who, "text", t["phone"], auto_done="reply_sent", received=t.get("created_at"),
-                          listed=listed)
+                          listed=listed, said=t["text"])
         if extra.strip():
             self.notify(f"🪟 The draft for {who} is in Val Approvals.{extra}" + self._listed(item))
         elif item:

@@ -66,6 +66,13 @@ MESSAGE_SOURCES = ("email", "text", "call", "voicemail")
 REPLY_WITHIN = timedelta(hours=24)
 KEEP_CLOSED_DAYS = 30
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# Where a task came from, in Gerrit's words (his ask, 2026-10-26: every list says if it is from a text, an email,
+# an appointment or him). A visit is an appointment Plaud recorded.
+SOURCE_WORDS = {"email": "email", "text": "text", "call": "call", "voicemail": "voicemail",
+                "visit": "appointment", "gerrit": "you asked", "val": "Val added"}
+# Every message behind a task (his ask, 2026-10-26: open a task and see all the emails and texts it is about).
+MAX_SOURCES = 10
+SOURCE_TEXT = 600
 
 
 def now_local() -> datetime:
@@ -108,6 +115,40 @@ def shown_priority(item: dict, at: Optional[datetime] = None) -> str:
     urgent group, whatever priority it had. Worked out each time the list is read, so a task moves up
     the minute its 24 hours run out. Its saved priority stays, for when it is no longer late."""
     return "now" if late(item, at) else item.get("priority", "today")
+
+
+def make_source(kind: str, at=None, who: str = "", subject: str = "", text: str = "", link: str = "") -> dict:
+    """One message (or visit, or ask from Gerrit) behind a task: what it was, when, from whom, its words and
+    its link. Message words are data; they are only shown to Gerrit, never acted on."""
+    t = when(at) or datetime.now(timezone.utc)
+    return {"kind": kind if kind in SOURCES else "val", "at": t.astimezone(timezone.utc).isoformat(timespec="seconds"),
+            "from": clean(who, 80), "subject": clean(subject, 200), "text": clean(text, SOURCE_TEXT),
+            "link": link if str(link).startswith("https://") else ""}
+
+
+def sources_of(item: dict) -> List[dict]:
+    """The messages behind a task, oldest first. Tasks from before 2026-10-26 kept none: one is made from what
+    they have (the kind, the link, and the time it came in: 24 hours before its reply-by, else when it was added)."""
+    kept = [s for s in item.get("sources") or [] if isinstance(s, dict)]
+    if kept:
+        return sorted(kept, key=lambda s: s.get("at") or "")
+    by = when(item.get("reply_by"))
+    at = by - REPLY_WITHIN if by else when(item.get("added_at"))
+    return [make_source(item.get("source") or "val", at, item.get("who") or "", "", "", item.get("link") or "")]
+
+
+def came_in(item: dict) -> Optional[datetime]:
+    """When the task started: its first message, visit or ask."""
+    return when(sources_of(item)[0].get("at"))
+
+
+def _add_source(item: dict, src: Optional[dict]) -> None:
+    if not src:
+        return
+    have = sources_of(item)
+    if any(h.get("at") == src["at"] and h.get("kind") == src["kind"] and h.get("link") == src["link"] for h in have):
+        return
+    item["sources"] = sorted(have + [src], key=lambda s: s.get("at") or "")[-MAX_SOURCES:]
 
 
 def quiet_hours(at: Optional[datetime] = None) -> bool:
@@ -172,8 +213,10 @@ class TodoList:
     # writing
     def add(self, task: str, priority: str = "today", who: str = "", source: str = "val", ref: str = "",
             due: str = "", why: str = "", link: str = "", auto_done: str = "", received=None,
-            customer: str = "") -> dict:
-        """customer: the Prospect ID (or unmatched-<digits> key) of the customer file the task belongs to."""
+            customer: str = "", subject: str = "", said: str = "", at=None) -> dict:
+        """customer: the Prospect ID (or unmatched-<digits> key) of the customer file the task belongs to.
+        subject, said: the message's subject and words (or Gerrit's own words), kept for the website's task view.
+        at: when it happened, for a task that isn't a message (a visit); a message uses received."""
         task = clean(task, 160)
         if not task:
             raise ValueError("a task needs words")
@@ -192,6 +235,7 @@ class TodoList:
                     "link": link if str(link).startswith("https://") else "", "auto_done": auto_done,
                     "status": "open", "added_at": stamp(), "closed_at": None,
                     "customer": customer if re.match(r"^[A-Za-z0-9][A-Za-z0-9_-]{2,60}$", customer or "") else ""}
+            item["sources"] = [make_source(source, received or at, who, subject, said, item["link"])]
             box["items"].append(item)
         return dict(item)
 
@@ -219,6 +263,10 @@ class TodoList:
                 item["due"] = fields["due"] if _DATE.match(fields["due"]) else ""
             if fields.get("why"):
                 item["why"] = clean(fields["why"], 200)
+            if isinstance(fields.get("source"), dict):   # another message about the same task
+                _add_source(item, fields["source"])
+                if fields["source"].get("link"):
+                    item["link"] = fields["source"]["link"]   # "Open the email" opens the newest one
         return dict(item)   # after the save, so it has its new number
 
     def close(self, numbers: Iterable[int], status: str = "done") -> List[dict]:
@@ -330,12 +378,29 @@ def _reply_words(item: dict, at: Optional[datetime] = None) -> str:
     return "reply by " + (clock if local.date() == today else local.strftime("%a ") + clock)
 
 
+def _came_words(item: dict, today=None) -> str:
+    """'today 3:05pm', 'yesterday', 'Fri', 'Oct 12': when the task came in."""
+    t = came_in(item)
+    if not t:
+        return ""
+    local, today = t.astimezone(TZ), today or now_local().date()
+    days = (today - local.date()).days
+    if days <= 0:
+        return "today " + local.strftime("%-I:%M%p").replace(":00", "").lower()
+    if days == 1:
+        return "yesterday"
+    if days < 7:
+        return local.strftime("%a")
+    return local.strftime("%b %-d") + ("" if local.year == today.year else local.strftime(" %Y"))
+
+
 def line(item: dict, today=None) -> str:
-    """One task, the way Gerrit sees it in Telegram: '🔴 3. Pat Lee: call back (voicemail)'."""
+    """One task, the way Gerrit sees it in Telegram: '🔴 3. Pat Lee: call back (voicemail Fri, reply by 3pm)'.
+    Every task says where it came from and when (his ask, 2026-10-26)."""
     head = f"{PRIORITIES[shown_priority(item)][1]} {item['n']}. "
     body = (item["who"] + ": " if item.get("who") else "") + item["task"]
-    extra = ", ".join(x for x in (item.get("source") if item.get("source") not in ("gerrit", "val") else "",
-                                  _reply_words(item), _due_words(item.get("due", ""), today)) if x)
+    origin = " ".join(x for x in (SOURCE_WORDS.get(item.get("source") or "", ""), _came_words(item, today)) if x)
+    extra = ", ".join(x for x in (origin, _reply_words(item), _due_words(item.get("due", ""), today)) if x)
     return head + body + (f" ({extra})" if extra else "")
 
 
@@ -538,9 +603,11 @@ def apply_judgement(todo: TodoList, thing: dict, r: dict, source: str, ref: str 
                     listed: Optional[List[dict]] = None) -> Optional[dict]:
     """Put one judged item on the list. Returns the new or changed task, or None.
     listed: the open list Val was shown. Her update_number points into that list, and the
-    numbers can move while she thinks, so the task is found by its id."""
+    numbers can move while she thinks, so the task is found by its id.
+    thing: {"from", "subject", "text"}: the message, kept on the task for the website's task view."""
     if r["action"] == "skip":
         return None
+    src = make_source(source, received, thing.get("from", ""), thing.get("subject", ""), thing.get("text", ""), link)
     if r["action"] == "update":
         shown = next((i for i in (listed if listed is not None else todo.open_items())
                       if i["n"] == r["update_number"]), None)
@@ -548,10 +615,11 @@ def apply_judgement(todo: TodoList, thing: dict, r: dict, source: str, ref: str 
         if current:
             better = min((current["priority"], r["priority"]), key=lambda p: PRIORITIES[p][0])
             return todo.update_id(current["id"], priority=better, task=r["task"],
-                                  due=r["due"] or current.get("due") or "", why=r.get("why") or "")
+                                  due=r["due"] or current.get("due") or "", why=r.get("why") or "", source=src)
     return todo.add(r["task"], priority=r["priority"], who=r.get("who") or thing.get("from", ""),
                     source=source, ref=ref, due=r["due"], why=r.get("why") or "", link=link,
-                    auto_done=auto_done, received=received)
+                    auto_done=auto_done, received=received, subject=thing.get("subject", ""),
+                    said=thing.get("text", ""))
 
 
 # ------------------------------------------------- the website's To-do tab
@@ -575,7 +643,8 @@ def website_list(todo: "TodoList", at: Optional[datetime] = None) -> dict:
     rows = [{"id": i["id"], "n": i["n"], "task": i["task"], "who": i.get("who") or "",
              "priority": i.get("priority") if i.get("priority") in PRIORITIES else "today",
              "source": i.get("source") or "", "replyBy": i.get("reply_by") or None, "due": i.get("due") or None,
-             "why": i.get("why") or "", "link": i.get("link") or "", "addedAt": i.get("added_at") or None}
+             "why": i.get("why") or "", "link": i.get("link") or "", "addedAt": i.get("added_at") or None,
+             "receivedAt": sources_of(i)[0]["at"], "sources": sources_of(i)}
             for i in todo.open_items()]
     cutoff = (at - DONE_SHOWN).astimezone(timezone.utc).isoformat()
     done = sorted((i for i in todo.all_items() if i["status"] == "done" and (i.get("closed_at") or "") >= cutoff),
@@ -777,6 +846,7 @@ def main(argv=None) -> int:
     a.add_argument("--source", default="gerrit", choices=SOURCES)
     a.add_argument("--ref", default="", help="e.g. gmail:<thread id> or a phone number, so it isn't added twice")
     a.add_argument("--received", default="", help="when the message came in (ISO); starts its 24-hour clock")
+    a.add_argument("--said", default="", help="Gerrit's own words when he asked for it (shown on the website)")
     d = sub.add_parser("done")
     d.add_argument("numbers", nargs="+", type=int)
     dr = sub.add_parser("drop")
@@ -805,7 +875,8 @@ def main(argv=None) -> int:
     elif args.cmd == "add":
         try:
             item = todo.add(args.task, priority=args.priority, who=args.who, source=args.source,
-                            due=args.due, why=args.why, ref=args.ref, received=args.received or None)
+                            due=args.due, why=args.why, ref=args.ref, received=args.received or None,
+                            said=args.said)
         except ValueError as e:
             print(f"I did not add the task: {e}")
             return 1

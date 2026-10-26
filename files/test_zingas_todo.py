@@ -96,12 +96,13 @@ class ListTests(unittest.TestCase):
     def test_lines_and_brief(self):
         item = self.todo.add("Call back", who="Pat Lee", source="voicemail", due="2026-10-22")
         item["reply_by"] = ""   # the 24-hour clock has its own tests below
-        self.assertEqual(zt.line(item, today=date(2026, 10, 22)), "🟡 1. Pat Lee: Call back (voicemail, due today)")
+        item["sources"] = [zt.make_source("voicemail", "2026-10-21T15:00:00-04:00", "Pat Lee")]
+        self.assertEqual(zt.line(item, today=date(2026, 10, 22)), "🟡 1. Pat Lee: Call back (voicemail yesterday, due today)")
         since = zt.stamp()
         self.todo.add("Order samples", priority="week", source="gerrit")
         brief = zt.render_brief(self.todo, since=since, today=date(2026, 10, 22))
         self.assertTrue(brief.startswith("To-do list: 2 open (1 today)"))
-        self.assertIn("🟢 THIS WEEK (1)\n🟢 2. Order samples 🆕", brief)
+        self.assertIn("🟢 THIS WEEK (1)\n🟢 2. Order samples (you asked today ", brief)
         self.assertIn("🔴 NOW: none", brief)        # every group shows, even an empty one
         self.assertIn("⚪ LATER: none", brief)
         self.assertIn("✅ Your to-do list is empty.", zt.render_list([]))
@@ -134,7 +135,7 @@ class TwentyFourHourRule(unittest.TestCase):
         old = self.todo.add("Answer about shutters", who="Amy Cole", source="email",
                             received="2026-09-25T09:00:00-04:00")
         self.assertTrue(zt.late(old))
-        self.assertEqual(zt.line(old), "🔴 1. Amy Cole: Answer about shutters (email, ⚠️ past 24 hours)")
+        self.assertEqual(zt.line(old), "🔴 1. Amy Cole: Answer about shutters (email Sep 25, ⚠️ past 24 hours)")
         fresh = self.todo.add("Answer about blinds", source="text")
         self.assertFalse(zt.late(fresh))
         self.assertIn("reply by", zt.line(fresh))
@@ -185,7 +186,7 @@ class QuietAndAnnounce(unittest.TestCase):
         item = self.todo.add("Drop off samples", priority="week", who="Pat", source="visit", ref="+13175550123",
                              due="2026-10-30", customer="P-100")
         self.assertEqual((item["source"], item["customer"], item["reply_by"]), ("visit", "P-100", ""))
-        self.assertIn("(visit, ", zt.line(item, today=datetime(2026, 10, 23).date()))
+        self.assertIn("(appointment ", zt.line(item, today=datetime(2026, 10, 23).date()))
         self.assertEqual(self.todo.add("x", customer="../bad")["customer"], "")
 
 
@@ -249,14 +250,14 @@ class BriefData(unittest.TestCase):
         self.assertIn("BRIEF: Morning, Thursday, October 22", first)
         self.assertIn("LAST BRIEF: none yet", first)
         self.assertIn("--- TO-DO LIST STARTS", first)
-        self.assertIn("🔴 NOW (1)\n🔴 1. Beth, Payments: Upload the Lee contract\n", first)
+        self.assertIn("🔴 NOW (1)\n🔴 1. Beth, Payments: Upload the Lee contract (Val added today ", first)
         self.assertIn("⚪ LATER: none\n--- TO-DO LIST ENDS", first)
         self.assertNotIn("🆕", first)                       # no last brief yet: nothing is marked new
         todo.add("Call back", who="Pat", source="call")
         todo.close([1])
         second = bd.main(vault, now=datetime(2026, 10, 22, 19, 0, tzinfo=zt.TZ))
         self.assertIn("BRIEF: Evening", second)
-        self.assertRegex(second, r"🟡 1\. Pat: Call back \(call, reply by [^)]+\) 🆕")
+        self.assertRegex(second, r"🟡 1\. Pat: Call back \(call today [^,]+, reply by [^)]+\) 🆕")
         self.assertRegex(second, r"LAST BRIEF: \w+day \d+:\d\d [AP]M")
         self.assertIn("✅ Done since the last brief: 1", second)
 
@@ -300,7 +301,7 @@ class LateGoesToNowTests(unittest.TestCase):
         self.assertEqual(items[0]["priority"], "today")      # the saved priority stays
         text = zt.render_list(items)
         now_part, today_part = text.split("🟡 TODAY")
-        self.assertIn("🔴 1. Call back Pat (text, ⚠️ past 24 hours)", now_part)
+        self.assertRegex(now_part, r"🔴 1\. Call back Pat \(text [A-Z][a-z]{2}( \d+)?, ⚠️ past 24 hours\)")
         self.assertIn("Answer Sam", today_part)
         self.assertIn("2 now", text.splitlines()[0])
 
@@ -434,6 +435,81 @@ class WebsiteClickTests(unittest.TestCase):
     def test_no_key_means_no_clicks_read(self):
         self.assertEqual(zt.fetch_changes(settings=lambda: ("", ""))[0], [])
         self.assertIn("not set up", zt.fetch_changes(settings=lambda: ("", ""))[1])
+
+
+class SourcesTests(unittest.TestCase):
+    """Gerrit's ask (2026-10-26): every task says where it came from and when, and keeps every message behind it."""
+
+    def setUp(self):
+        self.todo = zt.TodoList(tempfile.mkdtemp())
+
+    def test_a_new_task_keeps_its_message(self):
+        item = self.todo.add("Answer about blinds", who="Amy Cole", source="email", subject="Blinds",
+                             said="Can you  come\nTuesday?", link="https://mail.google.com/mail/u/0/#inbox/abc",
+                             received="2026-10-25T09:00:00-04:00")
+        self.assertEqual(item["sources"], [{"kind": "email", "at": "2026-10-25T13:00:00+00:00", "from": "Amy Cole",
+                                            "subject": "Blinds", "text": "Can you come Tuesday?",
+                                            "link": "https://mail.google.com/mail/u/0/#inbox/abc"}])
+
+    def test_gerrits_own_words_and_a_visit_time_are_kept(self):
+        mine = self.todo.add("Order samples", source="gerrit", said="add order samples for the Lees")
+        self.assertEqual((mine["sources"][0]["kind"], mine["sources"][0]["text"]),
+                         ("gerrit", "add order samples for the Lees"))
+        visit = self.todo.add("Drop off samples", source="visit", at="2026-10-23T10:00:00-04:00",
+                              subject="Visit on Oct 23", said="Measured three windows.")
+        self.assertEqual(visit["sources"][0]["at"], "2026-10-23T14:00:00+00:00")
+        self.assertEqual(visit["reply_by"], "")   # a visit isn't a message: no 24-hour clock
+
+    def test_a_judged_update_adds_the_new_message_and_keeps_the_old(self):
+        r = {"action": "add", "task": "Answer Amy", "priority": "today", "due": "", "why": "", "update_number": 0}
+        first = zt.apply_judgement(self.todo, {"from": "Amy", "subject": "Blinds", "text": "First email"}, r, "email",
+                                   link="https://mail.google.com/x/1", received="2026-10-24T09:00:00-04:00")
+        listed = self.todo.open_items()
+        r2 = dict(r, action="update", update_number=first["n"], task="Answer Amy about blinds")
+        again = zt.apply_judgement(self.todo, {"from": "Amy", "subject": "Re: Blinds", "text": "Second email"}, r2,
+                                   "email", link="https://mail.google.com/x/2", received="2026-10-25T09:00:00-04:00",
+                                   listed=listed)
+        self.assertEqual(again["id"], first["id"])
+        self.assertEqual([s["text"] for s in again["sources"]], ["First email", "Second email"])
+        self.assertEqual(again["link"], "https://mail.google.com/x/2")    # the button opens the newest
+        # The same message twice is kept once.
+        self.todo.update_id(first["id"], source=zt.make_source("email", "2026-10-25T09:00:00-04:00", "Amy", "",
+                                                               "Second email", "https://mail.google.com/x/2"))
+        self.assertEqual(len(self.todo.open_items()[0]["sources"]), 2)
+
+    def test_at_most_ten_messages_newest_kept(self):
+        item = self.todo.add("Call back", source="call", received="2026-10-01T09:00:00+00:00")
+        for d in range(2, 15):
+            self.todo.update_id(item["id"], source=zt.make_source("call", f"2026-10-{d:02d}T09:00:00+00:00"))
+        kept = self.todo.open_items()[0]["sources"]
+        self.assertEqual(len(kept), zt.MAX_SOURCES)
+        self.assertEqual(kept[-1]["at"], "2026-10-14T09:00:00+00:00")
+
+    def test_a_task_from_before_has_one_made_from_what_it_has(self):
+        old = {"id": "t-1", "source": "text", "who": "Pat", "reply_by": "2026-10-21T18:00:00+00:00",
+               "added_at": "2026-10-20T18:05:00+00:00", "link": ""}
+        self.assertEqual(zt.sources_of(old)[0]["at"], "2026-10-20T18:00:00+00:00")   # 24 hours before reply-by
+        mine = {"id": "t-2", "source": "gerrit", "added_at": "2026-10-20T18:05:00+00:00"}
+        self.assertEqual(zt.sources_of(mine)[0]["kind"], "gerrit")
+        self.assertEqual(zt.came_in(mine).isoformat(), "2026-10-20T18:05:00+00:00")
+
+    def test_the_line_says_where_and_when(self):
+        today = date(2026, 10, 26)
+        item = {"n": 1, "task": "Order samples", "source": "gerrit", "priority": "week",
+                "sources": [zt.make_source("gerrit", "2026-10-26T15:05:00-04:00")]}
+        self.assertEqual(zt.line(item, today), "🟢 1. Order samples (you asked today 3:05pm)")
+        item["sources"] = [zt.make_source("gerrit", "2026-10-23T15:05:00-04:00")]
+        self.assertEqual(zt.line(item, today), "🟢 1. Order samples (you asked Fri)")
+        item["source"], item["sources"] = "visit", [zt.make_source("visit", "2025-12-01T15:05:00-05:00")]
+        self.assertEqual(zt.line(item, today), "🟢 1. Order samples (appointment Dec 1 2025)")
+
+    def test_the_website_gets_the_messages_and_when_it_came_in(self):
+        self.todo.add("Answer about blinds", who="Amy Cole", source="email", subject="Blinds", said="Tuesday?",
+                      received="2026-10-25T09:00:00-04:00")
+        row = zt.website_list(self.todo)["items"][0]
+        self.assertEqual(row["receivedAt"], "2026-10-25T13:00:00+00:00")
+        self.assertEqual(row["sources"][0]["subject"], "Blinds")
+        self.assertNotIn("ref", row)
 
 
 if __name__ == "__main__":

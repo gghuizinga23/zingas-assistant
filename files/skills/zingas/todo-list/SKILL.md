@@ -30,6 +30,7 @@ Every email, text, call and voicemail from a real person must be answered within
   (`zingas-todo list`) before you use a task number.
 - So for a message from a real person who is waiting on Gerrit, don't `skip` it just because it seems small. Skip only what the list below says to skip.
 - When you add one yourself from Telegram, pass `--source email|text|call|voicemail` and `--received <when it came in>` so the clock starts at the right time.
+- When Gerrit asks you to add a task, pass his own words with `--said "..."` (copy his message, no prices). The website's task view shows them as "You told Val", so he can see later why the task is there.
 
 ## Judging one item
 Ask: **does this need Gerrit to do something?** If not, `skip`.
@@ -69,7 +70,7 @@ Run the command. Every command that changes the list also prints the whole new l
 | Gerrit says | You run |
 |---|---|
 | "What's on my list?" / "to-do list" | `zingas-todo list` and send it as is |
-| "Add: order samples for Lee, this week" | `zingas-todo add "Order samples for the Lees" --priority week` |
+| "Add: order samples for Lee, this week" | `zingas-todo add "Order samples for the Lees" --priority week --said "Add: order samples for Lee, this week"` |
 | "Add: answer Amy's email from this morning" | `zingas-todo add "Answer about shutters" --who "Amy Cole" --source email --received 2026-10-21T09:12:00-04:00` |
 | "Done 3" / "finished the Lee one" | `zingas-todo done 3` (run `zingas-todo list` first if you need the number) |
 | "Move 4 to later" | `zingas-todo set 4 --priority later` |

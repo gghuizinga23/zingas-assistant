@@ -205,6 +205,8 @@ class TodoTests(Setup):
         item = self.todo.open_items()[0]
         self.assertEqual((item["task"], item["priority"], item["source"], item["auto_done"]),
                          ("Confirm the install date with Pat", "now", "text", "reply_sent"))
+        self.assertEqual([(s["kind"], s["text"]) for s in item["sources"]],
+                         [("text", "Is my install still Friday?? I took off work")])
         self.assertIn("🔴 1. Pat: Confirm the install date with Pat", self.notes[-1])
         d = self.rig.store.drafts_by_status(["pending"])[0]
         self.rig.tap("a", d["id"])
@@ -229,6 +231,7 @@ class TodoTests(Setup):
         self.assertEqual([(i["task"], i["who"], i["source"], i["priority"]) for i in items],
                          [("Call back", "Pat Smith", "call", "today")])
         self.assertEqual(items[0]["why"], "This person called two or more times.")
+        self.assertEqual({(s["kind"], s["text"]) for s in items[0]["sources"]}, {("call", "Missed call. No voicemail.")})
         self.assertEqual(self.prompts, [])                      # no AI for a missed call
         self.assertEqual(len(self.notes), 1)
         self.assertEqual(self.rig.val("GET", "/api/val/updates")[1]["calls"], [])

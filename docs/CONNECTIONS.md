@@ -180,16 +180,25 @@ when unsure), for 30 seconds before trying again.
   "madeAt": "2026-10-26T18:00:00+00:00",
   "items": [{ "id": "a1b2c3d4e5f6", "n": 1, "task": "Call back Pat about shutters", "who": "Pat Lee",
               "priority": "today", "source": "text", "replyBy": "2026-10-27T15:00:00+00:00", "due": null,
-              "why": "", "link": "", "addedAt": "2026-10-26T15:00:00+00:00" }],
+              "why": "", "link": "", "addedAt": "2026-10-26T15:00:00+00:00",
+              "receivedAt": "2026-10-26T15:00:00+00:00",
+              "sources": [{ "kind": "text", "at": "2026-10-26T15:00:00+00:00", "from": "Pat Lee", "subject": "",
+                            "text": "Can you come Tuesday?", "link": "" }] }],
   "done": [{ "id": "f6e5d4c3b2a1", "task": "Send the brochure", "who": "", "closedAt": "2026-10-26T16:00:00+00:00" }]
 }
 ```
 
 - `items`: the open tasks, at most 500. `priority`: `now`, `today`, `week`, `later` (the one Val saved).
   `source`: `email`, `text`, `call`, `voicemail`, `visit`, `gerrit`, `val`. `replyBy`: messages only, 24 hours
-  after it came in. `due`: `YYYY-MM-DD` or null. `link`: https only.
+  after it came in. `due`: `YYYY-MM-DD` or null. `link`: https only (the newest email's).
+- `receivedAt`: when the task came in (its first message, visit or ask). `sources` (2026-10-26): every message
+  behind the task, oldest first, at most 10: `kind` (a `source` word), `at`, `from`, `subject` (emails; "Visit on
+  Oct 23" for a visit), `text` (at most 600 characters: the email's start, the text, the voicemail, the visit
+  summary, or Gerrit's own words), `link` (https only; Gmail links are fixed by the page to open the signed-in
+  person's own inbox). Both are optional: a list without them gets one source made from the task.
 - `done`: tasks finished in the last 24 hours, at most 100. `id` lets the page's Undo put one back.
-- Never a task's `ref` (it can hold a phone number), never a price (amounts are taken out on the way in).
+- Never a task's `ref` (it can hold a phone number), never a price (amounts are taken out on the way in, message
+  words too).
 
 Gerrit's clicks (`/api/assistant/todo/changes`):
 

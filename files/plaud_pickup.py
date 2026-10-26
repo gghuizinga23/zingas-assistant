@@ -880,7 +880,8 @@ class PlaudPickup:
                    else f"You promised this at the visit on {visit_day}. You did not say a day.")
             self._added.append(self.todo.add(p["task"], priority=promise_priority(p["due"], today), who=who,
                                              source="visit", ref=phone or f"plaud:{fid}", due=p["due"], why=why,
-                                             customer=key))
+                                             customer=key, at=start, subject=f"Visit on {visit_day}",
+                                             said=ans.get("summary") or ""))
 
     def hand_drafts(self, ans: dict, fid: str, name: str, phone: str, key: str, tz_name: str) -> None:
         if not ans["drafts"] or not zc.digits10(phone):
