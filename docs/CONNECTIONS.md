@@ -28,6 +28,7 @@ and events also need the rep on `VAL_FOLLOWUP_USERS` (403 for anyone else; all f
 | `POST /api/assistant/followups/touch` (writes) | Val | Logs one touch (text, email, call, visit, note; planned or done). Always allowed. Shape below. | `src/app/api/assistant/followups/touch/route.ts` |
 | `GET /api/assistant/events?after=<id>&types=&limit=100` | Val | What happened since `after` (her own place, the last id she handled), oldest first: `{events, last}`. She may read `followup_rep_changed`, `customer_stopped_texts`, `proposal_viewed`, `proposal_signed`, `order_stage_changed`; asking for anything else is a 400. Follow-up events come only for her reps on `VAL_FOLLOWUP_USERS`. | `src/app/api/assistant/events/route.ts`, `src/core/events/store.ts` |
 | `POST /api/assistant/upcoming` (writes; Val's key) | Val's follow-ups program (`zingas_followups.py`), about every 15 minutes and right after the day's list is made or sent | Saves the follow-ups the coming weekday lists will hold (14 days ahead), for the Assistant > Drafts tab's "Coming up". Each list replaces the last, so a reply, a sale or a new estimate shows on the next one. Sends nothing: each follow-up still reaches Telegram on its day and needs Gerrit's tap. Answers `{ok, drafts}`; nothing to read back. 30 posts per 10 minutes. The shape is below. | `src/app/api/assistant/upcoming/route.ts`, `src/modules/assistant/upcoming.ts` |
+| `POST /api/assistant/todo` (writes; Val's key) | Val's to-do sender (`zingas-todo watch`, supervisord program `zingas-todo-post`), on every change to the list and at least every 10 minutes | Saves Gerrit's open to-do list for the Assistant > To-do tab. Each list replaces the last. The page moves a message with no answer past 24 hours to Now itself (Gerrit's rule, 2026-10-26), the same as Val. Read-only: the list changes only through Val. Answers `{ok, items}`; nothing to read back. 120 posts per 10 minutes. The shape is below. | `src/app/api/assistant/todo/route.ts`, `src/modules/assistant/todo.ts` |
 
 The estimator's older routes for Val (`/api/estimator/assistant/*`, the signed webhook to quo-bridge) still
 work as documented in `docs/ESTIMATOR.md`.
@@ -147,8 +148,15 @@ customer (worklist) before doing anything else for them.
 
 `GET {QUO_BRIDGE_URL}/api/os/drafts` with `Authorization: Bearer <QUO_BRIDGE_TOKEN>` (quo-bridge's
 `ZINGAS_OS_TOKEN`): Val's drafts waiting on Gerrit (name, last 4 digits of the phone, category, text, what the
-customer said, status, reasons). Read-only; approving stays in Telegram. Shown on the Assistant section's
-Drafts tab. Code: `quo-bridge/os_link.py`, `src/modules/assistant/bridge.ts`.
+customer said, status, reasons, `edited`, `can_edit`). Shown on the Assistant section's Drafts tab.
+
+`POST {QUO_BRIDGE_URL}/api/os/drafts/action`, same code: Gerrit's button on one draft (Drafts tab, 2026-10-26).
+`{"id", "action": "edit" | "approve" | "send_now" | "skip", "text"?}`. `edit` saves new words (still waiting);
+`approve` is Gerrit's approval, the same as his Telegram tap (with `text`, the new words go first); `send_now`
+sends a text held until 8 AM; `skip` never sends it. quo-bridge runs the same send gate as for a tap (quiet hours,
+do-not-contact, the 8 AM hold) and updates the Telegram card. Answers `{ok, status, message}`; 409 when the
+draft was already handled. The website lets only people `ASSISTANT_USERS` names press these (Gerrit). Code:
+`quo-bridge/bridge.py` (`os_action`), `src/modules/assistant/bridge.ts`, `src/modules/assistant/actions.ts`.
 
 When quo-bridge can't reach the website's contact route, it treats the customer as do-not-contact (never text
 when unsure), for 30 seconds before trying again.
@@ -163,6 +171,24 @@ when unsure), for 30 seconds before trying again.
 | `APP_URL` | quo-bridge: `ZINGAS_OS_URL` | Yes |
 | `ASSISTANT_REP_EMAILS` | (none) | |
 | `VAL_FOLLOWUP_USERS` | (none) | Whose follow-ups Val keeps (Gerrit first). Also needs the rep in `ASSISTANT_REP_EMAILS`. |
+
+## Val's to-do list (`POST /api/assistant/todo`)
+
+```json
+{
+  "madeAt": "2026-10-26T18:00:00+00:00",
+  "items": [{ "id": "a1b2c3d4e5f6", "n": 1, "task": "Call back Pat about shutters", "who": "Pat Lee",
+              "priority": "today", "source": "text", "replyBy": "2026-10-27T15:00:00+00:00", "due": null,
+              "why": "", "link": "", "addedAt": "2026-10-26T15:00:00+00:00" }],
+  "done": [{ "task": "Send the brochure", "who": "", "closedAt": "2026-10-26T16:00:00+00:00" }]
+}
+```
+
+- `items`: the open tasks, at most 500. `priority`: `now`, `today`, `week`, `later` (the one Val saved).
+  `source`: `email`, `text`, `call`, `voicemail`, `visit`, `gerrit`, `val`. `replyBy`: messages only, 24 hours
+  after it came in. `due`: `YYYY-MM-DD` or null. `link`: https only.
+- `done`: tasks finished in the last 24 hours, at most 100.
+- Never a task's `ref` (it can hold a phone number), never a price (amounts are taken out on the way in).
 
 ## Val's coming follow-ups (`POST /api/assistant/upcoming`)
 
