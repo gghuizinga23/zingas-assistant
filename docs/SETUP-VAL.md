@@ -178,15 +178,24 @@ Val's program `zingas-followups` is live. The first list comes Monday 10/26: 7:4
 Vercel, where Val has no access) sends only follow-ups you approved, only to an address that already got
 an estimate from you, and logs each send. Val's computer never gets the main key.
 
-## Plaud (device here 2026-10-23; the build comes right after F0)
-The plan is in `docs/VAL-BRAIN.md`. Do P1 now, so every visit from today is saved. Val reads all past
-recordings when P2 is done.
+## Plaud (device here 2026-10-23; built 2026-10-24)
+The plan and what was built are in `docs/VAL-BRAIN.md`. Every visit recording becomes part of that customer's
+one file (with every text, call and email), and every promise you make at a visit goes on your to-do list with
+an alert, a few minutes after you stop recording. The recording replaces the truck debrief. Val reads all past
+recordings (the last year) when P2 is done; old visits fill her memory only, with no to-dos or texts.
+
+**Status (2026-10-24):** built and tested, **not on Val's computer yet**. Nothing changes for you until the
+install step below.
 
 | Step | What to do | Who | Time |
 |---|---|---|---|
 | P1 | **Now.** In the Plaud phone app: turn on **AutoFlow** (automatic transcripts) and speaker labels. Add product words to the custom vocabulary: PowerView, Silhouette, Pirouette, Duette, pergola, and others you say often. Then record every appointment: press record when the visit starts, stop when it ends. Don't connect Plaud to Zapier or anything else | Gerrit | 10 min |
-| P2 | **After F0.** On Val's computer I run `plaud login`. It prints a link: open it, sign in to Plaud, click **Authorize**. No key to copy | Gerrit signs in, I do the rest | 5 min |
-| P3 | **After F0.** Test: a 2-minute role-play recording during a test calendar event, with one promise ("I'll drop off samples Friday"). A few minutes after it syncs, the to-do and its alert show in Telegram | Gerrit records, I check | 10 min |
+| Install | **After your yes.** I run `bash files/install-plaud.sh` from the laptop. It saves a copy of every old file on Val's computer, puts the new programs on, installs the official Plaud program (read-only: it can list and read recordings, never delete or change them), and restarts Val's text and email programs. If it says Node.js is missing, I add that first (one more yes from you) | I do it | 5 min |
+| P2 | **Plaud sign-in, on Val's own screen.** Open Val's computer in the Orgo dashboard (the screen view). I start `plaud login` there. A browser opens **on that screen** with the Plaud sign-in: sign in with your Plaud account and click **Authorize**. You have 2 minutes. No key to copy. (It must be the browser on Val's screen: the sign-in answers to Val's computer itself.) Then I run `zingas-plaud check`: it shows "Plaud sign-in: works" and today's recordings. **Done 2026-10-24.** If it is ever needed again: on Val's desktop the Plaud program opens a blank Chrome tab, so Claude opens the sign-in page itself through Chrome's DevTools port 9223 (the full address, URL-encoded) and brings it to the front; when Gerrit is already signed in to web.plaud.ai, only **Allow** is needed | You sign in, I do the rest | 5 min |
+| P3 | **Test.** Record a 2-minute role-play at the time of a test appointment (made-up customer and phone), with one promise: "I'll drop off samples Friday." A few minutes after the phone app syncs: the to-do (🟢, due Friday) and its alert come in Telegram, and that evening's brief has the note to paste into Salesforce. Val makes an educated guess among that day's appointments ("Appt on" emails and your Google Calendar), so a visit you start early or late still finds its customer. A recording she is not sure about shows up once in the next morning brief with her best guess: answer it there ("yes" or "that one is the Smiths") or ignore it. A recording that is not a customer visit saves nothing | You record, I check | 10 min |
+
+If the Plaud sign-in stops working later, Val tells you once (not at night), the morning brief says so, and
+healthchecks.io sends its warning. Then do P2 again.
 
 ## Nightly backup (built 2026-10-23)
 Every night at 2:30 AM, Val's computer packs her vault (customer notes, to-do list, voice), her settings,

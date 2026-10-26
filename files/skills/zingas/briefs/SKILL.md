@@ -69,6 +69,12 @@ nothing about the calendar. In the first line of the morning brief you may say h
 ## Follow-ups (both briefs)
 Once quote follow-ups are on (F0), your instructions also have a block between `--- FOLLOW-UPS STARTS` and `--- FOLLOW-UPS ENDS`. Put the lines between them in the brief **as written**, right after the to-do list block (never the two marker lines). In the morning it is today's follow-ups (Friday: the weekend too) and the customers whose appointment Val could not find. In the evening it is what got sent, paused or removed. The program `zingas-followups` does all the work: never approve, change or send a follow-up yourself, and never ask Gerrit "Sold, Quoted or Lost?". When there is no such block, say nothing about follow-ups.
 
+## Visits (both briefs, when there is a block)
+Your instructions can have a block between `--- VISITS STARTS` and `--- VISITS ENDS`, from the visit recordings (`zingas-plaud`). Put the lines between them in the brief **as written**, right after the follow-ups block (never the two marker lines). Each line shows only once. When there is no such block, say nothing about recordings.
+- **Morning:** recordings Val could not match to a customer ("The Thu Oct 23, 2:10 PM recording (34 min): Smith or Jones?"), facts that do not agree, and recording problems. This is the only place Val asks about a recording: never send Gerrit a separate question. When Gerrit answers, file it (skill `customer-memory`, "When Gerrit says whose a recording is"). If he says nothing, leave it.
+- **Evening:** the notes from today's visits to paste into Salesforce, in the house format (`10/23/26 - ...; GH`), with the follow-up date and the spouse name. Never change the wording.
+- **A Plaud warning line** ("⚠️ Plaud: Val cannot read your recordings...") goes in as written, and its first words also go in the brief's first line.
+
 ## Monday numbers (Monday morning brief only)
 On Monday mornings your instructions also have a block between `--- MONDAY NUMBERS STARTS` and `--- MONDAY NUMBERS ENDS`.
 It is Gerrit's month so far from the company website (the same numbers as the Numbers tab), and in the first week of a

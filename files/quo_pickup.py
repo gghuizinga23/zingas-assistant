@@ -25,6 +25,12 @@ How a new customer text becomes a card in Val Approvals:
 Outcomes (sent, skipped, edited) are saved to the vault for the weekly voice
 review: voice-edits/<YYYY-MM>.jsonl.
 
+The customer file (zingas_customer): every text in, every approved text out, every
+missed call, voicemail and call summary gets a line in the customer's timeline, and
+Val reads the whole file (profile, last 15 contacts, newest visit) before she drafts.
+New facts she notices in a text (how they talk, life events, the house, what Gerrit
+said, their mood) go into the profile, tagged with the date.
+
 Gerrit's to-do list (zingas_todo): the same answer from Val also says whether
 the text puts a task on the list. Missed calls become "Call back" tasks with no
 AI. Voicemails and call summaries are judged by Val like emails. This program
@@ -50,6 +56,7 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0, "/usr/local/lib/zingas")
 sys.path.insert(1, os.path.dirname(os.path.abspath(__file__)))
+import zingas_customer as zc  # noqa: E402
 import zingas_todo as zt  # noqa: E402
 
 try:   # Val's read-only line to the company website (Salesforce records); optional
@@ -265,12 +272,20 @@ def _read(path: str, limit: int) -> str:
 
 # --------------------------------------------------------------- the prompt
 
+TEXT_FACTS = ('"facts": {"talk": ["how they write: short or long, emojis or not, the name they go by, the best '
+              'time they answer"], "life_events": [{"what": "...", "date": "YYYY-MM or YYYY-MM-DD or empty"}], '
+              '"house": ["rooms, sun, pets or kids, the problem to solve"], "gerrit_said": ["a promise or answer '
+              'Gerrit gave"], "mood": "warm | cooling | quiet | unhappy, a few words why, or empty"} '
+              '(only NEW facts this text shows; empty lists when none; never a price)')
+
+
 def build_prompt(text: dict, note_path: Optional[str], vault: str = VAULT, skill_path: str = SKILL,
                  open_items: Optional[List[dict]] = None, todo_skill: str = zt.SKILL,
-                 website: str = "") -> str:
+                 website: str = "", customer: str = "") -> str:
+    """customer: the customer file as zingas_customer.context() gives it. Without it, the start of the note."""
     thread = "\n".join(f"[{t['at'][:16]}] {'Customer' if t['from'] == 'customer' else 'Gerrit'}: {t['text']}"
                        for t in text.get("thread") or [])
-    note = _read(note_path, 3000) if note_path else ""
+    note = customer or (_read(note_path, 3000) if note_path else "")
     return "\n\n".join([
         "You are Val, Gerrit's assistant at Zinga's. A customer just texted Zinga's business number. "
         "Write ONE reply for Gerrit to approve, in Gerrit's voice. You can't send anything: your draft "
@@ -284,8 +299,10 @@ def build_prompt(text: dict, note_path: Optional[str], vault: str = VAULT, skill
         "## Rules for this job\n" + (_read(skill_path, 6000) or "(quo-texting skill missing)"),
         "## Gerrit's voice\n" + (_read(os.path.join(vault, "VOICE.md"), 8000) or "(VOICE.md missing)"),
         "## Real examples of Gerrit's texts\n" + _read(os.path.join(vault, "voice-examples/gerrit-texts.md"), 6000),
-        "## The customer\n<customer_note>\n" + (note or "No memory note matches this number. Treat them as "
-                                                "unmatched: no Salesforce Prospect ID.") + "\n</customer_note>",
+        "## The customer (their whole file: read it, so the draft sounds like a person who remembers them. "
+        "Mirror how they talk. Never quote a visit recording or use a detail that would feel like "
+        "surveillance.)\n<customer_note>\n" + (note or "No memory note matches this number. Treat them as "
+                                                   "unmatched: no Salesforce Prospect ID.") + "\n</customer_note>",
         "## Salesforce, from the company website (visits, results, follow-up notes; never prices)\n"
         "Use it to know who they are and what happened at their visit. Don't repeat Gerrit's follow-up notes "
         "to the customer word for word.\n<salesforce_record>\n"
@@ -306,7 +323,8 @@ def build_prompt(text: dict, note_path: Optional[str], vault: str = VAULT, skill
         '"todo": {"action": "add" | "update" | "skip", "task": "starts with a verb, 12 words or less", '
         '"who": "name, short", "priority": "now" | "today" | "week" | "later", '
         '"due": "YYYY-MM-DD only if the text gives a date, else empty", "why": "one short line or empty", '
-        '"update_number": "for update: the open task number", "emergency": true | false}}',
+        '"update_number": "for update: the open task number", "emergency": true | false}, '
+        + TEXT_FACTS + '}',
     ])
 
 
@@ -375,6 +393,8 @@ class Pickup:
             save_outcome(o, self.vault)
             if o.get("status") == "sent" and o.get("phone"):
                 self.todo.close_auto(o["phone"], "reply_sent")      # Gerrit's reply went out
+                self._log(zc.key_for(phone=o["phone"], vault=self.vault), "text_out", o.get("sent_at"),
+                          o.get("final_text") or "", "quo-out:" + str(o.get("draft_id")), "Gerrit")
             done["outcomes"] += 1
         self.bridge.ack(outcomes=[o["draft_id"] for o in up.get("outcomes") or []])
 
@@ -397,6 +417,27 @@ class Pickup:
         self._save_tries(tries)
         zt.announce(self.added, self.todo, self.notify, emergency=self.emergency)
         return done
+
+    # ------------------------------------------------------------ the customer file
+
+    def _log(self, key: str, channel: str, when, summary: str, ref: str, who: str = "") -> None:
+        """One timeline line. Never stops the pickup: the draft matters more than the log."""
+        try:
+            zc.log(key, channel, when, summary, ref=ref, who=who, vault=self.vault)
+        except Exception as e:
+            log(f"customer file: {type(e).__name__}")
+
+    def _facts(self, key: str, facts, source: str) -> None:
+        try:
+            zc.add_facts(key, facts, source, self.vault)
+        except Exception as e:
+            log(f"customer facts: {type(e).__name__}")
+
+    def _context(self, key: str, limit: int = 9000) -> str:
+        try:
+            return zc.context(key, self.vault, limit) if key else ""
+        except Exception:
+            return ""
 
     # ------------------------------------------------------------ the list
 
@@ -424,6 +465,11 @@ class Pickup:
                     c["kind"], "[call] ") + (c.get("text") or "")[:200], self.vault)
             name = note_name(note)
             who = name or pretty(c["phone"])
+            key = zc.key_for(phone=c["phone"], vault=self.vault)
+            self._log(key, {"missed": "missed_call", "voicemail": "voicemail"}.get(c["kind"], "call"),
+                      c.get("received_at") or c.get("created_at"),
+                      "Missed call. No voicemail." if c["kind"] == "missed" else (c.get("text") or "")[:600],
+                      "quo-call:" + str(c["id"]), name or "Customer")
             if c["kind"] == "missed":
                 again = [i for i in self.todo.open_for(c["phone"]) if i["task"].startswith("Call back")]
                 if again:
@@ -435,9 +481,10 @@ class Pickup:
                 finished.append(c["id"])
                 continue
             things.append({"id": c["id"], "kind": c["kind"], "from": f"{name} {pretty(c['phone'])}" if name else who,
-                           "text": (c.get("text") or "")[:3000],
-                           "note": _read(note, 1200).replace("\n", " ") if note else ""})
-            judged.append((c, who))
+                           "text": (c.get("text") or "")[:3000], "customer": key if name else "",
+                           "note": self._context(key, 2500) if name else
+                           (_read(note, 1200).replace("\n", " ") if note else "")})
+            judged.append((c, who, key))
         if not things:
             return finished
         listed = self.todo.open_items()
@@ -447,8 +494,11 @@ class Pickup:
         except Exception as e:
             log(f"calls: Val's answer didn't work ({type(e).__name__})")
             got = {}
-        for (c, who), t in zip(judged, things):
+        for (c, who, key), t in zip(judged, things):
             r = got.get(c["id"])
+            if r is not None and t.get("customer"):
+                self._facts(key, r.get("facts"), f"{'voicemail' if c['kind'] == 'voicemail' else 'call'} "
+                            f"{zc.short_date(datetime.now(zt.TZ))}")
             if r is None:
                 n = tries.get(c["id"], 0) + 1
                 tries[c["id"]] = n
@@ -472,17 +522,29 @@ class Pickup:
         if t.get("do_not_contact") or word in STOP_WORDS:
             return "skipped"     # quo-bridge already told Gerrit
         note = find_customer_note(t["phone"], self.vault)
-        first_time = not note and save_unmatched(t["phone"], t["text"], self.vault)
-        listed = self.todo.open_items()
         try:
             record = self.lookup(t["phone"])
         except Exception:      # the draft never waits on the website
             record = None
         sf = zingas_os.matched(record) if zingas_os else None
         try:
+            key = zc.resolve(phone=t["phone"], vault=self.vault, sf=sf)      # a Salesforce match makes the file
+        except Exception as e:
+            log(f"customer file: {type(e).__name__}")
+            key = ""
+        made_file = bool(key and not note)
+        note = find_customer_note(t["phone"], self.vault) if made_file else note
+        first_time = not note and save_unmatched(t["phone"], t["text"], self.vault)
+        key = key or zc.unmatched_key(t["phone"])
+        customer = self._context(key)      # read before this text is logged: the prompt has it already
+        self._log(key, "text_in", t.get("received_at") or t.get("created_at"), t["text"], "quo:" + str(t["id"]),
+                  note_name(note) or "Customer")
+        listed = self.todo.open_items()
+        try:
             ans = parse_answer(self.ask_val(build_prompt(t, note, self.vault, self.skill_path, listed,
                                                          self.todo_skill,
-                                                         zingas_os.customer_block(record) if zingas_os else "")))
+                                                         zingas_os.customer_block(record) if zingas_os else "",
+                                                         customer=customer)))
         except Exception as e:
             n = tries.get(t["id"], 0) + 1
             tries[t["id"]] = n
@@ -493,15 +555,18 @@ class Pickup:
                         "Answer the text in the Quo app.")
             return "skipped"
 
+        self._facts(key, ans.get("facts"), f"text {zc.short_date(datetime.now(zt.TZ))}")
         who = note_name(note) or ans.get("customer_name") or pretty(t["phone"])
         extra = f"\n{ans['note_for_gerrit']}" if ans.get("note_for_gerrit") else ""
-        if first_time and sf:
+        if made_file and sf:
             who = note_name(note) or sf.get("name") or who
-            extra += (f"\nThis number has no memory note yet. Salesforce says it is {sf.get('name')} "
-                      f"in {sf.get('city')}.")
+            extra += (f"\nThis number had no customer file yet. Salesforce says it is {sf.get('name')} "
+                      f"in {sf.get('city')}. I made a customer file.")
         elif first_time:
             extra += "\nThis is a new number. Is this person a new lead or a person that you know?"
         known_ids = {sf.get("prospectId")} if sf else set()
+        if key and not zc.is_unmatched(key):
+            known_ids.add(key)
         task = todo_of(ans)
         if task is None and ans["action"] == "ask_gerrit":       # never lose one that needs Gerrit
             task = {"action": "add", "task": "Answer the text from " + who, "priority": "today", "due": "",
@@ -514,7 +579,8 @@ class Pickup:
         try:
             self.bridge.draft({"to": t["phone"], "text": ans["text"], "category": ans["category"],
                                "customer_name": ans.get("customer_name") or "",
-                               "prospect_id": (ans.get("prospect_id") if note or ans.get("prospect_id") in known_ids
+                               "prospect_id": (key if key and not zc.is_unmatched(key)
+                                               else ans.get("prospect_id") if ans.get("prospect_id") in known_ids
                                                else ""),
                                "time_zone": valid_tz(ans.get("time_zone")), "reply_to": t["id"]})
         except BridgeError as e:

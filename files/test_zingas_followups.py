@@ -1,6 +1,7 @@
 """Tests for zingas_followups.py and followup_wording.py. Every name, email and
 phone here is made up. Run: python3 -m unittest files/test_zingas_followups.py"""
 
+import json
 import os
 import re
 import sys
@@ -312,6 +313,9 @@ class FollowupTests(unittest.TestCase):
         self.assertEqual(self.b.acked, ["f0"])
         self.assertEqual(self.customer(f)["touches"]["48 hours"]["state"], "sent")
         self.assertIn("Follow-ups today: 1 sent", zf.brief_block(self.now, self.tmp.name))
+        import zingas_customer as zc                       # the sent text is in the customer's timeline
+        entry = zc.timeline("unmatched-3175550142", self.tmp.name)[-1]
+        self.assertEqual((entry["channel"], entry["refs"]), ("Text out", ["fu-out:f0"]))
 
     def test_not_approved_comes_back_next_day(self):
         f = self.make(live=True)
@@ -358,6 +362,134 @@ class FollowupTests(unittest.TestCase):
         plan = f.make_plan()
         self.assertEqual(plan["items"], [])
         self.assertEqual((c["status"], c["why"]), ("stopped", "they chose another company"))
+
+    def test_a_reply_on_gerrits_cell_counts_and_val_sees_it(self):
+        f = self.make(live=True)
+        f.scan()
+        cell = {"pat.testerson@example.com": {
+            "last_in": z(at(2026, 10, 21, 9)), "last_out": z(at(2026, 10, 21, 9, 5)),
+            "thread": [{"at": "2026-10-21 09:00", "from": "customer", "text": "Can the screen go inside the tracks?"},
+                       {"at": "2026-10-21 09:05", "from": "Gerrit", "text": "Absolutely!"}]}}
+        with open(os.path.join(self.tmp.name, "followups", "cell-texts.json"), "w") as fh:
+            json.dump(cell, fh)
+        self.now = at(2026, 10, 24, 11)                 # read 3 days late: already quiet long enough
+        f.reply_check()
+        c = self.customer(f)
+        self.assertEqual(c["status"], "paused")
+        f.reply_check()
+        self.assertEqual((c["status"], c["mode"]), ("active", "conversation"))
+        self.reply = '{"action": "write", "text": "Hey Pat! Any other questions?", "email_body": "Hi Pat,\\nThanks!"}'
+        plan = f.make_plan()
+        self.assertEqual([i["touch"] for i in plan["items"]], ["after reply 1"])
+        self.assertIn("inside the tracks", self.written[0])
+
+    # the upcoming list (the Drafts tab on the website)
+    def test_upcoming_shows_the_coming_lists_and_changes_nothing(self):
+        f = self.make()
+        f.scan()
+        up = f.upcoming(14)
+        self.assertEqual([(i["list_day"], i["touch"]) for i in up["items"]],
+                         [("2026-10-21", "48 hours"), ("2026-10-26", "7 days"), ("2026-11-02", "day 14")])
+        self.assertTrue(up["items"][0]["text"].startswith("Hey Pat!"))
+        self.assertEqual(up["items"][0]["written_by"], "fixed")
+        self.assertTrue(all(t["state"] == "planned" for t in self.customer(f)["touches"].values()))
+        self.now = at(2026, 10, 21, 7, 40)                 # once the day's list is made, it leaves the upcoming list
+        f.make_plan()
+        self.assertEqual([i["touch"] for i in f.upcoming(14)["items"]], ["7 days", "day 14"])
+
+    def test_upcoming_missed_touches_collapse_like_the_real_list(self):
+        f = self.make()
+        f.scan()
+        self.now = at(2026, 10, 31, 10)                    # Saturday: 48 hours and 7 days were missed
+        up = f.upcoming(14)
+        self.assertEqual([(i["list_day"], i["touch"]) for i in up["items"]],
+                         [("2026-11-02", "day 14"), ("2026-11-09", "day 21")])
+
+    def test_val_writes_ahead_once_and_the_day_list_posts_the_same_words(self):
+        f = self.make()
+        f.scan()
+        c = self.customer(f)
+        f.resume(c, at(2026, 10, 24, 10))
+        self.now = at(2026, 10, 24, 11)                    # Saturday
+        self.reply = '{"action": "write", "text": "Hey Pat! Did the colors work out?", "email_body": "Hi Pat,\\nThanks!"}'
+        first = f.upcoming(14)["items"][0]
+        self.assertEqual((first["list_day"], first["touch"], first["written_by"]), ("2026-10-26", "after reply 1", "val"))
+        self.assertEqual(first["text"], "Hey Pat! Did the colors work out?")
+        self.assertIn("Monday, October 26", self.written[0])
+        n = len(self.written)                              # after reply 1, and day 14 (also hers now)
+        self.assertEqual(n, 2)
+        f.upcoming(14)
+        self.assertEqual(len(self.written), n)             # kept, not written again
+        self.reply = '{"action": "write", "text": "Something else", "email_body": "Hi Pat,\\nOther"}'
+        self.now = at(2026, 10, 26, 7, 40)
+        plan = f.make_plan()
+        self.assertEqual(plan["items"][0]["text"], "Hey Pat! Did the colors work out?")
+        self.assertEqual(len(self.written), n)
+
+    def test_a_new_message_makes_val_write_again(self):
+        f = self.make()
+        f.scan()
+        c = self.customer(f)
+        f.resume(c, at(2026, 10, 24, 10))
+        self.now = at(2026, 10, 24, 11)
+        self.reply = '{"action": "write", "text": "First try", "email_body": "Hi Pat,\\nA"}'
+        f.upcoming(14)
+        c["last_any"] = zf.iso(at(2026, 10, 24, 12))       # Gerrit emailed them
+        self.reply = '{"action": "write", "text": "Second try", "email_body": "Hi Pat,\\nB"}'
+        self.assertEqual(f.upcoming(14)["items"][0]["text"], "Second try")
+        self.assertEqual(len(self.written), 4)             # both of hers, written again once each
+
+    def test_upcoming_val_stop_is_only_a_note(self):
+        f = self.make()
+        f.scan()
+        c = self.customer(f)
+        f.resume(c, at(2026, 10, 24, 10))
+        self.reply = '{"action": "stop", "why": "they chose another company"}'
+        item = f.upcoming(14)["items"][0]
+        self.assertEqual((item["text"], item["note"]), ("", "Val would close this one: they chose another company"))
+        self.assertEqual(c["status"], "active")
+
+    def test_upcoming_names_who_is_on_hold(self):
+        f = self.make(live=True)
+        f.scan()
+        self.g.inbox.append({"sender": "pat.testerson@example.com", "messageTimestamp": z(at(2026, 10, 21, 9))})
+        self.now = at(2026, 10, 21, 10)
+        f.reply_check()
+        up = f.upcoming(14)
+        self.assertEqual(up["items"], [])
+        self.assertEqual(up["held"], [{"customer_name": "Pat and Sam Testerson", "why": "they wrote back",
+                                       "back_on": "2026-10-24"}])
+
+    def test_step_sends_the_upcoming_list_every_15_minutes(self):
+        sent = []
+
+        class Site:
+            fail = False
+
+            def post(self, path, body):
+                if Site.fail:
+                    raise RuntimeError("website /api/assistant/upcoming: HTTP 503")
+                sent.append((path, body))
+                return {"ok": True}
+
+        f = zf.Followups(self.g, self.b, vault=self.tmp.name, clock=lambda: self.now, site=Site())
+        f.step()
+        self.assertEqual([p for p, _ in sent], ["/api/assistant/upcoming"])
+        self.assertEqual(sent[0][1]["items"][0]["touch"], "48 hours")
+        f.step()
+        self.assertEqual(len(sent), 1)
+        self.now += timedelta(minutes=16)
+        Site.fail = True
+        f.step()                                           # the website down never stops follow-ups
+        self.assertEqual(len(sent), 1)
+        self.assertTrue(os.path.exists(os.path.join(self.tmp.name, "followups", "state.json")))
+
+    def test_no_cell_file_changes_nothing(self):
+        f = self.make(live=True)
+        f.scan()
+        self.now = at(2026, 10, 21, 10)
+        f.reply_check()
+        self.assertEqual(self.customer(f)["status"], "active")
 
     def test_texts_count_as_a_reply_and_dnc_stops(self):
         f = self.make(live=True)

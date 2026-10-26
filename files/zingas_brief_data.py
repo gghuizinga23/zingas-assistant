@@ -3,7 +3,9 @@
 Its output goes into Val's brief prompt. Plain code, no AI.
 
 It prints Gerrit's to-do list exactly as the brief must show it, with tasks
-added since the last brief marked 🆕, then notes the time of this brief.
+added since the last brief marked 🆕, then the follow-ups, the Plaud visit lines
+(recordings to match, notes to paste into Salesforce), the Monday numbers and
+any backup warning, then notes the time of this brief.
 Installed at ~/.hermes/scripts/zingas_brief_data.py.
 """
 
@@ -41,6 +43,16 @@ def followups_block(now) -> str:
     try:
         import zingas_followups as zf
         return zf.brief_block(now)
+    except Exception:  # the brief must never fail because of this block
+        return ""
+
+
+def visits_block(now, vault: str = zt.VAULT) -> str:
+    """Plaud visit lines: recordings to match (morning), notes to paste into Salesforce (evening), and a
+    warning when the Plaud sign-in stopped. "" when there is nothing."""
+    try:
+        import plaud_pickup as pp
+        return pp.brief_block(now, vault)
     except Exception:  # the brief must never fail because of this block
         return ""
 
@@ -85,6 +97,9 @@ def main(vault: str = zt.VAULT, now=None) -> str:
     block = followups_block(now)
     if block:
         out.append(block)
+    visits = visits_block(now, vault)
+    if visits:
+        out.append(visits)
     numbers = numbers_block(now)
     if numbers:
         out.append(numbers)

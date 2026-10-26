@@ -97,3 +97,22 @@ if os.path.exists(f"{SRC}/quo_pickup.py"):
     os.chmod("/usr/local/bin/zingas-quo", 0o755)
     shutil.copy2(f"{SRC}/quo-pickup.supervisor.conf", "/etc/supervisor/conf.d/zingas-quo-pickup.conf")
     print("quo pickup installed (starts after: supervisorctl reread && supervisorctl update)")
+
+if os.path.exists(f"{SRC}/plaud_pickup.py"):
+    # Plaud memory and the customer file (docs/VAL-BRAIN.md Parts 1-4). The pickups import these from the lib folder.
+    import subprocess
+    os.makedirs("/usr/local/lib/zingas", exist_ok=True)
+    for name in ("zingas_customer.py", "zingas_todo.py", "zingas_inbox.py", "quo_pickup.py", "plaud_pickup.py"):
+        shutil.copy2(f"{SRC}/{name}", f"/usr/local/lib/zingas/{name}")
+    shutil.copy2(f"{SRC}/plaud_pickup.py", "/usr/local/bin/zingas-plaud")
+    os.chmod("/usr/local/bin/zingas-plaud", 0o755)
+    shutil.copy2(f"{SRC}/zingas-plaud.supervisor.conf", "/etc/supervisor/conf.d/zingas-plaud.conf")
+    # The official Plaud program (read-only: list and read recordings). Needs Node.js 18 or newer.
+    if shutil.which("npm"):
+        r = subprocess.run(["npm", "install", "-g", "--no-fund", "--no-audit", "@plaud-ai/cli@0.3.15"],
+                           capture_output=True, text=True)
+        print("plaud program:", "installed" if r.returncode == 0 else f"npm failed ({r.returncode})")
+    else:
+        print("plaud program: NOT installed, npm is missing (install Node.js 18+, then npm i -g @plaud-ai/cli@0.3.15)")
+    print("plaud pickup installed. Next: step P2 `plaud login` on Val's screen, then "
+          "supervisorctl reread && supervisorctl update")

@@ -168,15 +168,25 @@ class QuietAndAnnounce(unittest.TestCase):
         self.assertTrue(zt.quiet_hours(datetime(2026, 10, 24, 11, 0, tzinfo=tz)))    # Sat
         self.assertTrue(zt.quiet_hours(datetime(2026, 10, 22, 7, 59, tzinfo=tz)))    # Thu 7:59am
 
-    def test_told_in_the_day_held_at_night_unless_emergency(self):
+    def test_every_new_task_is_told_right_away_any_hour(self):
+        """Gerrit's rule (2026-10-23): to-do alerts ignore quiet hours. Other Val messages keep them."""
         item = self.todo.add("Call back", who="Pat")
-        day, night = datetime(2026, 10, 21, 10, 0, tzinfo=zt.TZ), datetime(2026, 10, 21, 22, 0, tzinfo=zt.TZ)
+        day = datetime(2026, 10, 21, 10, 0, tzinfo=zt.TZ)
+        saturday_night = datetime(2026, 10, 24, 21, 0, tzinfo=zt.TZ)
         self.assertTrue(zt.announce([item], self.todo, self.sent.append, at=day))
         self.assertIn("📝 New task on your to-do list:\n🟡 1. Pat: Call back", self.sent[0])
         self.assertIn("This task is at the top.", self.sent[0])
-        self.assertFalse(zt.announce([item], self.todo, self.sent.append, at=night))
-        self.assertTrue(zt.announce([item], self.todo, self.sent.append, emergency=True, at=night))
+        self.assertTrue(zt.quiet_hours(saturday_night))
+        self.assertTrue(zt.announce([item], self.todo, self.sent.append, at=saturday_night))
         self.assertEqual(len(self.sent), 2)
+        self.assertFalse(zt.announce([], self.todo, self.sent.append))
+
+    def test_a_promise_from_a_visit_links_to_the_customer(self):
+        item = self.todo.add("Drop off samples", priority="week", who="Pat", source="visit", ref="+13175550123",
+                             due="2026-10-30", customer="P-100")
+        self.assertEqual((item["source"], item["customer"], item["reply_by"]), ("visit", "P-100", ""))
+        self.assertIn("(visit, ", zt.line(item, today=datetime(2026, 10, 23).date()))
+        self.assertEqual(self.todo.add("x", customer="../bad")["customer"], "")
 
 
 class Judging(unittest.TestCase):
@@ -256,8 +266,12 @@ class Cli(unittest.TestCase):
         os.environ["ZINGAS_VAULT"] = tempfile.mkdtemp()
         import importlib
         mod = importlib.reload(zt)
+        told = []
         try:
-            self.assertEqual(mod.main(["add", "Order samples", "--priority", "week", "--who", "Lees"]), 0)
+            with mock.patch.object(mod, "tell_gerrit", told.append):
+                self.assertEqual(mod.main(["add", "Order samples", "--priority", "week", "--who", "Lees"]), 0)
+            self.assertEqual(len(told), 1)                       # the CLI add alerts like every other path
+            self.assertIn("📝 New task on your to-do list:\n🟢 1. Lees: Order samples", told[0])
             self.assertEqual(mod.main(["set", "1", "--priority", "now"]), 0)
             self.assertEqual(mod.main(["done", "1"]), 0)
             self.assertEqual(mod.main(["done", "1"]), 1)

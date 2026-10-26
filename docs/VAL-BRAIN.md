@@ -1,7 +1,9 @@
 # Val's brain: Plaud visits, one file per customer, and what comes next
 
-**Status:** plan approved by Gerrit 2026-10-23. **Not started.** Parts 1–4 are built right after F0
-(this is Phase 4 in `docs/PLAN.md`). Part 5 is the next step after that.
+**Status:** plan approved by Gerrit 2026-10-23. **Parts 1–4 built 2026-10-24** (branch `claude/plaud-memory-c55472`,
+all tests pass). **Not on Val's computer yet:** it goes on with `files/install-plaud.sh` after Gerrit's yes, then
+Gerrit's steps P2 and P3 (`docs/SETUP-VAL.md`). What was built, and where it differs from the plan below, is in
+"Built 2026-10-24" at the end. Part 5 (Val's brain, B1–B5) is the next step.
 
 ## Context
 Gerrit has his Plaud and the Unlimited plan. Goals (2026-10-23):
@@ -68,7 +70,11 @@ and signs in). The CLI can list and read recordings, with no delete or edit comm
 3. A name or address said in the transcript → suggestion only.
 4. Not sure: one line in the **morning brief**, inside the approval Gerrit already does ("The 2:10 PM
    recording: Smith or Jones?"). No new Telegram question.
-- **Depends on Calendar access** (still blocked in Google Admin, waiting on Delisa). F0 needs it too.
+- ~~Depends on Calendar access.~~ **Built 2026-10-24 without waiting on it:** the time and phone come first
+  from the "Appt on ..." emails that F0 already reads (`followups/state.json`), so this works today. When no
+  email fits, Val looks at Gerrit's Google Calendar through the website (`/api/assistant/appointments`, once
+  Gerrit connects it): an event whose time fits, with a phone (and a PROSPECT id, if there is one) in its
+  title, place or note.
 
 **What Val makes from each visit.** Val reads the **entire transcript** (not just Plaud's summary) and pulls
 out every action item herself. One `hermes chat --oneshot -t todo` run, as in `quo_pickup.py`: the
@@ -252,6 +258,66 @@ Each step ends with a check: 10 drafts before and after, and Gerrit's unedited-d
 ## Reps later (Phase 5)
 Each rep signs in to their own Plaud on their own Val's computer, so recordings never mix. Plaud Team is only
 needed if Gerrit wants to hear reps' recordings himself (F11 coaching).
+
+## Built 2026-10-24 (Parts 1–4)
+**New files**
+- `files/zingas_customer.py` (+ `test_zingas_customer.py`): the customer file. `resolve()` (phone, then email,
+  then the F0 follow-up list, then the website's Salesforce match; never a name), `key_for()`, `log()` (one
+  timeline entry, deduped by its ref, sorted by time, refreshes "Last 5 contacts"; phone numbers are masked in
+  the profile so a number said in passing never matches), `add_facts()` (tagged with source and date, no money
+  words, newest 12 per section), `set_sale_stage()`, `move_unmatched()`, `context()` (profile, last 15
+  contacts, newest visit summary, "last contact from the customer: N days ago").
+- `files/plaud_pickup.py` (+ `test_plaud_pickup.py`, `zingas-plaud.supervisor.conf`): `zingas-plaud run |
+  check | backfill | unmatched | match`. Every 2 minutes, 3 Val runs at most per look (new visits first, then
+  the backfill, oldest first). The first run lists the last 365 days; old recordings fill memory only (no
+  to-dos, drafts or brief notes). "Fresh" = started in the last 24 hours, or listed new and less than 7 days old.
+- `files/install-plaud.sh`: puts all of it on Val's computer from the laptop (backs up each old file first;
+  `DRY_RUN=1` shows what it would do). Not run yet.
+
+**The Plaud program (checked 2026-10-24, `@plaud-ai/cli` 0.3.15, pinned).** No JSON output except `summary
+--json`, so the code reads its text: `plaud recent --days N` (id, name, date, duration per row), `plaud file
+<id>` (`start_at`, `created_at`, `duration`, `transcript: available`), `plaud transcript <id> -o <file>`
+(`[MM:SS - MM:SS] Speaker: words`), `plaud summary <id> -o <file>`. Exit code 2 = the sign-in does not work.
+The sign-in is kept in `~/.plaud/tokens.json` (never in the backup). `plaud login` waits for a browser **on the
+same computer** (it listens on port 8199 for 2 minutes), so step P2 happens on Val's own screen. The program
+sends Plaud anonymous usage counts (PostHog); no customer data goes there from Val's code. The official MCP
+server was not needed.
+
+**Differences from the plan above**
+- Matching uses F0's appointment emails and the calendar through the website (see Part 2). Changed with
+  Gerrit 2026-10-24: **an educated guess, not a time window.** Gerrit's visits move (early when he runs
+  ahead, late when he runs behind), so Val sees every appointment that day (up to 8, closest first), each
+  with its time difference, a short look at the customer file, and whether another recording already
+  matched it, plus the day's other recordings. She gives a letter, a confidence and a reason. High files it;
+  medium files it when the scheduled time is within 3 hours; low goes to the morning brief as "Val's best
+  guess is X. Is that right?". Only when Val cannot answer at all does the old window count (75 minutes
+  before to 45 minutes after the recording's start, and only one appointment). An appointment with a phone
+  but no customer file yet is kept under `unmatched-<digits>` and moves to the Prospect ID when the number
+  is matched.
+- **Not work, nothing saved** (Gerrit 2026-10-24). Val first says whether the recording is a Zinga's customer
+  visit. When it is not (Gerrit's private life), the program saves nothing: no file, fact, to-do, text or
+  brief line; state.json keeps only the id with `not_visit`, without Plaud's title. A recording Val cannot
+  read and no appointment fits is not kept either (a problem line says it is still in the Plaud app).
+  Every Hermes session of a recording run is deleted after the answer (`hermes sessions delete`), because
+  Hermes keeps a copy of each prompt.
+- Unmatched recordings are kept in `plaud/unmatched/` (not under any customer). Their promises still become
+  to-dos (who = the name Val heard). Gerrit's answer to the morning-brief line is filed with
+  `zingas-plaud match <id> --prospect-id | --phone`.
+- Visit drafts go to quo-bridge as category `reply` (never auto-send). A draft with a price is dropped.
+- quo-bridge: **no change.** `/api/val/updates` already hands back every approved text with its phone, final
+  wording and send time; quo_pickup logs it. Sent F0 follow-ups are logged by `zingas_followups.py`, and
+  Gerrit's sent emails by `zingas_inbox.py` (Gmail `in:sent`).
+- Every task can carry `customer` (the Prospect ID). New source `visit`. `announce()` no longer checks quiet
+  hours; `zingas-todo add` announces. All other Val notes keep quiet hours (a broken Plaud sign-in is told
+  once in the day, and in the morning brief).
+- Heartbeat: while `/root/.hermes/plaud-login-broken` exists (made by zingas-plaud only after the sign-in had
+  worked once), the 10-minute ping reports a failure with "Plaud sign-in stopped", so healthchecks.io warns
+  Gerrit.
+- The brief gets a `--- VISITS` block: morning = recordings to match, facts that disagree, problems; evening =
+  notes to paste into Salesforce. Each line shows once.
+- `docs/CONNECTIONS.md` (shared with `app/`): no new route. `zingas-plaud` is one more caller of
+  `GET /api/assistant/appointments` (and of the customer route by phone, like zingas-quo). The "Caller" column
+  of both copies should say so; left for the session that owns the shared file.
 
 ## Verification
 1. `python3 files/test_zingas_customer.py`, `python3 files/test_plaud_pickup.py`, and the existing test files.

@@ -60,6 +60,8 @@ lets only the folders above into git. Keep it that way.
 | `files/zingas_backup.py` | `/usr/local/bin/zingas-backup` (nightly backup, run by supervisord) |
 | `files/zingas_followups.py` | `/usr/local/bin/zingas-followups` (F0 quote follow-ups, run by supervisord) |
 | `files/followup_wording.py` | `/usr/local/lib/zingas/followup_wording.py` (the fixed follow-up wordings) |
+| `files/zingas_customer.py` | `/usr/local/lib/zingas/zingas_customer.py` (one file per customer: profile, timeline, visits; used by every pickup) |
+| `files/plaud_pickup.py` | `/usr/local/bin/zingas-plaud` and `/usr/local/lib/zingas/` (Plaud visit recordings into customer memory and to-dos, run by supervisord). Installed by `files/install-plaud.sh` |
 | `files/zingas_os.py` | `/usr/local/lib/zingas/zingas_os.py` and `/usr/local/bin/zingas-os` (Val's line to the company website: customer lookup, Monday numbers, calendar, and the Follow-Up sheet with skill `followup-sheet`). Installed by `files/install-zingas-os.sh` |
 | `files/zingas_money.py` | `/usr/local/lib/zingas/zingas_money.py` and `/usr/local/bin/zingas-money` (Val's hourly cost count to the company website, run by supervisord). With `files/money_prices.json` (public prices only) in `/usr/local/lib/zingas/`. Installed by `files/install-zingas-money.sh` |
 
@@ -70,5 +72,5 @@ python3 -m unittest discover -s quo-bridge -v
 ```
 
 ```bash
-python3 -m unittest discover -s files -p "test_*.py"
+cd files && for t in test_*.py; do python3 -m unittest "${t%.py}" || exit 1; done
 ```
