@@ -22,8 +22,10 @@ How a new customer text becomes a card in Val Approvals:
   4. It says "got it" (/api/val/ack) only after the draft is handed over, so
      a crash means a retry, never a lost text.
 
-Outcomes (sent, skipped, edited) are saved to the vault for the weekly voice
-review: voice-edits/<YYYY-MM>.jsonl.
+Outcomes (sent, skipped, edited, or Gerrit texted them himself in the Quo app) are
+saved to the vault, voice-edits/<YYYY-MM>.jsonl. zingas-voice learns from every
+change Gerrit made, and each new draft gets those lessons plus the past edits most
+like this text (zingas_voice.prompt_block).
 
 The customer file (zingas_customer): every text in, every approved text out, every
 missed call, voicemail and call summary gets a line in the customer's timeline, and
@@ -58,6 +60,7 @@ sys.path.insert(0, "/usr/local/lib/zingas")
 sys.path.insert(1, os.path.dirname(os.path.abspath(__file__)))
 import zingas_customer as zc  # noqa: E402
 import zingas_todo as zt  # noqa: E402
+import zingas_voice as zv  # noqa: E402
 
 try:   # Val's read-only line to the company website (Salesforce records); optional
     import zingas_os  # noqa: E402
@@ -250,16 +253,8 @@ def valid_tz(name) -> str:
 
 
 def save_outcome(o: dict, vault: str = VAULT) -> None:
-    folder = os.path.join(vault, "voice-edits")
-    os.makedirs(folder, mode=0o700, exist_ok=True)
-    p = os.path.join(folder, datetime.now(timezone.utc).strftime("%Y-%m") + ".jsonl")
-    row = {k: o.get(k) for k in ("draft_id", "category", "status", "edited", "val_draft", "final_text",
-                                 "sent_at", "reasons")}
-    new = not os.path.exists(p)
-    with open(p, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
-    if new:
-        os.chmod(p, 0o600)
+    """Val's draft and what Gerrit sent, for zingas-voice to learn from (voice-edits/<YYYY-MM>.jsonl)."""
+    zv.save_pair(o, "text", vault)
 
 
 def _read(path: str, limit: int) -> str:
@@ -281,7 +276,7 @@ TEXT_FACTS = ('"facts": {"talk": ["how they write: short or long, emojis or not,
 
 def build_prompt(text: dict, note_path: Optional[str], vault: str = VAULT, skill_path: str = SKILL,
                  open_items: Optional[List[dict]] = None, todo_skill: str = zt.SKILL,
-                 website: str = "", customer: str = "") -> str:
+                 website: str = "", customer: str = "", voice: str = "") -> str:
     """customer: the customer file as zingas_customer.context() gives it. Without it, the start of the note."""
     thread = "\n".join(f"[{t['at'][:16]}] {'Customer' if t['from'] == 'customer' else 'Gerrit'}: {t['text']}"
                        for t in text.get("thread") or [])
@@ -299,6 +294,7 @@ def build_prompt(text: dict, note_path: Optional[str], vault: str = VAULT, skill
         "## Rules for this job\n" + (_read(skill_path, 6000) or "(quo-texting skill missing)"),
         "## Gerrit's voice\n" + (_read(os.path.join(vault, "VOICE.md"), 8000) or "(VOICE.md missing)"),
         "## Real examples of Gerrit's texts\n" + _read(os.path.join(vault, "voice-examples/gerrit-texts.md"), 6000),
+        voice or "## What Gerrit's edits taught you\nNothing yet.",
         "## The customer (their whole file: read it, so the draft sounds like a person who remembers them. "
         "Mirror how they talk. Never quote a visit recording or use a detail that would feel like "
         "surveillance.)\n<customer_note>\n" + (note or "No memory note matches this number. Treat them as "
@@ -391,7 +387,7 @@ class Pickup:
 
         for o in up.get("outcomes") or []:
             save_outcome(o, self.vault)
-            if o.get("status") == "sent" and o.get("phone"):
+            if o.get("status") in ("sent", "replaced", "own") and o.get("phone"):
                 self.todo.close_auto(o["phone"], "reply_sent")      # Gerrit's reply went out
                 self._log(zc.key_for(phone=o["phone"], vault=self.vault), "text_out", o.get("sent_at"),
                           o.get("final_text") or "", "quo-out:" + str(o.get("draft_id")), "Gerrit")
@@ -547,7 +543,8 @@ class Pickup:
             ans = parse_answer(self.ask_val(build_prompt(t, note, self.vault, self.skill_path, listed,
                                                          self.todo_skill,
                                                          zingas_os.customer_block(record) if zingas_os else "",
-                                                         customer=customer)))
+                                                         customer=customer,
+                                                         voice=zv.prompt_block(self.vault, "text", "", t["text"]))))
         except Exception as e:
             n = tries.get(t["id"], 0) + 1
             tries[t["id"]] = n

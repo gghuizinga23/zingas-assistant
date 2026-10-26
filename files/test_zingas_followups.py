@@ -307,10 +307,16 @@ class FollowupTests(unittest.TestCase):
         self.assertEqual(len(self.b.submitted), 1)         # once a day
         self.assertEqual(self.customer(f)["touches"]["48 hours"]["state"], "submitted")
         self.b.out = [{"draft_id": "f0", "customer_key": "pat.testerson@example.com", "touch": "48 hours",
-                       "status": "sent", "sent_at": z(self.now), "email_status": "sent"}]
+                       "status": "sent", "sent_at": z(self.now), "email_status": "sent", "edited": True,
+                       "val_draft": "Hi Pat, just checking in on the quote.",
+                       "final_text": "Hi Pat, any questions on the shades quote?", "phone": "+13175550142"}]
         self.now = at(2026, 10, 22, 18)
         f.step()
         self.assertEqual(self.b.acked, ["f0"])
+        import zingas_voice as zv                          # Gerrit's change to the follow-up: Val learns from it
+        pair = zv.read_pairs(self.tmp.name)[-1]
+        self.assertEqual((pair["id"], pair["kind"], pair["category"], pair["final_text"]),
+                         ("f0", "edited", "followup 48 hours", "Hi Pat, any questions on the shades quote?"))
         self.assertEqual(self.customer(f)["touches"]["48 hours"]["state"], "sent")
         self.assertIn("Follow-ups today: 1 sent", zf.brief_block(self.now, self.tmp.name))
         import zingas_customer as zc                       # the sent text is in the customer's timeline

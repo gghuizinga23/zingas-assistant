@@ -252,6 +252,32 @@ quote follow-up list never ran, and the only warning was a healthchecks.io email
 | A3 | **Put the sender on Val's computer:** `bash files/install-activity-log.sh`. It copies one program and its settings, starts it, and shows its first lines; no other program restarts and no keys are copied | Gerrit says go (or runs it), I check | 2 min |
 | A4 | Check: `bash files/val-log.sh` shows Val's check-ins and her program lines | Claude | 1 min |
 
+## Val learns from your edits (built 2026-10-26)
+Why: you asked that when you change a draft of Val's, she compares the two, learns what you did better and
+writes the next one like it. Now:
+
+- **What counts:** a text you edit (Telegram or the website), a follow-up text you edit, a Gmail draft of hers
+  you change before sending, and a text you type yourself in the Quo app. Skipped drafts don't count.
+- **Within 5 minutes** the program `zingas-voice` writes one short lesson ("Give a day, not soon"). A change
+  that only fixes a fact (a day, a name) goes in the customer's file, not in the lessons. The next text draft
+  gets the lessons plus the 3 to 5 past edits most like it; emails read the same lessons from the vault.
+- **You text a customer yourself in Quo while Val's draft waits:** her draft stops (the card says "you texted
+  them yourself"), so they never get two answers.
+- **Sunday 6 PM:** one Telegram message: how many drafts went out with no change (this week and last), what she
+  learned, and up to 5 lessons that keep coming back. Answer "rules 1 3" to make them permanent in VOICE.md.
+  Nothing becomes permanent without your yes.
+- **A wrong lesson:** tell Val in Telegram, or tap Remove on the website (Assistant > What Val learned, once
+  that page is built). It stops at once.
+- **Cost:** one small Val run per edited draft, cents a week.
+
+| Step | What to do | Who | Time |
+|---|---|---|---|
+| V1 | Say go to put branch `voice-lessons` on `main` (pushed to GitHub) | Gerrit says go, I do the rest | 1 min |
+| V2 | **Put the new quo-bridge online.** Make a Vercel token (vercel.com → Account Settings → **Tokens**, your Pro team, expires in 1 day). I start `files/quo-redeploy.sh` from a checkout of `main`; you paste the token into its hidden prompt. Code only, nobody gets a text | Gerrit makes and pastes the token, I do the rest | 5 min |
+| V3 | **Quo tells quo-bridge about texts you send yourself:** I start `files/quo-sent-setup.sh`; you paste the Quo key (1Password: Zingas Bridge → Bridge Secrets → `QUO_API_KEY`) and the same Vercel token. It makes Quo's three alerts again (new texts, calls, and now sent texts), saves their keys in Vercel, puts quo-bridge online, then removes the old alerts. Nobody gets a text. Then delete the token | Gerrit pastes the two keys, I do the rest | 5 min |
+| V4 | **Put zingas-voice on Val's computer:** `bash files/install-voice.sh`. It backs up the old files, copies the new ones, restarts the text pickup, inbox and follow-ups programs and starts zingas-voice | Gerrit says go (or runs it), I check | 3 min |
+| V5 | Learn from the edits already saved (`zingas-voice backfill`), read the lessons, check a draft prompt and print Sunday's message without sending it (`zingas-voice weekly --dry`) | Claude | 10 min |
+
 ## Money tracker (planned 2026-10-23; cost count built 2026-10-24)
 Val keeps a running total of everything you pay for: her own costs and your own AI and tool sign-ups. She
 counts her use every hour, reads the receipts herself, and checks her numbers against them each month. You

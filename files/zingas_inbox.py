@@ -14,6 +14,8 @@ look, in every label and folder. Then:
      on the quote follow-up list) gets a line in that customer's timeline, and Val
      reads the customer's file while she judges it. Gerrit's own sent emails to a
      known customer get a line too (zingas_customer, docs/VAL-BRAIN.md Part 1).
+  5. A sent email in the thread of a Gmail draft Val made is handed to zingas_voice,
+     which saves Val's draft beside what Gerrit sent, so Val learns from his changes.
 
 The first run only notes what is already there, so old mail never floods the list.
 It never prints email text to its log: counts and ids only.
@@ -40,6 +42,10 @@ sys.path.insert(0, "/usr/local/lib/zingas")
 sys.path.insert(1, os.path.dirname(os.path.abspath(__file__)))
 import zingas_customer as zc  # noqa: E402
 import zingas_todo as zt  # noqa: E402
+try:
+    import zingas_voice as zv  # noqa: E402
+except ImportError:      # an older install without it: the inbox still works
+    zv = None
 
 HERMES_HOME = os.environ.get("HERMES_HOME", "/root/.hermes")
 ENV = os.path.join(HERMES_HOME, ".env")
@@ -275,11 +281,13 @@ class Inbox:
         except GmailError as e:
             log(f"sent mail: {e}")
             return
+        new = []
         for m in msgs:
             mid = m.get("messageId")
             if not mid or mid in seen:
                 continue
             seen.add(mid)
+            new.append(m)
             st.setdefault("sent_seen", []).append(mid)
             subject = zc.one_line(m.get("subject"), 160) or "(no subject)"
             for address in {address_of(a) for a in zc.EMAIL_RE.findall(str(m.get("to") or ""))} - {""}:
@@ -291,6 +299,11 @@ class Inbox:
                                ref="gmail:" + mid, who="Gerrit", vault=self.vault)
                     except Exception as e:
                         log(f"customer file: {type(e).__name__}")
+        if new and zv is not None:
+            try:   # a sent email in the thread of a Gmail draft Val made: Val learns what Gerrit changed
+                zv.match_sent(new, self.gmail.body, self.vault)
+            except Exception as e:
+                log(f"voice edits: {type(e).__name__}")
         st["sent_seen"] = st.get("sent_seen", [])[-500:]
         st["sent_since"] = now
 

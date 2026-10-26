@@ -21,7 +21,8 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional
 
-FINISHED = ("sent", "skipped", "stopped", "blocked", "paused", "expired", "stopped_customer")
+FINISHED = ("sent", "skipped", "stopped", "blocked", "paused", "expired", "stopped_customer",
+            "replaced", "own")      # replaced/own: Gerrit texted the customer himself in the Quo app
 
 
 def utc_iso(dt: datetime) -> str:

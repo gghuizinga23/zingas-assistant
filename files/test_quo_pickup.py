@@ -144,7 +144,7 @@ class PickupTests(Setup):
         d = self.rig.store.drafts_by_status(["pending"])[0]
         self.assertEqual((d["time_zone"], d["category"]), ("America/Indiana/Indianapolis", "reply"))
 
-    def test_outcome_is_saved_for_the_voice_review(self):
+    def test_outcome_is_saved_and_the_next_draft_learns_from_it(self):
         self.rig.customer_texts("Thursday?")
         self.pickup.once()
         d = self.rig.store.drafts_by_status(["pending"])[0]
@@ -157,7 +157,12 @@ class PickupTests(Setup):
         self.assertEqual((row["status"], row["edited"]), ("sent", True))
         self.assertEqual(row["val_draft"], "Hi Pat! Thursday works. Thanks! Gerrit")
         self.assertEqual(row["final_text"], "Thursday at 2 is perfect! Gerrit")
+        self.assertEqual((row["channel"], row["kind"], row["customer_said"]), ("text", "edited", "Thursday?"))
         self.assertEqual(self.pickup.once()["outcomes"], 0)
+        self.rig.customer_texts("Could Thursday work for the install too?")       # the next draft sees his edit
+        self.pickup.once()
+        self.assertIn("Times Gerrit changed a draft like this one", self.prompts[-1])
+        self.assertIn("Gerrit changed it to: Thursday at 2 is perfect! Gerrit", self.prompts[-1])
 
     def test_bridge_down_means_try_again_later(self):
         self.rig.customer_texts("Hi")

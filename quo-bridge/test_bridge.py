@@ -180,6 +180,93 @@ class Calls(unittest.TestCase):
         self.assertEqual(len(r.val("GET", "/api/val/updates")[1]["calls"]), 1)
 
 
+class GerritsOwnTexts(unittest.TestCase):
+    """Gerrit answers a customer himself in the Quo app: Val's waiting draft stops, and Val learns from it."""
+
+    def sent_in_quo(self, r, text, msg_id="ACout1", phone=CUSTOMER, at=None):
+        """Quo's message.delivered as its docs show it (2026-03-30): no "to"; the customer is in
+        context.recipientIdentifiers."""
+        r._n += 1
+        ev = f"EVsent{r._n}"
+        raw = json.dumps({"id": ev, "type": "message.delivered", "data": {
+            "resource": {"id": msg_id, "direction": "outgoing", "text": text, "media": [], "status": "delivered",
+                         "createdAt": (at or r.clock()).isoformat()},
+            "context": {"phoneNumberId": "PNbiz", "userId": "USgerrit", "senderIdentifier": "+13175550100",
+                        "recipientIdentifiers": [phone]}}}).encode()
+        ts = int(r.clock().timestamp())
+        return r.call("POST", "/api/quo", raw, {"webhook-id": ev, "webhook-timestamp": str(ts),
+                                                "webhook-signature": sign_quo_body(raw, QUO_SECRET, ev, ts)})
+
+    def test_waiting_draft_is_replaced_and_never_sent(self):
+        r = Rig()
+        r.customer_texts("Do you have anything Thursday?")
+        r.clock.t += timedelta(minutes=5)
+        _, d = r.draft()
+        r.clock.t += timedelta(minutes=2)
+        code, got = self.sent_in_quo(r, "Thursday at 3 works, see you then")
+        self.assertEqual((code, got["replaced"]), (200, [d["id"]]))
+        self.assertEqual(r.status(d["id"]), "replaced")
+        self.assertIn("you texted them yourself", r.tg.edits[-1]["text"])
+        r.tap("a", d["id"])                                   # a late tap on the old card sends nothing
+        self.assertEqual(r.quo.sent, [])
+        out = r.val("GET", "/api/val/updates")[1]["outcomes"]
+        self.assertEqual([(o["status"], o["val_draft"], o["final_text"], o["customer_said"]) for o in out],
+                         [("replaced", "Hi! Thursday at 2 works great. 🙂", "Thursday at 3 works, see you then",
+                           "Do you have anything Thursday?")])
+
+    def test_own_text_with_no_draft_is_an_example(self):
+        r = Rig()
+        r.customer_texts("Thanks for coming out today")
+        r.clock.t += timedelta(minutes=10)
+        self.sent_in_quo(r, "Anytime! Talk soon")
+        out = r.val("GET", "/api/val/updates")[1]["outcomes"]
+        self.assertEqual([(o["status"], o["category"], o["final_text"], o["customer_said"]) for o in out],
+                         [("own", "gerrit_own", "Anytime! Talk soon", "Thanks for coming out today")])
+
+    def test_quo_bridges_own_send_and_repeats_are_ignored(self):
+        r = Rig()
+        r.customer_texts("Thursday?")
+        _, d = r.draft()
+        r.tap("a", d["id"])
+        self.assertEqual(len(r.quo.sent), 1)
+        got = self.sent_in_quo(r, "Hi! Thursday at 2 works great. 🙂", msg_id="ACnew")[1]
+        self.assertEqual(got, {"ignored": "sent by quo-bridge"})
+        self.assertEqual(r.status(d["id"]), "sent")
+        r.clock.t += timedelta(hours=1)
+        self.sent_in_quo(r, "One more thing", msg_id="ACx")
+        self.assertEqual(self.sent_in_quo(r, "One more thing", msg_id="ACx")[1], {"ignored": "already stored"})
+        self.assertEqual(self.sent_in_quo(r, "Hi! Thursday at 2 works great. 🙂", msg_id="AC0001")[1],
+                         {"ignored": "already stored"})
+
+    def test_quo_auto_reply_does_not_stop_a_draft(self):
+        r = Rig()
+        r.customer_texts("Hello?")
+        _, d = r.draft()
+        got = self.sent_in_quo(r, "Thanks for texting Zinga's! We'll reply soon.")[1]
+        self.assertTrue(got.get("auto_reply"))
+        self.assertEqual(r.status(d["id"]), "pending")
+
+    def test_draft_written_after_gerrits_text_stays(self):
+        r = Rig()
+        r.customer_texts("Hi")
+        r.clock.t += timedelta(minutes=5)
+        before = r.clock()
+        r.clock.t += timedelta(minutes=1)
+        _, d = r.draft()
+        self.sent_in_quo(r, "Hey, what's up?", at=before)
+        self.assertEqual(r.status(d["id"]), "pending")
+
+    def test_incoming_and_other_numbers_are_left_alone(self):
+        r = Rig()
+        r.customer_texts("Hi")
+        r.clock.t += timedelta(minutes=5)
+        _, d = r.draft()
+        self.sent_in_quo(r, "Wrong person", phone="+13175550777")
+        self.assertEqual(r.status(d["id"]), "pending")
+        got = r.quo_event("message.delivered", {"id": "ACz", "direction": "incoming", "text": "x"})[1]
+        self.assertEqual(got, {"ignored": "not an outgoing text"})
+
+
 class Locks(unittest.TestCase):
     def test_bad_quo_signature_is_refused_and_nothing_is_stored(self):
         r = Rig()

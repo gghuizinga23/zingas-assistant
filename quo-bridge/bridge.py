@@ -20,7 +20,7 @@ import re
 import secrets
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, List, Mapping, Optional, Tuple
 from zoneinfo import ZoneInfo
 
@@ -39,6 +39,9 @@ STOP_WORDS = {"STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT", "OPTOUT
 START_WORDS = {"START", "UNSTOP"}
 _CATEGORY_RE = re.compile(r"^[a-z_]{1,32}$")
 CALL_EVENTS = ("call.completed", "call.voicemail.completed", "call.summary.completed")
+SENT_EVENTS = ("message.delivered",)     # a text that left the business number (its own Quo alert)
+WAITING = ("pending", "editing", "held", "countdown", "failed")
+AUTO_REPLY_SECONDS = 60    # an "outgoing" text this soon after theirs is Quo's auto-reply, not Gerrit
 
 Response = Tuple[int, dict]
 
@@ -194,6 +197,8 @@ class Bridge(FollowupMixin):
             return 200, {"ignored": "not json"}
         if event.get("type") in CALL_EVENTS:
             return self._on_call(event)
+        if event.get("type") in SENT_EVENTS:
+            return self._on_sent(event)
         if event.get("type") != "message.received":
             return 200, {"ignored": event.get("type")}
         data = event.get("data") or {}
@@ -223,6 +228,66 @@ class Bridge(FollowupMixin):
             self._log("dnc_off", None, phone)
             self._tell_gerrit(f"✅ {pretty_phone(phone)} texted START. They can get texts again.")
         return 200, {"stored": True}
+
+    def _on_sent(self, event: dict) -> Response:
+        """A text that left the business number. quo-bridge's own sends are already stored, so any other is one
+        Gerrit typed himself in the Quo app. Two things happen:
+          - Val's waiting draft to that person stops (status "replaced"), so they never get two answers.
+          - Val's computer gets it as an outcome: with her draft beside it (she learns what Gerrit wrote
+            instead), or alone (status "own": one more example of how Gerrit writes)."""
+        data = event.get("data") or {}
+        res, ctx = data.get("resource") or {}, data.get("context") or {}
+        if not res.get("id") or res.get("direction") not in ("outgoing", "outbound"):
+            return 200, {"ignored": "not an outgoing text"}
+        # Quo's shape (docs 2026-03-30): the customer is in context.recipientIdentifiers, a list
+        listed = ctx.get("recipientIdentifiers") or []
+        listed = listed if isinstance(listed, list) else [listed]
+        to = res.get("to")
+        listed += (to if isinstance(to, list) else [to]) + list((ctx.get("participants") or {}).get("external") or [])
+        phone = next((p for p in (us_phone(x) for x in listed if x) if p), None)
+        text = str(res.get("text") or "").strip()[:MAX_TEXT]
+        if not phone or not text:
+            return 200, {"ignored": "no US number or no words"}
+        msg_id = str(res["id"])
+        if self.store.get_message(msg_id):
+            return 200, {"ignored": "already stored"}      # quo-bridge's own send, or the same alert again
+        when = parse_time(res.get("createdAt")) or self.now()
+        last = self.store.latest_outbound(phone)
+        if last and last["body"].strip() == text and abs((parse_time(last["created_at"]) or when) - when) < timedelta(minutes=10):
+            return 200, {"ignored": "sent by quo-bridge"}      # its own send, alert came before the id was saved
+        theirs = self.store.latest_inbound(phone)
+        stamp = utc_iso(when)
+        if not self.store.add_message({"id": msg_id, "phone": phone, "direction": "out", "body": text,
+                                       "created_at": stamp}):
+            return 200, {"duplicate": True}
+        their_time = parse_time(theirs["created_at"]) if theirs else None
+        if their_time and timedelta(0) <= when - their_time < timedelta(seconds=AUTO_REPLY_SECONDS):
+            self._log("auto_reply", None, phone)
+            return 200, {"stored": True, "auto_reply": True}
+        replaced = []
+        for d in self.store.drafts_by_status(WAITING):
+            if d["phone"] != phone or d.get("category") == "followup":
+                continue
+            if (parse_time(d["created_at"]) or when) > when:
+                continue            # Val wrote it after Gerrit's text: it answers something newer
+            got = self.store.claim_draft(d["id"], [d["status"]], {
+                "status": "replaced", "final_body": text, "edited": True, "sent_at": stamp, "send_after": None,
+                "reasons": "Gerrit texted them himself in the Quo app."})
+            if got:
+                replaced.append(got["id"])
+                self._edit_card(got, self._card_text(got, "✍️ Not sent: you texted them yourself in the Quo app."))
+                self._log("replaced", got["id"], "Gerrit texted in the Quo app")
+                stats = self._stats(got["category"])
+                stats.record_approval(edited=True)      # Val's words weren't used: the streak starts over
+                self._save_stats(stats)
+        if not replaced:
+            said = theirs["body"] if their_time and when - their_time < timedelta(days=3) else ""
+            self.store.insert_draft_if_new({
+                "id": "own-" + msg_id, "phone": phone, "time_zone": DEFAULT_TIME_ZONE, "category": "gerrit_own",
+                "body": "", "final_body": text, "edited": True, "customer_said": said[:2000], "status": "own",
+                "created_at": stamp, "sent_at": stamp, "reasons": "Gerrit texted them himself in the Quo app."})
+            self._log("own_text", "own-" + msg_id, phone)
+        return 200, {"stored": True, "replaced": replaced}
 
     def _on_call(self, event: dict) -> Response:
         """Calls and voicemails go on Val's to-do list. Only incoming calls from a US
@@ -275,7 +340,8 @@ class Bridge(FollowupMixin):
         outcomes = [{"draft_id": d["id"], "phone": d["phone"], "category": d["category"],
                      "status": d["status"], "val_draft": d["body"], "final_text": self._text_of(d),
                      "edited": bool(d.get("edited")), "sent_at": d.get("sent_at"),
-                     "reasons": d.get("reasons") or ""}
+                     "reasons": d.get("reasons") or "", "customer_said": d.get("customer_said") or "",
+                     "customer_name": d.get("customer_name") or "", "prospect_id": d.get("prospect_id") or ""}
                     for d in self.store.unreported_outcomes(20, exclude_category="followup")]
         calls = [{"id": c["id"], "phone": c["phone"], "kind": c["kind"], "text": c.get("body") or "",
                   "received_at": c["created_at"]} for c in self.store.unpicked_calls(20)]

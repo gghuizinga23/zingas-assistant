@@ -44,6 +44,10 @@ sys.path.insert(0, "/usr/local/lib/zingas")
 sys.path.insert(1, os.path.dirname(os.path.abspath(__file__)))
 import followup_wording as fw  # noqa: E402
 import zingas_todo as zt  # noqa: E402
+try:
+    import zingas_voice as zv  # noqa: E402
+except ImportError:      # an older install without it: follow-ups still work
+    zv = None
 
 try:   # the customer file (docs/VAL-BRAIN.md Part 1); a follow-up never waits on it
     import zingas_customer as zc  # noqa: E402
@@ -725,6 +729,12 @@ class Followups:
         got = self.bridge.outcomes()
         done = []
         for o in got:
+            if o.get("status") == "sent" and zv is not None:
+                try:   # Gerrit's change to a follow-up text teaches Val too (zingas-voice)
+                    zv.save_pair(dict(o, category="followup " + str(o.get("touch") or "")), "text",
+                                 os.path.dirname(self.p["dir"]))
+                except Exception as e:
+                    log(f"voice edits: {type(e).__name__}")
             c = self.st["customers"].get(o.get("customer_key") or "")
             t = c and c["touches"].get(o.get("touch") or "")
             done.append(o["draft_id"])

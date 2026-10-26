@@ -190,6 +190,20 @@ class InboxTests(unittest.TestCase):
         got = [(e["channel"], e["lines"]) for e in zc.timeline("P-100", self.vault)]
         self.assertEqual(got, [("Email out", ["Subject: Your quote", "Here is your quote. Gerrit"])])
 
+    def test_sent_email_after_vals_gmail_draft_is_saved_for_zingas_voice(self):
+        import zingas_voice as zv
+        self.inbox.once()
+        zv.note_drafted("r-1", "th-s1", "Hi Pat, here is your quote. Let me know.", self.vault)
+        self.gmail.sent_mail = [dict(email("s1", self.now + 10, subject="Your quote"), to="pat@example.com")]
+        self.gmail.bodies["s1"] = "Hi Pat, here's the quote. Free Thursday to go over it?\n\nOn Mon Pat wrote:\n> hi"
+        self.now += 120
+        self.inbox.once()
+        self.now += 120
+        self.inbox.once()
+        pairs = zv.read_pairs(self.vault)
+        self.assertEqual([(p["id"], p["channel"], p["kind"], p["final_text"]) for p in pairs],
+                         [("r-1", "email", "edited", "Hi Pat, here's the quote. Free Thursday to go over it?")])
+
 
 class Helpers(unittest.TestCase):
     def test_names_and_labels(self):

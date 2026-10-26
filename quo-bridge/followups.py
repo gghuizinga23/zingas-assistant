@@ -145,6 +145,7 @@ class FollowupMixin:
             "draft_id": d["id"], "customer_key": d.get("customer_key"), "touch": d.get("touch"),
             "status": d["status"], "sent_at": d.get("sent_at"), "reasons": d.get("reasons") or "",
             "edited": bool(d.get("edited")), "final_text": d.get("final_body") or d.get("body") or "",
+            "val_draft": d.get("body") or "", "phone": d.get("phone") or "", "customer_name": d.get("customer_name") or "",
             "email_status": d.get("email_status") or "", "email_error": d.get("email_error") or "",
         } for d in rows]}
 

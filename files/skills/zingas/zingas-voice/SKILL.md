@@ -1,7 +1,7 @@
 ---
 name: zingas-voice
 description: Write every customer text and email in Gerrit's own voice, and learn from Gerrit's edits.
-version: 0.1.0
+version: 0.2.0
 author: Zinga's Assistant
 metadata:
   hermes:
@@ -46,10 +46,25 @@ Emails are a little longer and can carry quote details from the Estimator summar
 ## Before you show a draft
 Check it against `VOICE.md` in the vault (`/root/Documents/ZingasVault/VOICE.md`). That file holds Gerrit's real phrases, sign-offs and the rules Gerrit added. It overrides this skill when they disagree, except the "never" rules in SOUL.md.
 
-Pull the 3 to 5 past replies most like this situation from the example bank (`/root/Documents/ZingasVault/voice-examples/`) and match their length and tone.
+Read `/root/Documents/ZingasVault/voice-lessons/LESSONS.md` before any customer draft. It lists what Gerrit's
+edits taught you, and the newest emails he changed. Follow those lessons. They win over the fixed examples.
 
-## Learning from edits
-- When Gerrit edits a draft before approving, quo-bridge saves the (draft, final) pair to `voice_edits`.
-- Every Sunday evening, read that week's pairs and suggest at most 5 changes to `VOICE.md`. Each one is a short rule plus the example that taught it. Send them to Gerrit in Telegram, one per message, so Gerrit can say yes or no to each.
+Pull the 3 to 5 past replies most like this situation and match their length and tone. When you have the
+terminal, run `zingas-voice examples --channel email --about "<what the customer wrote>"` (or `--channel text`):
+it gives the past drafts Gerrit changed that are most like this one, with Val's words, Gerrit's words and the
+lesson. Else use the example bank (`/root/Documents/ZingasVault/voice-examples/`).
+
+## Learning from edits (zingas-voice does this by itself)
+- Every time Gerrit sends something different from your draft (an edited text, an edited Gmail draft, or a
+  text he typed himself in the Quo app), the program `zingas-voice` saves both versions in `voice-edits/` and
+  writes one short lesson within 5 minutes. A change that only fixes a fact (a day, a name) goes in the
+  customer's file, not in the lessons.
+- Text drafts get the lessons and the most similar past edits by themselves. Do nothing for that.
+- Every Sunday at 6 PM, zingas-voice sends Gerrit one Telegram message: how many drafts went out with no
+  change, what you learned, and up to 5 lessons that keep coming back, offered as permanent rules.
+- When Gerrit answers that message with numbers ("rules 1 3", "yes to 2"), run `zingas-voice rule 1 3` with
+  his numbers and send him its answer. That puts them in `VOICE.md`. Never add them to VOICE.md by hand.
+- When Gerrit says a lesson is wrong, run `zingas-voice list`, find it, and run `zingas-voice remove L<n>`.
+  He can also tap Remove on the website (Assistant > What Val learned).
 - Change `VOICE.md` only after Gerrit says yes.
 - When Gerrit texts a rule directly ("never say 'reach out'"), add it to `VOICE.md` right away and confirm in one line.

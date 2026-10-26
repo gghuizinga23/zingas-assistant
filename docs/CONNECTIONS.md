@@ -32,6 +32,8 @@ and events also need the rep on `VAL_FOLLOWUP_USERS` (403 for anyone else; all f
 | `GET /api/assistant/issues?rep=` | Val's to-do sender (`zingas-todo watch`, `IssueSync`), every 2 minutes | The rep's blocked orders, as on the Issues tab (Gerrit, 2026-10-26: each one is a Today task, Now after 24 hours). Salesforce is read again at most every 2 minutes. Per order: id, customer, products, job number, `waitingOn`, `task`, turned in, days blocked, the last 5 comments, a link that opens it on the Issues tab. Never the balance due, never an amount. Shape below. | `src/app/api/assistant/issues/route.ts`, `src/modules/assistant/issues.ts`, `assistant/files/zingas_todo.py` (`IssueSync`) |
 | `GET` and `POST /api/assistant/todo/changes` (Val's key) | Val's to-do sender (`zingas-todo watch`), every 15 seconds | Gerrit's clicks on the To-do tab (Done, priority, due date, words, remove, undo). GET gives the ones Val hasn't made yet, oldest first; Val makes each on her list with plain code (the same rules as Telegram) and POSTs how each went. The page shows a click at once and, for an hour, any Val couldn't make. Table `assistant_todo_changes`. 200 calls per 10 minutes. The shape is below. | `src/app/api/assistant/todo/changes/route.ts`, `src/modules/assistant/todoStore.ts`, `assistant/files/zingas_todo.py` (`Changer`) |
 
+| `POST /api/assistant/lessons` (writes; Val's key) | Val's learning program (`zingas-voice run`, supervisord program `zingas-voice`), on every change and at least every 10 minutes | Saves what Val learned from Gerrit's edits, for the Assistant > What Val learned tab: this week's "sent with no change" numbers and every lesson in use (removed ones are left out) with the two versions that taught it. Each list replaces the last. Answers `{ok}`; nothing to read back. 60 posts per 10 minutes. The shape is below. | `src/app/api/assistant/lessons/route.ts`, `src/modules/assistant/lessons.ts`, `assistant/files/zingas_voice.py` |
+| `GET` and `POST /api/assistant/lessons/changes` (Val's key) | `zingas-voice run`, every 15 seconds | Gerrit's clicks on the What Val learned tab: Remove (a wrong lesson) and Make it a rule. Same pattern as the to-do clicks: GET gives the ones Val hasn't made yet, Val makes each with plain code and POSTs how each went. Table `assistant_voice_lesson_changes`. 200 calls per 10 minutes. The shape is below. | `src/app/api/assistant/lessons/changes/route.ts`, `src/modules/assistant/lessonsStore.ts`, `assistant/files/zingas_voice.py` (`Runner`) |
 The estimator's older routes for Val (`/api/estimator/assistant/*`, the signed webhook to quo-bridge) still
 work as documented in `docs/ESTIMATOR.md`.
 
@@ -218,6 +220,45 @@ POST <- { "results": [{ "id": "<uuid>", "ok": true, "message": "Priority changed
   `task` (new words, at most 160, amounts taken out).
 - A click is made once. If the POST fails, Val sends the same answer again on her next look; the website keeps
   the first answer. `message` shows to Gerrit when `ok` is false; it never holds a phone number or a price.
+
+## What Val learned from Gerrit's edits (`POST /api/assistant/lessons`)
+
+Added 2026-10-26 (assistant `files/zingas_voice.py`, `website_body`). Every time Gerrit sends something
+different from Val's draft (an edited text or follow-up, an edited Gmail draft, or a text he typed himself in the
+Quo app), Val saves both versions and writes one short lesson. Lessons go into her next drafts at once.
+
+```json
+{
+  "at": "2026-10-26T22:00:00+00:00",
+  "week": { "drafts": 12, "unchanged": 7, "last_drafts": 10, "last_unchanged": 4,
+            "by_channel": { "text": { "drafts": 9, "unchanged": 6 }, "email": { "drafts": 3, "unchanged": 1 } } },
+  "lessons": [{ "id": "L3", "date": "2026-10-26T18:04:00+00:00", "channel": "text", "category": "reply",
+                "kind": "edited", "customer_name": "Pat", "customer_said": "Do you have anything Thursday?",
+                "val_wrote": "Hi Pat, this is Gerrit Huizinga with Zinga's. Thursday could work soon.",
+                "gerrit_sent": "Hi Pat, Thursday at 2 works. See you then!",
+                "lesson": "Drop the intro line when the customer already knows Gerrit.",
+                "status": "active", "seen": 2, "proposed": true }]
+}
+```
+
+- `week`: the 7 days before `at` and the 7 before that. A draft counts when it was sent (unchanged or edited) or
+  Gerrit answered himself instead; skipped drafts don't count.
+- `lessons`: at most 500, newest first. `channel`: `text` or `email`. `kind`: `edited` (Gerrit changed Val's
+  draft) or `rewrote` (he answered himself instead). `status`: `active` or `rule` (Gerrit made it a permanent
+  rule in VOICE.md). `seen`: how many edits taught the same idea. `proposed`: offered as a rule (seen 2 or more
+  times; at most 5). `customer_name` is a first name only. Never a phone number or email address.
+- Text fields are at most 2,000 characters; `lesson` at most 200.
+
+Gerrit's clicks (`/api/assistant/lessons/changes`), the same shape as the to-do clicks:
+
+```json
+GET  -> { "changes": [{ "id": "<uuid>", "itemId": "L3", "action": "remove", "madeAt": "2026-10-26T18:01:00+00:00" }] }
+POST <- { "results": [{ "id": "<uuid>", "ok": true, "message": "Removed. Val will not use it again." }] }
+```
+
+- `action`: `remove` (the lesson is wrong: it stops at once and never comes back; a rule also leaves VOICE.md)
+  or `rule` (make it a permanent rule in VOICE.md). The next list Val sends no longer has a removed lesson.
+- A click is made once. If the POST fails, Val sends the same answer again on her next look.
 
 ## Blocked orders for Val (`GET /api/assistant/issues`)
 
