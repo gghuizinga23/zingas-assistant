@@ -274,6 +274,10 @@ POST <- { "results": [{ "id": "<uuid>", "ok": true, "message": "Removed. Val wil
                "link": "https://<site>/issues?open=a0X5e000001" }] }
 ```
 
+Only orders that wait on Gerrit: one waiting on the market manager's approval is left out (Gerrit, 2026-10-26), so
+its task is closed on Val's side like any order that leaves the list (`waitsOnGerrit` in
+`src/modules/assistant/issues.ts`).
+
 - Val's side (`IssueSync`, every 2 minutes): a new order is a task with source `issue`, priority `today` and a
   24-hour clock from when Val first saw it (`replyBy`; Now after that), and Gerrit is told at once. A new comment
   or a new `waitingOn` goes on the open task (a new task if Gerrit closed the old one). An order that leaves the
