@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """zingas-todo: Gerrit's running to-do list. Plain code, no AI of its own.
 
-Runs on Val's computer. Four things write to the list:
+Runs on Val's computer. Five things write to the list:
   - zingas-inbox (new emails), and zingas-quo (texts, missed calls, voicemails),
     which ask Val to judge each new thing and then add it here themselves;
   - zingas-plaud (visit recordings): every promise Gerrit made at a visit;
-  - Val, in Telegram, when Gerrit says "add ...", "done 3" or "move 4 to later".
+  - Val, in Telegram, when Gerrit says "add ...", "done 3" or "move 4 to later";
+  - the website's Issues tab: every blocked order of Gerrit's is a task (IssueSync, in `watch`).
 
 Every new task alerts Gerrit in Telegram right away, any hour, any day, with the whole
 re-sorted list (Gerrit's rule, 2026-10-23). All other Val messages keep quiet hours.
@@ -58,18 +59,21 @@ PRIORITIES = {
     "week": (2, "🟢", "This week"),
     "later": (3, "⚪", "Later"),
 }
-SOURCES = ("email", "text", "call", "voicemail", "visit", "gerrit", "val")
+SOURCES = ("email", "text", "call", "voicemail", "visit", "issue", "gerrit", "val")
 # Gerrit's hard rule (2026-10-21): every email, text, call and voicemail gets an
 # answer within 24 hours of coming in. Tasks from them carry a reply_by time and
 # never sit lower than "today".
 MESSAGE_SOURCES = ("email", "text", "call", "voicemail")
+# Gerrit's rule (2026-10-26): a blocked order on his Issues tab is a Today task, and it moves to Now when it isn't
+# done within 24 hours, the same as a message. Its clock starts when Val first sees the order.
+CLOCK_SOURCES = MESSAGE_SOURCES + ("issue",)
 REPLY_WITHIN = timedelta(hours=24)
 KEEP_CLOSED_DAYS = 30
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # Where a task came from, in Gerrit's words (his ask, 2026-10-26: every list says if it is from a text, an email,
 # an appointment or him). A visit is an appointment Plaud recorded.
 SOURCE_WORDS = {"email": "email", "text": "text", "call": "call", "voicemail": "voicemail",
-                "visit": "appointment", "gerrit": "you asked", "val": "Val added"}
+                "visit": "appointment", "issue": "issue", "gerrit": "you asked", "val": "Val added"}
 # Every message behind a task (his ask, 2026-10-26: open a task and see all the emails and texts it is about).
 MAX_SOURCES = 10
 SOURCE_TEXT = 600
@@ -223,7 +227,7 @@ class TodoList:
         priority = priority if priority in PRIORITIES else "today"
         source = source if source in SOURCES else "val"
         by = ""
-        if source in MESSAGE_SOURCES:
+        if source in CLOCK_SOURCES:
             by = reply_by(received)
             if PRIORITIES[priority][0] > PRIORITIES["today"][0]:
                 priority = "today"
@@ -375,7 +379,8 @@ def _reply_words(item: dict, at: Optional[datetime] = None) -> str:
         return "⚠️ past 24 hours"
     local, today = by.astimezone(TZ), at.astimezone(TZ).date()
     clock = local.strftime("%-I:%M%p").replace(":00", "").lower()
-    return "reply by " + (clock if local.date() == today else local.strftime("%a ") + clock)
+    word = "do by " if item.get("source") == "issue" else "reply by "
+    return word + (clock if local.date() == today else local.strftime("%a ") + clock)
 
 
 def _came_words(item: dict, today=None) -> str:
@@ -805,9 +810,124 @@ class Changer:
         return new, problem
 
 
+# ------------------------------------------------ blocked orders (the Issues tab)
+
+# Gerrit's ask (2026-10-26): everything on his Issues tab is on the to-do list, in Today, and moves to Now when it
+# isn't done within 24 hours. Val reads his blocked orders from the website every 2 minutes. Plain code, no AI.
+ISSUES_DOOR = "/api/assistant/issues"
+ISSUE_EVERY = timedelta(minutes=2)
+
+
+def fetch_issues(settings=_website_settings, timeout: float = 30):
+    """Gerrit's open blocked orders. Returns (issues, "") or (None, reason): None means "don't know", never "none"."""
+    answer, problem = _ask("GET", ISSUES_DOOR, None, settings, timeout)
+    if problem:
+        return None, problem
+    issues = answer.get("issues") if isinstance(answer, dict) else None
+    if not isinstance(issues, list):
+        return None, "the website sent no issues list"
+    return [i for i in issues if isinstance(i, dict) and i.get("id")], ""
+
+
+def _comment_key(c: dict) -> str:
+    return f"{c.get('date') or ''}|{c.get('text') or ''}"
+
+
+class IssueSync:
+    """Keeps the to-do list in step with the Issues tab:
+      - a new blocked order: a Today task with a 24-hour clock (Now after that), and Gerrit is told at once;
+      - a new comment from Customer Success: added to the task's messages (a new task if he closed the old one);
+      - what it waits on changes: the task's words change;
+      - the order leaves the Issues tab (it went through): the task is done.
+    What Val has seen is kept in todo/issues.json, so a restart adds nothing twice."""
+
+    def __init__(self, todo: "TodoList", fetch=fetch_issues, notify: Callable[[str], None] = tell_gerrit,
+                 clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)):
+        self.todo, self.fetch, self.notify, self.clock = todo, fetch, notify, clock
+        self.path = os.path.join(todo.folder, "issues.json")
+        self.last_at: Optional[datetime] = None
+
+    def _load(self) -> dict:
+        try:
+            with open(self.path, encoding="utf-8") as fh:
+                data = json.load(fh)
+            return data if isinstance(data, dict) and isinstance(data.get("seen"), dict) else {"seen": {}}
+        except (OSError, ValueError):
+            return {"seen": {}}
+
+    def _save(self, state: dict) -> None:
+        os.makedirs(self.todo.folder, mode=0o700, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=self.todo.folder, prefix=".issues-", suffix=".json")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(state, fh, ensure_ascii=False, indent=1)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, self.path)
+
+    def _add(self, issue: dict, now: datetime, said: str = "", subject: str = "") -> dict:
+        days = issue.get("daysBlocked")
+        waiting = clean(issue.get("waitingOn"), 60) or "blocked"
+        why = f"The order waits on {waiting.lower()}" + (f" ({days} days since it was turned in)." if days else ".")
+        return self.todo.add(clean(issue.get("task"), 160) or "Unblock the order", priority="today",
+                             who=clean(issue.get("customer"), 80), source="issue", ref="issue:" + str(issue["id"]),
+                             why=why, link=str(issue.get("link") or ""), auto_done="issue_cleared",
+                             received=now.isoformat(), subject=subject or f"Blocked order: {waiting}", said=said)
+
+    def step(self, force: bool = False) -> Tuple[List[dict], str]:
+        """One look (at most every ISSUE_EVERY). Returns (tasks added, "" or the reason it failed)."""
+        now = self.clock()
+        if not force and self.last_at and now - self.last_at < ISSUE_EVERY:
+            return [], ""
+        self.last_at = now
+        issues, problem = self.fetch()
+        if issues is None:
+            return [], problem
+        state, added = self._load(), []
+        seen = state["seen"]
+        for issue in issues:
+            iid, ref = str(issue["id"]), "issue:" + str(issue["id"])
+            comments = [c for c in issue.get("comments") or [] if isinstance(c, dict)]
+            keys = [_comment_key(c) for c in comments]
+            newest = comments[0] if comments else {}
+            said = clean(f"{newest.get('date', '')} {newest.get('text', '')}", SOURCE_TEXT)
+            mine = self.todo.open_for(ref)
+            if iid not in seen:
+                added.append(self._add(issue, now, said=said))
+                seen[iid] = {"comments": keys[:20], "waitingOn": issue.get("waitingOn") or ""}
+                continue
+            was = seen[iid]
+            fresh = [c for c, k in zip(comments, keys) if k not in set(was.get("comments") or [])]
+            moved = (issue.get("waitingOn") or "") != (was.get("waitingOn") or "")
+            if fresh or moved:
+                note = clean("; ".join(f"{c.get('date', '')} {c.get('text', '')}".strip() for c in fresh), SOURCE_TEXT)
+                subject = f"Now waiting on {issue.get('waitingOn')}" if moved else "New comment from Customer Success"
+                if mine:
+                    self.todo.update_id(mine[0]["id"], task=issue.get("task") if moved else None,
+                                        source=make_source("issue", now, "Customer Success", subject, note,
+                                                           str(issue.get("link") or "")))
+                else:   # Gerrit closed the task, and the order needs him again
+                    added.append(self._add(issue, now, said=note or said, subject=subject))
+            was["comments"] = (keys + [k for k in was.get("comments") or [] if k not in keys])[:20]
+            was["waitingOn"] = issue.get("waitingOn") or ""
+        gone = set(seen) - {str(i["id"]) for i in issues}
+        for iid in gone:   # the order went through (or left the Issues tab): its task is done
+            self.todo.close_auto("issue:" + iid, "issue_cleared")
+            seen.pop(iid, None)
+        self._save(state)
+        announce(added, self.todo, self.notify)
+        return added, ""
+
+
 def watch(todo: "TodoList") -> None:   # pragma: no cover (a loop; Changer.step and Poster.step are tested)
-    poster, changer = Poster(todo), Changer(todo)
+    poster, changer, issues = Poster(todo), Changer(todo), IssueSync(todo)
     while True:
+        try:
+            added, problem = issues.step()
+            if added:
+                print(f"{stamp()} added {len(added)} blocked order(s) from the Issues tab", flush=True)
+            if problem:
+                print(f"{stamp()} issues: {problem}", file=sys.stderr, flush=True)
+        except Exception as e:   # the list still goes out when the issues can't be read
+            print(f"{stamp()} issues error: {type(e).__name__}", file=sys.stderr, flush=True)
         try:
             made, problem = changer.step()
             if made:

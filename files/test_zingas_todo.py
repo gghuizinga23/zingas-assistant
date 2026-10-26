@@ -512,5 +512,118 @@ class SourcesTests(unittest.TestCase):
         self.assertNotIn("ref", row)
 
 
+class IssueSyncTests(unittest.TestCase):
+    """Gerrit's ask (2026-10-26): the Issues tab's blocked orders are Today tasks, Now after 24 hours, kept live."""
+
+    def setUp(self):
+        self.todo = zt.TodoList(tempfile.mkdtemp())
+        self.now = datetime(2026, 10, 26, 21, 0, tzinfo=zt.timezone.utc)
+        self.issues, self.sent, self.fail = [self.issue()], [], False
+        self.sync = zt.IssueSync(self.todo, fetch=self.fetch, notify=self.sent.append, clock=lambda: self.now)
+
+    def issue(self, iid="s1", waiting="Order info", task="Send Customer Success the order info", comments=None):
+        return {"id": iid, "customer": "Bruhn, Tim", "waitingOn": waiting, "task": task, "daysBlocked": 6,
+                "comments": comments if comments is not None else [{"date": "10/25/26", "text": "Need the color; KJC"}],
+                "link": f"https://os.example.com/issues?open={iid}"}
+
+    def fetch(self):
+        return (None, "no answer from the website (URLError)") if self.fail else (list(self.issues), "")
+
+    def look(self):
+        return self.sync.step(force=True)
+
+    def test_a_blocked_order_is_a_today_task_with_a_24_hour_clock_and_gerrit_is_told(self):
+        added, problem = self.look()
+        self.assertEqual(problem, "")
+        item = self.todo.open_items()[0]
+        self.assertEqual([a["id"] for a in added], [item["id"]])
+        self.assertEqual((item["task"], item["who"], item["source"], item["priority"], item["ref"]),
+                         ("Send Customer Success the order info", "Bruhn, Tim", "issue", "today", "issue:s1"))
+        self.assertEqual(item["reply_by"], "2026-10-27T21:00:00+00:00")
+        self.assertEqual(item["sources"][0]["text"], "10/25/26 Need the color; KJC")
+        self.assertEqual(item["link"], "https://os.example.com/issues?open=s1")
+        self.assertIn("📝 New task on your to-do list:", self.sent[0])
+        self.assertIn("(issue today", self.sent[0])
+        # Not done within 24 hours: Now.
+        self.assertEqual(zt.shown_priority(item, at=self.now + zt.timedelta(hours=25)), "now")
+        self.assertIn("do by", zt._reply_words(item, at=self.now))
+
+    def test_nothing_twice_even_after_a_restart(self):
+        self.look()
+        self.now += zt.timedelta(minutes=5)
+        again = zt.IssueSync(self.todo, fetch=self.fetch, notify=self.sent.append, clock=lambda: self.now)
+        self.assertEqual(again.step()[0], [])
+        self.assertEqual(len(self.todo.open_items()), 1)
+        self.assertEqual(len(self.sent), 1)
+
+    def test_a_new_comment_and_a_new_blocker_go_on_the_same_task(self):
+        self.look()
+        self.issues = [self.issue(waiting="Accounting hold", task="Clear the accounting hold on the order",
+                                  comments=[{"date": "10/26/26", "text": "Card declined; KJC"},
+                                            {"date": "10/25/26", "text": "Need the color; KJC"}])]
+        self.now += zt.timedelta(minutes=3)
+        self.assertEqual(self.look()[0], [])
+        item = self.todo.open_items()[0]
+        self.assertEqual(item["task"], "Clear the accounting hold on the order")
+        self.assertEqual([(s["subject"], s["text"]) for s in item["sources"]][-1],
+                         ("Now waiting on Accounting hold", "10/26/26 Card declined; KJC"))
+        self.assertEqual(len(self.sent), 1)    # a change isn't a new task: no new alert
+
+    def test_a_new_comment_after_gerrit_closed_it_is_a_new_task(self):
+        self.look()
+        self.todo.close([1])
+        self.issues = [self.issue(comments=[{"date": "10/27/26", "text": "Still need the color; KJC"},
+                                            {"date": "10/25/26", "text": "Need the color; KJC"}])]
+        self.now += zt.timedelta(days=1)
+        added, _ = self.look()
+        self.assertEqual(len(added), 1)
+        self.assertEqual(added[0]["sources"][0]["text"], "10/27/26 Still need the color; KJC")
+        self.assertEqual(added[0]["reply_by"], "2026-10-28T21:00:00+00:00")   # a new 24 hours
+
+    def test_closing_the_task_alone_never_adds_it_back(self):
+        self.look()
+        self.todo.close([1])
+        self.now += zt.timedelta(minutes=3)
+        self.assertEqual(self.look()[0], [])
+        self.assertEqual(self.todo.open_items(), [])
+
+    def test_an_order_that_went_through_is_done(self):
+        self.issues = [self.issue("s1"), self.issue("s2")]
+        self.look()
+        self.issues = [self.issue("s2")]
+        self.now += zt.timedelta(minutes=3)
+        self.look()
+        self.assertEqual([i["ref"] for i in self.todo.open_items()], ["issue:s2"])
+        done = [i for i in self.todo.all_items() if i["status"] == "done"]
+        self.assertEqual([i["ref"] for i in done], ["issue:s1"])
+
+    def test_no_answer_changes_nothing(self):
+        self.look()
+        self.fail, self.issues = True, []
+        self.now += zt.timedelta(minutes=3)
+        added, problem = self.look()
+        self.assertEqual((added, problem), ([], "no answer from the website (URLError)"))
+        self.assertEqual(len(self.todo.open_items()), 1)    # never closed because the website was down
+
+    def test_it_looks_at_most_every_two_minutes(self):
+        calls = []
+        sync = zt.IssueSync(self.todo, fetch=lambda: calls.append(1) or ([], ""), notify=self.sent.append,
+                            clock=lambda: self.now)
+        sync.step()
+        sync.step()
+        self.now += zt.timedelta(minutes=2)
+        sync.step()
+        self.assertEqual(len(calls), 2)
+
+    def test_the_door_answer_is_checked(self):
+        settings = lambda: ("https://os.example.com", "key")
+        with mock.patch.object(zt, "_ask", return_value=({"issues": [{"id": "s1"}, {"x": 1}, "bad"]}, "")):
+            self.assertEqual(zt.fetch_issues(settings), ([{"id": "s1"}], ""))
+        with mock.patch.object(zt, "_ask", return_value=({"nope": 1}, "")):
+            self.assertEqual(zt.fetch_issues(settings)[0], None)
+        with mock.patch.object(zt, "_ask", return_value=(None, "the website answered 502")):
+            self.assertEqual(zt.fetch_issues(settings), (None, "the website answered 502"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -29,6 +29,7 @@ and events also need the rep on `VAL_FOLLOWUP_USERS` (403 for anyone else; all f
 | `GET /api/assistant/events?after=<id>&types=&limit=100` | Val | What happened since `after` (her own place, the last id she handled), oldest first: `{events, last}`. She may read `followup_rep_changed`, `customer_stopped_texts`, `proposal_viewed`, `proposal_signed`, `order_stage_changed`; asking for anything else is a 400. Follow-up events come only for her reps on `VAL_FOLLOWUP_USERS`. | `src/app/api/assistant/events/route.ts`, `src/core/events/store.ts` |
 | `POST /api/assistant/upcoming` (writes; Val's key) | Val's follow-ups program (`zingas_followups.py`), about every 15 minutes and right after the day's list is made or sent | Saves the follow-ups the coming weekday lists will hold (14 days ahead), for the Assistant > Drafts tab's "Coming up". Each list replaces the last, so a reply, a sale or a new estimate shows on the next one. Sends nothing: each follow-up still reaches Telegram on its day and needs Gerrit's tap. Answers `{ok, drafts}`; nothing to read back. 30 posts per 10 minutes. The shape is below. | `src/app/api/assistant/upcoming/route.ts`, `src/modules/assistant/upcoming.ts` |
 | `POST /api/assistant/todo` (writes; Val's key) | Val's to-do sender (`zingas-todo watch`, supervisord program `zingas-todo-post`), on every change to the list and at least every 10 minutes | Saves Gerrit's open to-do list for the Assistant > To-do tab. Each list replaces the last. The page moves a message with no answer past 24 hours to Now itself (Gerrit's rule, 2026-10-26), the same as Val. Answers `{ok, items}`; nothing to read back. 120 posts per 10 minutes. The shape is below. | `src/app/api/assistant/todo/route.ts`, `src/modules/assistant/todo.ts` |
+| `GET /api/assistant/issues?rep=` | Val's to-do sender (`zingas-todo watch`, `IssueSync`), every 2 minutes | The rep's blocked orders, as on the Issues tab (Gerrit, 2026-10-26: each one is a Today task, Now after 24 hours). Salesforce is read again at most every 2 minutes. Per order: id, customer, products, job number, `waitingOn`, `task`, turned in, days blocked, the last 5 comments, a link that opens it on the Issues tab. Never the balance due, never an amount. Shape below. | `src/app/api/assistant/issues/route.ts`, `src/modules/assistant/issues.ts`, `assistant/files/zingas_todo.py` (`IssueSync`) |
 | `GET` and `POST /api/assistant/todo/changes` (Val's key) | Val's to-do sender (`zingas-todo watch`), every 15 seconds | Gerrit's clicks on the To-do tab (Done, priority, due date, words, remove, undo). GET gives the ones Val hasn't made yet, oldest first; Val makes each on her list with plain code (the same rules as Telegram) and POSTs how each went. The page shows a click at once and, for an hour, any Val couldn't make. Table `assistant_todo_changes`. 200 calls per 10 minutes. The shape is below. | `src/app/api/assistant/todo/changes/route.ts`, `src/modules/assistant/todoStore.ts`, `assistant/files/zingas_todo.py` (`Changer`) |
 
 The estimator's older routes for Val (`/api/estimator/assistant/*`, the signed webhook to quo-bridge) still
@@ -189,8 +190,8 @@ when unsure), for 30 seconds before trying again.
 ```
 
 - `items`: the open tasks, at most 500. `priority`: `now`, `today`, `week`, `later` (the one Val saved).
-  `source`: `email`, `text`, `call`, `voicemail`, `visit`, `gerrit`, `val`. `replyBy`: messages only, 24 hours
-  after it came in. `due`: `YYYY-MM-DD` or null. `link`: https only (the newest email's).
+  `source`: `email`, `text`, `call`, `voicemail`, `visit`, `issue`, `gerrit`, `val`. `replyBy`: messages and
+  blocked orders only, 24 hours after it came in (an order: after Val first saw it). `due`: `YYYY-MM-DD` or null. `link`: https only (the newest email's).
 - `receivedAt`: when the task came in (its first message, visit or ask). `sources` (2026-10-26): every message
   behind the task, oldest first, at most 10: `kind` (a `source` word), `at`, `from`, `subject` (emails; "Visit on
   Oct 23" for a visit), `text` (at most 600 characters: the email's start, the text, the voicemail, the visit
@@ -213,6 +214,22 @@ POST <- { "results": [{ "id": "<uuid>", "ok": true, "message": "Priority changed
   `task` (new words, at most 160, amounts taken out).
 - A click is made once. If the POST fails, Val sends the same answer again on her next look; the website keeps
   the first answer. `message` shows to Gerrit when `ok` is false; it never holds a phone number or a price.
+
+## Blocked orders for Val (`GET /api/assistant/issues`)
+
+```json
+{ "rep": "Gerrit Huizinga", "syncedAt": "2026-10-26T21:00:00.000Z",
+  "issues": [{ "id": "a0X5e000001", "customer": "Bruhn, Tim", "products": ["Pergolas"], "jobNumber": "3536",
+               "waitingOn": "Order info", "task": "Send Customer Success the order info",
+               "turnedInOn": "2026-10-20", "daysBlocked": 6,
+               "comments": [{ "date": "10/25/26", "text": "Need the fabric color; KJC" }],
+               "link": "https://<site>/issues?open=a0X5e000001" }] }
+```
+
+- Val's side (`IssueSync`, every 2 minutes): a new order is a task with source `issue`, priority `today` and a
+  24-hour clock from when Val first saw it (`replyBy`; Now after that), and Gerrit is told at once. A new comment
+  or a new `waitingOn` goes on the open task (a new task if Gerrit closed the old one). An order that leaves the
+  list is done. An error or no answer changes nothing. What Val has seen: `todo/issues.json` in her vault.
 
 ## Val's coming follow-ups (`POST /api/assistant/upcoming`)
 
