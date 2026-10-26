@@ -13,7 +13,8 @@
   POST /api/val/followups/pause     a customer wrote back: hold their follow-ups
   POST /api/val/followups/contacts  last text in/out and do-not-contact, for a list of phones
   Zinga's OS (the company website), only with ZINGAS_OS_TOKEN:
-  GET  /api/os/drafts    drafts waiting on Gerrit, read-only, last 4 digits of the phone only
+  GET  /api/os/drafts    drafts waiting on Gerrit, last 4 digits of the phone only
+  POST /api/os/drafts/action  Gerrit's button on the website's Drafts tab: edit, approve, send now, skip
 
 Optional: with ZINGAS_OS_URL and ZINGAS_OS_TOKEN both set, every do-not-contact
 check also asks the website's shared list, and a STOP adds the number to it
@@ -96,7 +97,7 @@ def make_app(get_bridge):
                   ("POST", "/api/val/drafts"), ("POST", "/api/telegram"), ("GET", "/api/tick"),
                   ("POST", "/api/val/followups"), ("GET", "/api/val/followups/outcomes"),
                   ("POST", "/api/val/followups/pause"), ("POST", "/api/val/followups/contacts"),
-                  ("GET", "/api/os/drafts"), ("POST", "/api/val/activity")}
+                  ("GET", "/api/os/drafts"), ("POST", "/api/os/drafts/action"), ("POST", "/api/val/activity")}
         if (method, path) not in routes:
             known = {p for _, p in routes}
             return _reply(start_response, 405 if path in known else 404, {"error": "no such door"})
@@ -125,10 +126,20 @@ def make_app(get_bridge):
                 if not bearer_ok(headers, bridge.cfg.cron_secret):
                     return _reply(start_response, 401, {"error": "bad code"})
                 status, body = bridge.tick()
-            elif path == "/api/os/drafts":   # the website's read-only door
+            elif path == "/api/os/drafts":   # the website's door: what is waiting
                 if not bearer_ok(headers, bridge.cfg.os_token):
                     return _reply(start_response, 401, {"error": "bad code"})
                 status, body = 200, drafts_for_os(bridge.store)
+            elif path == "/api/os/drafts/action":   # Gerrit's button on the website (it checks who he is)
+                if not bearer_ok(headers, bridge.cfg.os_token):
+                    return _reply(start_response, 401, {"error": "bad code"})
+                try:
+                    payload = json.loads(raw or b"{}")
+                except ValueError:
+                    return _reply(start_response, 400, {"error": "not json"})
+                if not isinstance(payload, dict):
+                    return _reply(start_response, 400, {"error": "send a JSON object"})
+                status, body = bridge.os_action(payload)
             else:   # Val's doors
                 if not bearer_ok(headers, bridge.cfg.val_token):
                     return _reply(start_response, 401, {"error": "bad code"})

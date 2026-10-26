@@ -34,6 +34,7 @@ from store import parse_time, utc_iso
 DEFAULT_TIME_ZONE = "America/Indiana/Indianapolis"
 MAX_PENDING = 30           # if Val's code leaked, the worst case is this many cards
 MAX_TEXT = 1600            # Quo's limit for one text
+BUSY = "Someone already did an action on this draft."
 STOP_WORDS = {"STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT", "OPTOUT", "REVOKE"}
 START_WORDS = {"START", "UNSTOP"}
 _CATEGORY_RE = re.compile(r"^[a-z_]{1,32}$")
@@ -449,45 +450,8 @@ class Bridge(FollowupMixin):
         if not d:
             self._answer(cq, "I cannot find that draft.")
             return
-        if action == "a":
-            claimed = self.store.claim_draft(draft_id, ["pending", "failed"],
-                                             {"status": "approving", "approved_at": d.get("approved_at") or self._stamp()})
-            if not claimed:
-                self._answer(cq, "Someone already did an action on this draft.")
-                return
-            if d["category"] == "followup":
-                self._answer(cq, self._approve_followup(claimed))
-                return
-            if not d.get("approved_at"):   # count each draft once toward auto-send
-                stats = self._stats(d["category"])
-                stats.record_approval(edited=bool(d.get("edited")))
-                self._save_stats(stats)
-            self._answer(cq, self._send_now(claimed, approved=True))
-        elif action == "n":
-            claimed = self.store.claim_draft(draft_id, ["held"], {"status": "approving"})
-            if not claimed:
-                self._answer(cq, "Someone already did an action on this draft.")
-                return
-            self._log("send_now", draft_id, "Gerrit tapped Send now outside 8am to 8pm.")
-            self._answer(cq, self._send_now(claimed, approved=True, send_now=True))
-        elif action == "s":
-            claimed = self.store.claim_draft(draft_id, ["pending", "editing", "held", "failed"], {"status": "skipped"})
-            if claimed:
-                self._edit_card(claimed, self._card_text(claimed, "✖️ Skipped. Nothing was sent."))
-                self._log("skipped", draft_id, "")
-                if claimed["category"] == "followup":
-                    self._render_batch(claimed.get("batch_id"))
-            self._answer(cq, "Skipped." if claimed else "Someone already did an action on this draft.")
-        elif action == "x":
-            claimed = self.store.claim_draft(draft_id, ["countdown"], {"status": "stopped"})
-            if claimed:
-                stats = self._stats(d["category"])
-                stats.record_complaint()
-                self._save_stats(stats)
-                self._edit_card(claimed, self._card_text(claimed, "🛑 Stopped. Nothing was sent. "
-                                                                   "This kind of text needs your OK again."))
-                self._log("stopped", draft_id, "")
-            self._answer(cq, "Stopped." if claimed else "You are too late. The text went out, or someone already did an action on it.")
+        if action in ("a", "n", "s", "x"):
+            self._answer(cq, self._act(action, draft_id, d))
         elif action == "e":
             if d["category"] == "followup" and not d["phone"]:
                 self._answer(cq, "This one is email only. To change it, tap Remove and write it yourself.")
@@ -503,6 +467,95 @@ class Bridge(FollowupMixin):
             self._answer(cq, "Type the new text.")
         else:
             self._answer(cq, "?")
+
+    def _act(self, action: str, draft_id: str, d: dict) -> str:
+        """Approve (a), Send now (n), Skip (s) or Stop (x) on one draft: the same for a tap in Telegram and a
+        button on the website's Drafts tab. Returns the short answer for Gerrit."""
+        if action == "a":
+            claimed = self.store.claim_draft(draft_id, ["pending", "failed"],
+                                             {"status": "approving", "approved_at": d.get("approved_at") or self._stamp()})
+            if not claimed:
+                return BUSY
+            if d["category"] == "followup":
+                return self._approve_followup(claimed)
+            if not d.get("approved_at"):   # count each draft once toward auto-send
+                stats = self._stats(d["category"])
+                stats.record_approval(edited=bool(d.get("edited")))
+                self._save_stats(stats)
+            return self._send_now(claimed, approved=True)
+        if action == "n":
+            claimed = self.store.claim_draft(draft_id, ["held"], {"status": "approving"})
+            if not claimed:
+                return BUSY
+            self._log("send_now", draft_id, "Gerrit tapped Send now outside 8am to 8pm.")
+            return self._send_now(claimed, approved=True, send_now=True)
+        if action == "s":
+            claimed = self.store.claim_draft(draft_id, ["pending", "editing", "held", "failed"], {"status": "skipped"})
+            if not claimed:
+                return BUSY
+            self._edit_card(claimed, self._card_text(claimed, "✖️ Skipped. Nothing was sent."))
+            self._log("skipped", draft_id, "")
+            if claimed["category"] == "followup":
+                self._render_batch(claimed.get("batch_id"))
+            return "Skipped."
+        if action == "x":
+            claimed = self.store.claim_draft(draft_id, ["countdown"], {"status": "stopped"})
+            if not claimed:
+                return "You are too late. The text went out, or someone already did an action on it."
+            stats = self._stats(d["category"])
+            stats.record_complaint()
+            self._save_stats(stats)
+            self._edit_card(claimed, self._card_text(claimed, "🛑 Stopped. Nothing was sent. "
+                                                               "This kind of text needs your OK again."))
+            self._log("stopped", draft_id, "")
+            return "Stopped."
+        return "?"
+
+    # ------------------------------------------- 3b. Gerrit's buttons on the website
+
+    def os_action(self, payload: dict) -> Response:
+        """A button on the website's Drafts tab (Assistant > Drafts). The website lets only the people its
+        ASSISTANT_USERS setting names press them (Gerrit), and calls with its own ZINGAS_OS_TOKEN.
+        Approve here is Gerrit's approval, the same as his tap in Telegram: the send gate (quiet hours,
+        do-not-contact, 8am hold) runs exactly the same, and the Telegram card shows what happened.
+          {"id": "...", "action": "edit", "text": "..."}       save new words; it still needs approval
+          {"id": "...", "action": "approve", "text": "..."}    approve and send (text optional: edit first)
+          {"id": "...", "action": "send_now"}                  a held text, now
+          {"id": "...", "action": "skip"}                      never send it"""
+        draft_id = str(payload.get("id") or "").strip()
+        action = payload.get("action")
+        if not draft_id or action not in ("edit", "approve", "send_now", "skip"):
+            return 400, {"error": "send an id and an action: edit, approve, send_now or skip"}
+        d = self.store.get_draft(draft_id)
+        if not d:
+            return 404, {"error": "I cannot find that draft."}
+        text = payload.get("text")
+        if text is not None and not isinstance(text, str):
+            return 400, {"error": "text must be words"}
+        new_words = text is not None and text.strip() != self._text_of(d).strip()
+        if action == "edit" or (action == "approve" and new_words):
+            if d["category"] == "followup" and not d.get("phone"):
+                return 409, {"error": "This one is email only. To change it, skip it and write it yourself."}
+            words = (text or "").strip()
+            if not words or len(words) > MAX_TEXT:
+                return 400, {"error": f"The text must be 1 to {MAX_TEXT} characters."}
+            if new_words:
+                claimed = self.store.claim_draft(draft_id, ["pending", "failed", "editing"],
+                                                 {"status": "pending", "final_body": words, "edited": True,
+                                                  "error": None})
+                if not claimed:
+                    return 409, {"ok": False, "status": d.get("status"), "message": BUSY}
+                self._edit_card(claimed, self._card_text(claimed, "✏️ Edited on the website."),
+                                self._buttons(claimed))
+                self._log("edited", draft_id, "on the website")
+                d = claimed
+            if action == "edit":
+                return 200, {"ok": True, "status": d.get("status"), "message": "Saved. It still needs your approval."}
+        self._log("website", draft_id, action)
+        message = self._act({"approve": "a", "send_now": "n", "skip": "s"}[action], draft_id, d)
+        fresh = self.store.get_draft(draft_id) or {}
+        ok = message != BUSY
+        return (200 if ok else 409), {"ok": ok, "status": fresh.get("status"), "message": message}
 
     def _on_message(self, msg: dict) -> None:
         if int((msg.get("from") or {}).get("id") or 0) != self.cfg.approver_id:

@@ -14,7 +14,7 @@ import app as wsgi
 import os_link
 from os_link import OsLink, SharedDncStore
 from store import MemoryStore, SupabaseStore
-from test_bridge import CUSTOMER, Rig
+from test_bridge import CUSTOMER, TUE_9PM, Rig
 
 OS_URL = "https://zingas-os.example.com"
 OS_TOKEN = "os-token-123"
@@ -215,12 +215,109 @@ class DraftsDoor(unittest.TestCase):
         self.assertEqual([x["id"] for x in body["drafts"]], [d["id"]])          # sent ones aren't listed
         row = body["drafts"][0]
         self.assertEqual(set(row), {"id", "customer_name", "phone_last4", "category", "body", "customer_said",
-                                    "status", "reasons", "created_at", "send_after"})
+                                    "status", "reasons", "created_at", "send_after", "edited", "can_edit"})
+        self.assertEqual((row["edited"], row["can_edit"]), (False, True))
         self.assertEqual(row["phone_last4"], "0123")
         self.assertEqual(row["body"], "Thursday at 2 works!")
         self.assertEqual(row["customer_said"], "Can you come Thursday?")
         self.assertEqual(row["status"], "pending")
         self.assertNotIn("5550123", json.dumps(body))
+
+
+class WebsiteButtons(unittest.TestCase):
+    """Gerrit's buttons on the website's Drafts tab: POST /api/os/drafts/action."""
+
+    def rig(self, **kw):
+        r = Rig(**kw)
+        r.bridge.cfg.os_token = OS_TOKEN
+        return r
+
+    def press(self, r, body, token=OS_TOKEN):
+        return r.call("POST", "/api/os/drafts/action", body, {"Authorization": "Bearer " + token})
+
+    def waiting(self, r):
+        r.customer_texts("Can you come Thursday?")
+        return r.draft()[1]["id"]
+
+    def test_needs_the_website_code(self):
+        r = self.rig()
+        d = self.waiting(r)
+        self.assertEqual(r.call("POST", "/api/os/drafts/action", {"id": d, "action": "approve"})[0], 401)
+        self.assertEqual(r.val("POST", "/api/os/drafts/action", {"id": d, "action": "approve"})[0], 401)
+        self.assertEqual(self.press(Rig(), {"id": d, "action": "approve"}, token="")[0], 401)   # no token set
+        self.assertEqual(r.quo.sent, [])
+
+    def test_approve_sends_like_a_telegram_tap(self):
+        r = self.rig()
+        d = self.waiting(r)
+        status, body = self.press(r, {"id": d, "action": "approve"})
+        self.assertEqual((status, body["ok"], body["status"], body["message"]), (200, True, "sent", "Sent."))
+        self.assertEqual(r.quo.sent, [(CUSTOMER, "Hi! Thursday at 2 works great. 🙂")])
+        self.assertIn("✅ Sent", r.tg.edits[-1]["text"])                 # the Telegram card shows it too
+        self.assertEqual(self.press(r, {"id": d, "action": "approve"})[0], 409)   # never twice
+        self.assertEqual(len(r.quo.sent), 1)
+
+    def test_edit_saves_the_words_and_still_waits(self):
+        r = self.rig()
+        d = self.waiting(r)
+        status, body = self.press(r, {"id": d, "action": "edit", "text": "  Thursday at 2 is perfect!  "})
+        self.assertEqual((status, body["status"]), (200, "pending"))
+        self.assertEqual(r.quo.sent, [])
+        saved = r.store.get_draft(d)
+        self.assertEqual((saved["final_body"], saved["edited"]), ("Thursday at 2 is perfect!", True))
+        self.assertIn("Thursday at 2 is perfect!", r.tg.edits[-1]["text"])
+        self.press(r, {"id": d, "action": "approve"})
+        self.assertEqual(r.quo.sent, [(CUSTOMER, "Thursday at 2 is perfect!")])
+
+    def test_approve_with_new_words_sends_the_new_words(self):
+        r = self.rig()
+        d = self.waiting(r)
+        self.press(r, {"id": d, "action": "approve", "text": "See you Thursday at 2!"})
+        self.assertEqual(r.quo.sent, [(CUSTOMER, "See you Thursday at 2!")])
+
+    def test_quiet_hours_still_hold_the_text(self):
+        r = self.rig(now=TUE_9PM)
+        d = self.waiting(r)
+        status, body = self.press(r, {"id": d, "action": "approve"})
+        self.assertEqual((status, body["status"]), (200, "held"))
+        self.assertEqual(r.quo.sent, [])
+        status, body = self.press(r, {"id": d, "action": "send_now"})    # Gerrit's own "send it now"
+        self.assertEqual(body["status"], "sent")
+        self.assertEqual(len(r.quo.sent), 1)
+
+    def test_do_not_contact_still_blocks(self):
+        r = self.rig()
+        d = self.waiting(r)
+        r.store.set_dnc(CUSTOMER, True, "2026-10-20T15:00:00+00:00")
+        _, body = self.press(r, {"id": d, "action": "approve"})
+        self.assertEqual(body["status"], "blocked")
+        self.assertEqual(r.quo.sent, [])
+
+    def test_skip(self):
+        r = self.rig()
+        d = self.waiting(r)
+        _, body = self.press(r, {"id": d, "action": "skip"})
+        self.assertEqual((body["status"], body["message"]), ("skipped", "Skipped."))
+        self.assertEqual(self.press(r, {"id": d, "action": "approve"})[0], 409)
+        self.assertEqual(r.quo.sent, [])
+
+    def test_bad_requests(self):
+        r = self.rig()
+        d = self.waiting(r)
+        self.assertEqual(self.press(r, {"id": d, "action": "launch"})[0], 400)
+        self.assertEqual(self.press(r, {"action": "approve"})[0], 400)
+        self.assertEqual(self.press(r, {"id": "nope", "action": "approve"})[0], 404)
+        self.assertEqual(self.press(r, {"id": d, "action": "edit", "text": ""})[0], 400)
+        self.assertEqual(self.press(r, {"id": d, "action": "edit", "text": "x" * 1601})[0], 400)
+        self.assertEqual(self.press(r, {"id": d, "action": "edit", "text": 5})[0], 400)
+        self.assertEqual(r.store.get_draft(d)["status"], "pending")
+        self.assertEqual(r.quo.sent, [])
+
+    def test_telegram_taps_still_work(self):
+        r = self.rig()
+        d = self.waiting(r)
+        r.tap("a", d)
+        self.assertEqual(len(r.quo.sent), 1)
 
 
 REQUIRED_ENV = {k: "x" for k in wsgi.REQUIRED}

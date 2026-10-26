@@ -13,8 +13,9 @@ The rule is "never text when unsure": if the website can't be reached, answers
 with an error, or answers with something we can't read, the number counts as
 do-not-contact.
 
-drafts_for_os() is what the website's read-only door (GET /api/os/drafts)
-shows: the drafts waiting on Gerrit, without full phone numbers.
+drafts_for_os() is what the website's door (GET /api/os/drafts) shows: the
+drafts waiting on Gerrit, without full phone numbers. Gerrit's buttons there
+come back through POST /api/os/drafts/action (Bridge.os_action).
 
 Standard library only, like the rest of quo-bridge.
 """
@@ -163,5 +164,8 @@ def drafts_for_os(store, limit: int = 100) -> dict:
             "reasons": d.get("reasons") or "",
             "created_at": d.get("created_at"),
             "send_after": d.get("send_after"),
+            "edited": bool(d.get("edited")),
+            # A follow-up with no phone is email only: its words can't be changed from the website.
+            "can_edit": bool(phone),
         })
     return {"drafts": out}
