@@ -86,6 +86,12 @@ if os.path.exists(f"{SRC}/zingas_followups.py"):
     print("quote follow-ups installed; they only make lists until f0-setup.sh turns them on "
           "(starts after: supervisorctl reread && supervisorctl update)")
 
+if os.path.exists(f"{SRC}/zingas_activity.py"):
+    shutil.copy2(f"{SRC}/zingas_activity.py", "/usr/local/bin/zingas-activity")
+    os.chmod("/usr/local/bin/zingas-activity", 0o755)
+    shutil.copy2(f"{SRC}/zingas-activity.supervisor.conf", "/etc/supervisor/conf.d/zingas-activity.conf")
+    print("activity log sender installed (starts after: supervisorctl reread && supervisorctl update)")
+
 if os.path.exists(f"{SRC}/quo_pickup.py"):
     shutil.copy2(f"{SRC}/quo_pickup.py", "/usr/local/bin/zingas-quo")
     os.chmod("/usr/local/bin/zingas-quo", 0o755)

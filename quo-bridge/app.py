@@ -96,7 +96,7 @@ def make_app(get_bridge):
                   ("POST", "/api/val/drafts"), ("POST", "/api/telegram"), ("GET", "/api/tick"),
                   ("POST", "/api/val/followups"), ("GET", "/api/val/followups/outcomes"),
                   ("POST", "/api/val/followups/pause"), ("POST", "/api/val/followups/contacts"),
-                  ("GET", "/api/os/drafts")}
+                  ("GET", "/api/os/drafts"), ("POST", "/api/val/activity")}
         if (method, path) not in routes:
             known = {p for _, p in routes}
             return _reply(start_response, 405 if path in known else 404, {"error": "no such door"})
@@ -146,7 +146,8 @@ def make_app(get_bridge):
                     handler = {"/api/val/ack": bridge.val_ack, "/api/val/drafts": bridge.val_draft,
                                "/api/val/followups": bridge.val_followups,
                                "/api/val/followups/pause": bridge.val_followup_pause,
-                               "/api/val/followups/contacts": bridge.val_followup_contacts}[path]
+                               "/api/val/followups/contacts": bridge.val_followup_contacts,
+                               "/api/val/activity": bridge.val_activity}[path]
                     status, body = handler(payload)
         except Exception:
             # The trace names files and lines, never settings values.

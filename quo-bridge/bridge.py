@@ -4,7 +4,7 @@ Four ways in, each with its own lock:
   - Quo's text and call alerts (signed by Quo)    -> handle_quo()
   - Val's computer, with the drafts-only code       -> val_updates(), val_ack(), val_draft()
   - Gerrit's taps in the Val Approvals bot          -> handle_telegram()
-  - Vercel's every-minute timer (CRON_SECRET)       -> tick()
+  - Vercel's every-minute timer (CRON_SECRET)       -> tick()   (also the watchdog: activity.watch)
 
 Val's code can only hand over drafts and pick up new texts. Every send goes
 through send_gate.decide() first, and only an Approve tap from Gerrit's own
@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from typing import Callable, Dict, List, Mapping, Optional, Tuple
 from zoneinfo import ZoneInfo
 
+import activity
 import cost_count
 import send_gate
 from clients import QuoError, TelegramError, verify_quo_signature
@@ -257,6 +258,10 @@ class Bridge(FollowupMixin):
         return 200, ({"stored": True} if new else {"duplicate": True})
 
     # ------------------------------------------------------- 2. Val's computer
+
+    def val_activity(self, payload: dict) -> Response:
+        """Val's activity log: her programs' log lines and her 10-minute check-in (activity.py)."""
+        return activity.receive(self.store, payload, self.now())
 
     def val_updates(self) -> Response:
         texts = []
@@ -606,5 +611,9 @@ class Bridge(FollowupMixin):
                         self.store.update_draft(d["id"], {"escalated_at": None})
                     self._log("escalate_failed", None, str(e))
         done["followups_expired"] = self._fu_tick()
+        try:   # the watchdog must never stop the timer's other work
+            done["watchdog"] = activity.watch(self.store, self.quo, self.cfg.gerrit_cell, now)
+        except Exception as e:
+            print(f"watchdog failed: {type(e).__name__}", file=sys.stderr)
         done["cost_count"] = cost_count.hourly(self.store, self.cost, now)   # last: it never raises
         return 200, done

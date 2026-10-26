@@ -76,7 +76,7 @@ class QuoClient(clients.QuoClient):
 ORGO = sys.argv[1] if len(sys.argv) > 1 else "orgo"
 COMPUTER = sys.argv[2] if len(sys.argv) > 2 else "Hermes Agent"
 NAME = "zingas-quo-bridge"
-DEPLOY_FILES = ("app.py", "bridge.py", "clients.py", "cost_count.py", "followups.py", "os_link.py", "store.py",
+DEPLOY_FILES = ("activity.py", "app.py", "bridge.py", "clients.py", "cost_count.py", "followups.py", "os_link.py", "store.py",
                 "send_gate.py", "pyproject.toml", "vercel.json")
 VAL_FILES = {   # laptop file -> place on Val's computer
     "quo_pickup.py": "/usr/local/bin/zingas-quo",

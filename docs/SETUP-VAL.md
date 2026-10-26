@@ -219,6 +219,30 @@ Val's programs. Then the keys come back from 1Password: `files/save-op-token.sh`
 
 **Cost:** free under 10 GB. Every backup is kept for now (about 1 GB a year at today's size).
 
+## Activity log and watchdog (built 2026-10-26)
+Why: on Sunday 10/25 at 5:34 AM Orgo's prepaid credits ran out and Orgo froze Val's computer. Monday's first
+quote follow-up list never ran, and the only warning was a healthchecks.io email. Now:
+
+- **Activity log.** A small program on Val's computer, `zingas-activity`, sends quo-bridge every minute the new
+  lines from her programs' logs (follow-ups, backup, inbox, money, text pickup, Plaud; never her chat logs),
+  "list made for <day>" when the follow-up list is made, "brief made" for each brief, and every 10 minutes a
+  check-in saying which programs run. quo-bridge keeps it in its events table, next to its own rows (cards
+  posted, texts sent). **To see it:** `bash files/val-log.sh` (today), `bash files/val-log.sh 3` (3 days),
+  `bash files/val-log.sh 1 followups` (one program). Read only.
+- **Watchdog.** quo-bridge's every-minute timer runs on Vercel, so it works when Val's computer is off. It texts
+  your cell from the Quo number when: no check-in for 30 minutes ("Val is down", then "Val is back"); a program
+  has been stopped 30+ minutes; or on a weekday no follow-up list by 8:10 AM. Texts wait for 7 AM to 10 PM. It
+  says nothing until the first check-in arrives. The healthchecks.io email stays as a second warning.
+- **Orgo credits:** Val costs about $1.20 a day (1 cent every 12 minutes). Turn on automatic top-up in Orgo if
+  it offers one; `~/.orgo-cli/bin/orgo billing balance` shows what is left.
+
+| Step | What to do | Who | Time |
+|---|---|---|---|
+| A1 | Say go to put branch `val-activity-log` on `main` (pushed to GitHub) | Gerrit says go, I do the rest | 1 min |
+| A2 | **Put the new quo-bridge online.** Make a Vercel token (vercel.com → Account Settings → **Tokens**, your Pro team, expires in 1 day). I start `files/quo-redeploy.sh`; you paste the token into its hidden prompt. Code only: no settings or keys change, nobody gets a text. Then delete the token | Gerrit makes and pastes the token, I do the rest | 5 min |
+| A3 | **Put the sender on Val's computer:** `bash files/install-activity-log.sh`. It copies one program and its settings, starts it, and shows its first lines; no other program restarts and no keys are copied | Gerrit says go (or runs it), I check | 2 min |
+| A4 | Check: `bash files/val-log.sh` shows Val's check-ins and her program lines | Claude | 1 min |
+
 ## Money tracker (planned 2026-10-23; cost count built 2026-10-24)
 Val keeps a running total of everything you pay for: her own costs and your own AI and tool sign-ups. She
 counts her use every hour, reads the receipts herself, and checks her numbers against them each month. You

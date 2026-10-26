@@ -198,6 +198,17 @@ class MemoryStore:
     def last_event_at(self, kind: str) -> Optional[str]:
         return max((e["at"] for e in self.events if e["kind"] == kind), default=None)
 
+    def log_many(self, rows: List[dict]) -> None:
+        self.events.extend(dict(r) for r in rows)
+
+    def last_event(self, kind: str, detail_prefix: str = "") -> Optional[dict]:
+        rows = [(parse_time(e["at"]), n, e) for n, e in enumerate(self.events)
+                if e["kind"] == kind and (e.get("detail") or "").startswith(detail_prefix)]
+        if not rows:
+            return None
+        e = max(rows, key=lambda r: r[:2])[2]     # newest; of two at the same moment, the one written last
+        return {"at": e["at"], "detail": e.get("detail")}
+
     # cost count (cost_count.py)
     def sent_drafts_since(self, since: str) -> List[dict]:
         rows = [{k: d.get(k) for k in ("phone", "body", "final_body", "sent_at")} for d in self.drafts.values()
@@ -399,6 +410,18 @@ class SupabaseStore:
     def last_event_at(self, kind: str) -> Optional[str]:
         rows = self._call("GET", f"events?kind=eq.{_q(kind)}&select=at&order=at.desc&limit=1")
         return rows[0]["at"] if rows else None
+
+    def log_many(self, rows: List[dict]) -> None:
+        self._call("POST", "events", [{"at": r["at"], "kind": r["kind"], "draft_id": r.get("draft_id"),
+                                       "detail": (r.get("detail") or "")[:2000]} for r in rows],
+                   prefer="return=minimal")
+
+    def last_event(self, kind: str, detail_prefix: str = "") -> Optional[dict]:
+        like = ""
+        if detail_prefix:   # PostgREST's like: * is any text. Characters LIKE treats specially match any one.
+            like = "&detail=like." + _q(re.sub(r"[%_*\\]", "_", detail_prefix) + "*")
+        rows = self._call("GET", f"events?kind=eq.{_q(kind)}{like}&select=at,detail&order=at.desc&limit=1")
+        return rows[0] if rows else None
 
     # cost count (cost_count.py): only what a count needs, never names
     def sent_drafts_since(self, since: str, page: int = 1000) -> List[dict]:
