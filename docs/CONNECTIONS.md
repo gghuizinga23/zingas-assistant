@@ -31,9 +31,9 @@ and events also need the rep on `VAL_FOLLOWUP_USERS` (403 for anyone else; all f
 | `POST /api/assistant/todo` (writes; Val's key) | Val's to-do sender (`zingas-todo watch`, supervisord program `zingas-todo-post`), on every change to the list and at least every 10 minutes | Saves Gerrit's open to-do list for the Assistant > To-do tab. Each list replaces the last. The page moves a message with no answer past 24 hours to Now itself (Gerrit's rule, 2026-10-26), the same as Val. Answers `{ok, items}`; nothing to read back. 120 posts per 10 minutes. The shape is below. | `src/app/api/assistant/todo/route.ts`, `src/modules/assistant/todo.ts` |
 | `GET /api/assistant/issues?rep=` | Val's to-do sender (`zingas-todo watch`, `IssueSync`), every 2 minutes | The rep's blocked orders, as on the Issues tab (Gerrit, 2026-10-26: each one is a Today task, Now after 24 hours). Salesforce is read again at most every 2 minutes. Per order: id, customer, products, job number, `waitingOn`, `task`, turned in, days blocked, the last 5 comments, a link that opens it on the Issues tab. Never the balance due, never an amount. Shape below. | `src/app/api/assistant/issues/route.ts`, `src/modules/assistant/issues.ts`, `assistant/files/zingas_todo.py` (`IssueSync`) |
 | `GET` and `POST /api/assistant/todo/changes` (Val's key) | Val's to-do sender (`zingas-todo watch`), every 15 seconds | Gerrit's clicks on the To-do tab (Done, priority, due date, words, remove, undo). GET gives the ones Val hasn't made yet, oldest first; Val makes each on her list with plain code (the same rules as Telegram) and POSTs how each went. The page shows a click at once and, for an hour, any Val couldn't make. Table `assistant_todo_changes`. 200 calls per 10 minutes. The shape is below. | `src/app/api/assistant/todo/changes/route.ts`, `src/modules/assistant/todoStore.ts`, `assistant/files/zingas_todo.py` (`Changer`) |
-
-| `POST /api/assistant/lessons` (writes; Val's key) | Val's learning program (`zingas-voice run`, supervisord program `zingas-voice`), on every change and at least every 10 minutes | Saves what Val learned from Gerrit's edits, for the Assistant > What Val learned tab: this week's "sent with no change" numbers and every lesson in use (removed ones are left out) with the two versions that taught it. Each list replaces the last. Answers `{ok}`; nothing to read back. 60 posts per 10 minutes. The shape is below. | `src/app/api/assistant/lessons/route.ts`, `src/modules/assistant/lessons.ts`, `assistant/files/zingas_voice.py` |
+| `POST /api/assistant/lessons` (writes; Val's key) | Val's learning program (`zingas-voice run`, supervisord program `zingas-voice`), on every change and at least every 10 minutes | Saves what Val learned from Gerrit's edits, for the Assistant > What Val learned tab: this week's "sent with no change" numbers and every lesson in use (removed ones are left out) with the two versions that taught it. Each list replaces the last. Answers `{ok, lessons}`; nothing to read back. 503 until its tables are made. 60 posts per 10 minutes. The shape is below. | `src/app/api/assistant/lessons/route.ts`, `src/modules/assistant/lessons.ts`, `assistant/files/zingas_voice.py` |
 | `GET` and `POST /api/assistant/lessons/changes` (Val's key) | `zingas-voice run`, every 15 seconds | Gerrit's clicks on the What Val learned tab: Remove (a wrong lesson) and Make it a rule. Same pattern as the to-do clicks: GET gives the ones Val hasn't made yet, Val makes each with plain code and POSTs how each went. Table `assistant_voice_lesson_changes`. 200 calls per 10 minutes. The shape is below. | `src/app/api/assistant/lessons/changes/route.ts`, `src/modules/assistant/lessonsStore.ts`, `assistant/files/zingas_voice.py` (`Runner`) |
+
 The estimator's older routes for Val (`/api/estimator/assistant/*`, the signed webhook to quo-bridge) still
 work as documented in `docs/ESTIMATOR.md`.
 
@@ -143,10 +143,13 @@ The website keeps "something happened" notes in `os_events` (`src/core/events/st
 `proposal_viewed`, `proposal_signed`, `order_stage_changed`, `customer_stopped_texts`, `fleet_issue_reported`,
 `followup_rep_changed`. Val reads them through `GET /api/assistant/events` (above); never `fleet_issue_reported`.
 
-`followup_rep_changed`: a person changed the follow-up date or note on the sheet, or undid one of Val's changes,
-on a customer Val keeps follow-ups for. `data`: `{appointmentId, rep, by, fields: ["follow_up_date" |
-"followup_note" | ...], action: "edit" | "undo"}`; `prospect_id` is the customer's. Val should re-read that
-customer (worklist) before doing anything else for them.
+`followup_rep_changed`: a person changed the follow-up date or note on the sheet, undid one of Val's changes, or
+pressed a button on the Follow-Up page run by Val, on a customer Val keeps follow-ups for. `data`: `{appointmentId,
+rep, by, fields: ["follow_up_date" | "followup_note" | "driver" | "paused_until" | "stage" | ...], action: "edit" |
+"undo" | "mine" | "val" | "snooze" | "date" | "sold" | "lost" | "update"}`; `prospect_id` is the customer's.
+`mine` is "I've got this", `val` is "Val, take it back", `update` is "Tell Val what happened" (the rep's words are
+the newest entry on the follow-up note, never in the event). Val should re-read that customer (worklist) before
+doing anything else for them.
 
 ## quo-bridge's door for the website
 
