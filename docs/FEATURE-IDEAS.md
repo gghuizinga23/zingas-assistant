@@ -55,3 +55,10 @@ numbers: jobs Val touched and jobs Val revived, valued at the sale amount plus t
 Later: cost per rep, a cheaper-model check and a year-end tax export. It all shows in a new Assistant tab in
 the Sales Dashboard (Gerrit only), with Val's work, the follow-up pipeline, voice and trust, and health.
 Details and build steps C1–C7 are in `docs/PLAN.md`, "Money: costs and ROI" (Build order step 5).
+
+**Added 2026-10-26 (Gerrit's idea): temp shades by Amazon (F12).**
+A customer who asks for temporary shades (in the visit, or by text or email) gets them ordered from a
+dedicated Zinga's Amazon account with its own virtual card and shipped straight to their home. Val confirms
+where to ship (never guessed) and how many from the window sizes (never on sliding doors), and every order
+waits for Gerrit's tap. Once a month she emails payments@ the list of orders and invoices for reimbursement.
+Details in `docs/PLAN.md`, "F12: Temp shades by Amazon" (Build order step 9b).

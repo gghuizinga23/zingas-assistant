@@ -172,7 +172,10 @@ Highest priority first. Each step comes after what it needs. **Gerrit:** marks h
 7. **Val's brain B1–B3.** B3 needs Calendar.
 8. **F2 missed-call text-back.** Ahead of F1: it needs only Calendar, it is small, and a missed call is a
    lead lost that day.
-9. **Estimator read access** (Phase 1.5). F1, F8 and B4 need it.
+9. **Estimator read access** (Phase 1.5). F1, F8, F12 and B4 need it.
+   9b. **F12 temp shades by Amazon** (added 2026-10-26, see "F12" below). Needs the quote's window sizes from
+   step 9. Gerrit: the Amazon account, the virtual card, the login in Val's vault, the product link and its
+   size, and what payments@ needs (F12, "Gerrit's steps").
 10. **F1 know the customer**, with the read-only customer lookup.
 11. **B4** Salesforce and Estimator facts (needs F1 and step 9).
 12. **F3 end-of-day wrap-up**, rethought: Val reads results herself and never asks Sold / Lost.
@@ -295,6 +298,79 @@ key that can send email.
 **Overlap with F8:** F0 covers the schedule. F8 still adds the hot-lead alerts ("opened the proposal 3
 times") and a fresh reason in each touch.
 
+## F12: Temp shades by Amazon (added 2026-10-26, Build order step 9b)
+Some customers ask for temporary shades to cover their windows until the install. Val orders them from a
+dedicated Zinga's Amazon account, paid with a dedicated virtual card, and ships them straight to the
+customer. Once a month she sends payments@ one email listing every order so Gerrit gets reimbursed.
+**Not started.**
+
+**When Val starts one (Gerrit, 2026-10-26):** as soon as she learns a customer wants temp shades:
+- the visit recording (Plaud memory) has the customer asking for them, or Gerrit offering them;
+- the customer texts or emails asking for them;
+- Gerrit tells Val in Telegram.
+
+Each becomes a to-do ("Temp shades: <customer>") and starts an order draft.
+
+**Where to ship: never guessed (Gerrit, 2026-10-26).** Gerrit usually asks in the appointment where they
+want them delivered. Val takes the address only from the customer's own words (the recording, a text, an
+email). Not there: Val drafts a text (email if there is no phone), "Where would you like the temporary
+shades shipped?", which waits for Gerrit's tap like any customer text. The address on file may be offered as
+a question ("Should we send them to 123 Main St?"), never assumed. No order until the customer has said where.
+
+**How many:**
+- From the Estimator (each window's label, width and height; step 9). Per window: the width ÷ the shade's
+  width, rounded up, times the height ÷ the shade's height, rounded up.
+- **Never on sliding doors (Gerrit, 2026-10-26: too big an opening).** A window whose label or product says
+  slider, sliding or patio door gets none, and the card lists it as "skipped".
+- A window Val can't tell, or a missing size: she asks Gerrit on the card. Before the Estimator is connected:
+  the count comes from the recording or a line Gerrit types.
+- One product only: the Amazon link Gerrit picks, with its size. Val never swaps it for another.
+
+**Every order waits for Gerrit's tap (Gerrit, 2026-10-26).** A Val Approvals card shows the customer, the
+ship-to address and where it came from ("she said it in the visit", "her text Tue 2:10 PM"), the window
+list with sliding doors marked skipped, the shade count, the item and the total with tax and shipping.
+Buttons: **Approve**, **Edit count**, **Skip**. Unlike texts, orders don't earn auto-buy.
+
+**Placing the order:** Val uses her browser on the Orgo computer, signed in to the dedicated Amazon account
+only, and buys only the approved count of the one product, shipped to the confirmed address, with the gift
+note "From Zinga's, until your new window coverings arrive". If Amazon asks for a sign-in code, a CAPTCHA or
+a new card, Val stops and tells Gerrit; she never works around it. If Amazon keeps blocking her: she fills the
+cart and Gerrit taps Place order in the Amazon app.
+
+**After the order:** the order number, cost and tracking go in the customer's file and an order log in
+Val's vault (never git). Val can draft a "your temporary shades arrive Thursday" text, approved as usual.
+
+**Monthly reimbursement (Gerrit, 2026-10-26):** on the first business day of each month Val tallies last
+month's orders: date, customer, city, shades, total and order number. She checks them against the Amazon
+order history and the virtual card's charges, then drafts one email to payments@ with the table and the
+Amazon invoices attached. Gerrit approves it in Val Approvals. It sends through the locked email helper on
+Vercel (see F0, "Email sending"), which gets one new, narrow permission: this monthly email, to payments@
+only. The money tracker counts these orders as "reimbursable", not as Gerrit's own cost.
+
+**Safety:**
+- The virtual card is the account's only payment method, works only at Amazon, and has a per-order and a
+  monthly limit. Val's computer holds the Amazon login, so the card limit caps the worst case.
+- Never a price for the shades in a customer text (the usual "no $" rule).
+- No card numbers, addresses or customer names in git (this repo is public).
+
+**Gerrit's steps** (he does these himself; Val can't create accounts or enter card details):
+1. Make the Amazon account with its own email.
+2. Get the virtual card, set its limits and add it as the only payment method.
+3. Put the Amazon login in Val's 1Password vault.
+4. Send the product link and its size.
+5. Confirm payments@'s address and what they need on the email.
+
+**Suggestions and open questions for Gerrit:**
+- A free **Amazon Business** account: monthly invoices in one place, any ship-to address, and room to add
+  reps later with each order tagged by rep.
+- Ask Zinga's for a **company virtual card** locked to Amazon. Then there is nothing to reimburse, and the
+  monthly email becomes a report. If not, a virtual card on Gerrit's own account (a Privacy.com-style card)
+  with a monthly limit.
+- Prime (or Business Prime) for 1–2 day shipping: worth it once there are a few orders a month.
+- Does payments@ want the invoices as PDFs, or one spreadsheet?
+- Is it always free for the customer, or do they ever pay part?
+- Other openings to skip besides sliding doors (French doors, very large picture windows)?
+
 ## Plaud memory and Val's brain (added 2026-10-23, right after F0)
 Gerrit approved the plan in `docs/VAL-BRAIN.md`. **Parts 1–4 built 2026-10-24** (not on Val's computer yet).
 Build order:
@@ -326,6 +402,7 @@ customer text still waits for Gerrit's tap (for F0, the one morning tap above).
 | F9 | **Weather nudge:** the first hot week of the year brings open outdoor-shade, screen and pergola quotes back with a timely touch in each customer's own area | A kind of quiet-quote follow-up, so it plugs into F8. The first hot week is in spring, so it must be ready by about April 2027 | F8 (or F3's open-quote list); a free weather forecast feed |
 | F10 | **Spouse pack:** a short summary for the decision maker who missed the visit | A typed-line version works after F3; the full version needs the recording | F3; Plaud (Phase 4) for the full version |
 | F11 | **Coaching from recordings:** objections and answers per visit, and monthly win/loss patterns. Gerrit only | Needs weeks of recordings to show patterns | Plaud (Phase 4) |
+| F12 | **Temp shades by Amazon** (added 2026-10-26): a customer who asks for temporary shades gets them ordered on a dedicated Amazon account and shipped to the address they confirmed, the count worked out from the window sizes (never on sliding doors), each order after Gerrit's tap; once a month one reimbursement email to payments@. Details in "F12" above | Right after Estimator read access (Build order step 9b), which gives the window sizes | Estimator Phase 1.5; Gerrit's Amazon account, virtual card and product link |
 
 ## Money: costs and ROI (added 2026-10-23, Build order step 5)
 Gerrit wants one running total of everything he pays for, live and correct, with a weekly brief, a monthly
