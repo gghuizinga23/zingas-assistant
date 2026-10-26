@@ -23,6 +23,8 @@ id, so code that read the list a moment ago still changes the right task.
   zingas-todo undo 3             reopen the last task #3 that was closed
   zingas-todo set 3 --priority later [--due 2026-10-24] [--task "..."]
   zingas-todo drop 3             not needed after all (kept in the record)
+  zingas-todo post               send the list to the website's To-do tab once
+  zingas-todo watch              keep sending it: on every change, and every 10 minutes (supervisord)
 """
 
 from __future__ import annotations
@@ -36,6 +38,9 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
+import urllib.request
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Iterable, List, Optional
@@ -98,6 +103,13 @@ def late(item: dict, at: Optional[datetime] = None) -> bool:
     return bool(by) and item.get("status", "open") == "open" and by <= (at or datetime.now(timezone.utc))
 
 
+def shown_priority(item: dict, at: Optional[datetime] = None) -> str:
+    """Gerrit's rule (2026-10-26): a message with no answer past 24 hours goes to Now, the most
+    urgent group, whatever priority it had. Worked out each time the list is read, so a task moves up
+    the minute its 24 hours run out. Its saved priority stays, for when it is no longer late."""
+    return "now" if late(item, at) else item.get("priority", "today")
+
+
 def quiet_hours(at: Optional[datetime] = None) -> bool:
     """SOUL.md: quiet after 8pm on weekdays, before 8am, and all weekend."""
     t = (at or now_local()).astimezone(TZ)
@@ -119,6 +131,7 @@ class TodoList:
         with open(os.path.join(self.folder, ".lock"), "w") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             items = self._read()
+            renumber(items)   # a task may have moved up since the last save (24-hour rule)
             box = {"items": items}
             yield box
             renumber(box["items"])
@@ -149,7 +162,9 @@ class TodoList:
 
     # reading
     def open_items(self) -> List[dict]:
-        return sort_items(i for i in self._read() if i["status"] == "open")
+        items = self._read()
+        renumber(items)   # the numbers match the order shown right now (the 24-hour rule moves tasks)
+        return sort_items(i for i in items if i["status"] == "open")
 
     def all_items(self) -> List[dict]:
         return self._read()
@@ -260,10 +275,10 @@ def clean(text, limit: int) -> str:
     return " ".join(str(text or "").split())[:limit]
 
 
-def sort_items(items: Iterable[dict]) -> List[dict]:
-    """Most important first: priority, then the oldest unanswered message, then the
-    nearest due date, then the oldest."""
-    return sorted(items, key=lambda i: (PRIORITIES.get(i["priority"], (9,))[0], i.get("reply_by") or "9999",
+def sort_items(items: Iterable[dict], at: Optional[datetime] = None) -> List[dict]:
+    """Most important first: priority as shown (late messages count as Now), then the oldest
+    unanswered message, then the nearest due date, then the oldest."""
+    return sorted(items, key=lambda i: (PRIORITIES.get(shown_priority(i, at), (9,))[0], i.get("reply_by") or "9999",
                                         i.get("due") or "9999-99-99", i.get("added_at") or ""))
 
 
@@ -299,7 +314,7 @@ def _reply_words(item: dict, at: Optional[datetime] = None) -> str:
 
 def line(item: dict, today=None) -> str:
     """One task, the way Gerrit sees it in Telegram: '🔴 3. Pat Lee: call back (voicemail)'."""
-    head = f"{PRIORITIES[item['priority']][1]} {item['n']}. "
+    head = f"{PRIORITIES[shown_priority(item)][1]} {item['n']}. "
     body = (item["who"] + ": " if item.get("who") else "") + item["task"]
     extra = ", ".join(x for x in (item.get("source") if item.get("source") not in ("gerrit", "val") else "",
                                   _reply_words(item), _due_words(item.get("due", ""), today)) if x)
@@ -309,7 +324,8 @@ def line(item: dict, today=None) -> str:
 def summary(items: List[dict]) -> str:
     counts = {p: 0 for p in PRIORITIES}
     for i in items:
-        counts[i["priority"]] = counts.get(i["priority"], 0) + 1
+        p = shown_priority(i)
+        counts[p] = counts.get(p, 0) + 1
     parts = [f"{counts[p]} {PRIORITIES[p][2].lower()}" for p in ("now", "today") if counts[p]]
     behind = sum(1 for i in items if late(i))
     if behind:
@@ -323,7 +339,7 @@ def render_groups(items: List[dict], today=None, since: Optional[str] = None) ->
     items = sort_items(items)
     out = []
     for p, (_, mark, head) in PRIORITIES.items():
-        group = [i for i in items if i["priority"] == p]
+        group = [i for i in items if shown_priority(i) == p]
         out.append(f"{mark} {head.upper()} ({len(group)})" if group else f"{mark} {head.upper()}: none")
         out += [line(i, today) + (" 🆕" if since and i["added_at"] >= since else "") for i in group]
     return out
@@ -353,7 +369,7 @@ def render_markdown(items: List[dict]) -> str:
     out = ["# Gerrit's to-do list", "",
            "_Kept by Val. Change it by texting Val (\"done 3\", \"add ...\"), not by editing this page._", ""]
     for p, (_, mark, head) in PRIORITIES.items():
-        group = [i for i in open_ if i["priority"] == p]
+        group = [i for i in open_ if shown_priority(i) == p]
         if group:
             out.append(f"## {mark} {head}")
             out += [f"- [ ] **{i['n']}.** " + (f"{i['who']}: " if i.get("who") else "") + i["task"]
@@ -520,12 +536,105 @@ def apply_judgement(todo: TodoList, thing: dict, r: dict, source: str, ref: str 
                     auto_done=auto_done, received=received)
 
 
+# ------------------------------------------------- the website's To-do tab
+
+# Val posts the open list to the company website (Assistant > To-do) with her own website key. The website
+# keeps only the newest list. It reads nothing back and changes nothing here: Gerrit still changes the list
+# through Val. Shape: assistant docs/CONNECTIONS.md, "Val's to-do list".
+DOOR = "/api/assistant/todo"
+POST_EVERY = timedelta(minutes=10)   # a fresh copy even with no change, so the page can tell Val is up
+WATCH_SLEEP = 15                     # seconds between looks at the list file
+DONE_SHOWN = timedelta(hours=24)     # finished tasks the page shows under "Done lately"
+
+
+def website_list(todo: "TodoList", at: Optional[datetime] = None) -> dict:
+    """The open list for the website. `priority` is the saved one; the website moves a task with a late
+    replyBy to Now itself (the same 24-hour rule), so the page stays right between posts. No `ref`: it can
+    hold a phone number or a Gmail id, which the page does not need."""
+    at = at or datetime.now(timezone.utc)
+    rows = [{"id": i["id"], "n": i["n"], "task": i["task"], "who": i.get("who") or "",
+             "priority": i.get("priority") if i.get("priority") in PRIORITIES else "today",
+             "source": i.get("source") or "", "replyBy": i.get("reply_by") or None, "due": i.get("due") or None,
+             "why": i.get("why") or "", "link": i.get("link") or "", "addedAt": i.get("added_at") or None}
+            for i in todo.open_items()]
+    cutoff = (at - DONE_SHOWN).astimezone(timezone.utc).isoformat()
+    done = sorted((i for i in todo.all_items() if i["status"] == "done" and (i.get("closed_at") or "") >= cutoff),
+                  key=lambda i: i.get("closed_at") or "", reverse=True)[:30]
+    return {"madeAt": at.astimezone(timezone.utc).isoformat(timespec="seconds"), "items": rows,
+            "done": [{"task": i["task"], "who": i.get("who") or "", "closedAt": i.get("closed_at")} for i in done]}
+
+
+def _website_settings():
+    if "/usr/local/lib/zingas" not in sys.path:
+        sys.path.append("/usr/local/lib/zingas")
+    try:
+        import zingas_os   # on Val's computer; reads her website key from 1Password, never prints it
+    except ImportError:
+        return "", ""
+    return zingas_os.read_secret("ZINGAS_OS_URL"), zingas_os.read_secret("ASSISTANT_API_TOKEN")
+
+
+def post_list(body: dict, settings=_website_settings, timeout: float = 20) -> str:
+    """Sends one list. Returns "" when the website took it, else a short reason (never the key)."""
+    url, token = settings()
+    if not url or not token:
+        return "the website key or address is not set up (1Password: ZINGAS_OS_URL, ASSISTANT_API_TOKEN)"
+    req = urllib.request.Request(url.rstrip("/") + DOOR, data=json.dumps(body).encode("utf-8"), method="POST",
+                                 headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json",
+                                          "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return "" if resp.status == 200 else f"the website answered {resp.status}"
+    except urllib.error.HTTPError as e:
+        return f"the website answered {e.code}: " + e.read().decode("utf-8", "replace")[:160].strip()
+    except (urllib.error.URLError, OSError) as e:
+        return f"no answer from the website ({type(e).__name__})"
+
+
+class Poster:
+    """Sends the list when it changed, and at least every POST_EVERY. Plain code, no AI."""
+
+    def __init__(self, todo: "TodoList", send: Callable[[dict], str] = post_list,
+                 clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)):
+        self.todo, self.send, self.clock = todo, send, clock
+        self.last_sent: Optional[str] = None
+        self.last_at: Optional[datetime] = None
+
+    def step(self) -> Optional[str]:
+        """One look. Returns None when nothing was sent, "" when a list went, or the reason it failed."""
+        now = self.clock()
+        body = website_list(self.todo, now)
+        same = json.dumps({k: v for k, v in body.items() if k != "madeAt"}, sort_keys=True)
+        if same == self.last_sent and self.last_at and now - self.last_at < POST_EVERY:
+            return None
+        problem = self.send(body)
+        if not problem:
+            self.last_sent, self.last_at = same, now
+        return problem
+
+
+def watch(todo: "TodoList") -> None:   # pragma: no cover (a loop; Poster.step is tested)
+    poster = Poster(todo)
+    while True:
+        try:
+            problem = poster.step()
+            if problem:
+                print(f"{stamp()} to-do list not sent: {problem}", file=sys.stderr, flush=True)
+            elif problem == "":
+                print(f"{stamp()} to-do list sent", flush=True)
+        except Exception as e:   # one bad look must not stop the sender
+            print(f"{stamp()} to-do sender error: {type(e).__name__}", file=sys.stderr, flush=True)
+        time.sleep(WATCH_SLEEP)
+
+
 # ------------------------------------------------------------------- the CLI
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="zingas-todo", description="Gerrit's running to-do list.")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list")
+    sub.add_parser("post")
+    sub.add_parser("watch")
     b = sub.add_parser("brief")
     b.add_argument("--since", default="", help="ISO time of the last brief; marks newer tasks 🆕")
     a = sub.add_parser("add")
@@ -551,6 +660,13 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     todo = TodoList()
 
+    if args.cmd == "post":
+        problem = post_list(website_list(todo))
+        print("The website took the to-do list." if not problem else f"The list was not sent: {problem}")
+        return 0 if not problem else 1
+    if args.cmd == "watch":
+        watch(todo)
+        return 0
     if args.cmd == "list":
         print(render_list(todo.open_items()))
     elif args.cmd == "brief":

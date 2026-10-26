@@ -134,11 +134,11 @@ class TwentyFourHourRule(unittest.TestCase):
         old = self.todo.add("Answer about shutters", who="Amy Cole", source="email",
                             received="2026-09-25T09:00:00-04:00")
         self.assertTrue(zt.late(old))
-        self.assertEqual(zt.line(old), "🟡 1. Amy Cole: Answer about shutters (email, ⚠️ past 24 hours)")
+        self.assertEqual(zt.line(old), "🔴 1. Amy Cole: Answer about shutters (email, ⚠️ past 24 hours)")
         fresh = self.todo.add("Answer about blinds", source="text")
         self.assertFalse(zt.late(fresh))
         self.assertIn("reply by", zt.line(fresh))
-        self.assertTrue(zt.render_brief(self.todo).startswith("To-do list: 2 open (2 today, 1 past 24 hours)"))
+        self.assertTrue(zt.render_brief(self.todo).startswith("To-do list: 2 open (1 now, 1 today, 1 past 24 hours)"))
 
     def test_oldest_unanswered_message_comes_first(self):
         self.todo.add("Newer", source="text", received="2026-10-15T10:00:00-04:00")
@@ -280,6 +280,89 @@ class Cli(unittest.TestCase):
         finally:
             del os.environ["ZINGAS_VAULT"]
             importlib.reload(zt)
+
+
+class LateGoesToNowTests(unittest.TestCase):
+    """Gerrit's rule (2026-10-26): no answer past 24 hours puts the task in Now, the most urgent group."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.todo = zt.TodoList(self.dir)
+
+    def test_a_late_message_shows_in_now_and_numbers_follow(self):
+        self.todo.add("Fix the crew problem", priority="now")
+        self.todo.add("Call back Pat", priority="today", source="text", received="2026-10-20T14:00:00+00:00")
+        self.todo.add("Answer Sam", priority="today", source="email")          # clock just started
+        items = self.todo.open_items()
+        # Late messages go first in Now, oldest first (the skill's 24-hour rule).
+        self.assertEqual([(i["n"], i["task"], zt.shown_priority(i)) for i in items],
+                         [(1, "Call back Pat", "now"), (2, "Fix the crew problem", "now"), (3, "Answer Sam", "today")])
+        self.assertEqual(items[0]["priority"], "today")      # the saved priority stays
+        text = zt.render_list(items)
+        now_part, today_part = text.split("🟡 TODAY")
+        self.assertIn("🔴 1. Call back Pat (text, ⚠️ past 24 hours)", now_part)
+        self.assertIn("Answer Sam", today_part)
+        self.assertIn("2 now", text.splitlines()[0])
+
+    def test_done_uses_the_number_shown(self):
+        self.todo.add("A", priority="now")
+        self.todo.add("B", priority="today", source="email", received="2026-10-01T00:00:00+00:00")
+        self.todo.add("C", priority="today")
+        self.todo.close([1])                                   # 1 is B: late, so first in Now
+        self.assertEqual([i["task"] for i in self.todo.open_items()], ["A", "C"])
+
+    def test_the_task_moves_up_the_minute_its_time_runs_out(self):
+        item = self.todo.add("Answer Lee", priority="today", source="email", received="2026-10-25T12:00:00+00:00")
+        before = datetime.fromisoformat("2026-10-26T11:59:00+00:00")
+        after = datetime.fromisoformat("2026-10-26T12:00:00+00:00")
+        self.assertEqual((zt.shown_priority(item, before), zt.shown_priority(item, after)), ("today", "now"))
+
+    def test_the_markdown_view_follows_the_rule(self):
+        self.todo.add("Call back Pat", priority="today", source="call", received="2026-10-20T14:00:00+00:00")
+        md = open(os.path.join(self.dir, "To-Do.md"), encoding="utf-8").read()
+        self.assertLess(md.index("## 🔴 Now"), md.index("Call back Pat"))
+        self.assertNotIn("## 🟡 Today", md)
+
+
+class WebsiteTests(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.todo = zt.TodoList(self.dir)
+
+    def test_the_list_for_the_website(self):
+        self.todo.add("Call back Pat", priority="today", who="Pat Lee", source="text", ref="+13175550100",
+                      received="2026-10-20T14:00:00+00:00")
+        self.todo.add("Old one")
+        self.todo.close([2])
+        body = zt.website_list(self.todo)
+        self.assertEqual(len(body["items"]), 1)
+        row = body["items"][0]
+        self.assertEqual((row["task"], row["who"], row["priority"], row["source"], row["n"]),
+                         ("Call back Pat", "Pat Lee", "today", "text", 1))
+        self.assertEqual(row["replyBy"], "2026-10-21T14:00:00+00:00")
+        self.assertNotIn("ref", row)
+        self.assertNotIn("3175550100", json.dumps(body))      # no phone numbers go to the website
+        self.assertEqual([d["task"] for d in body["done"]], ["Old one"])
+
+    def test_sends_on_change_and_every_10_minutes(self):
+        sent, clock = [], [datetime.fromisoformat("2026-10-26T15:00:00+00:00")]
+        poster = zt.Poster(self.todo, send=lambda b: sent.append(b) or "", clock=lambda: clock[0])
+        self.assertEqual(poster.step(), "")                     # the first look always sends
+        self.assertIsNone(poster.step())                        # nothing changed
+        self.todo.add("New task")
+        self.assertEqual(poster.step(), "")                     # a change sends at once
+        clock[0] = clock[0] + zt.POST_EVERY
+        self.assertEqual(poster.step(), "")                     # 10 minutes: a fresh copy
+        self.assertEqual(len(sent), 3)
+
+    def test_a_failed_send_tries_again_next_look(self):
+        answers = ["no answer from the website (URLError)", ""]
+        poster = zt.Poster(self.todo, send=lambda b: answers.pop(0))
+        self.assertIn("no answer", poster.step())
+        self.assertEqual(poster.step(), "")
+
+    def test_no_key_means_nothing_sent(self):
+        self.assertIn("not set up", zt.post_list({"items": []}, settings=lambda: ("", "")))
 
 
 if __name__ == "__main__":
