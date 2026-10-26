@@ -215,7 +215,9 @@ class DraftsDoor(unittest.TestCase):
         self.assertEqual([x["id"] for x in body["drafts"]], [d["id"]])          # sent ones aren't listed
         row = body["drafts"][0]
         self.assertEqual(set(row), {"id", "customer_name", "phone_last4", "category", "body", "customer_said",
-                                    "status", "reasons", "created_at", "send_after", "edited", "can_edit"})
+                                    "status", "reasons", "created_at", "send_after", "edited", "can_edit",
+                                    "batch_id", "touch", "due_at", "email_subject", "email_body"})
+        self.assertEqual((row["batch_id"], row["email_subject"], row["email_body"]), ("", "", ""))   # a reply, not a follow-up
         self.assertEqual((row["edited"], row["can_edit"]), (False, True))
         self.assertEqual(row["phone_last4"], "0123")
         self.assertEqual(row["body"], "Thursday at 2 works!")

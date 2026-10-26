@@ -150,12 +150,16 @@ customer (worklist) before doing anything else for them.
 
 `GET {QUO_BRIDGE_URL}/api/os/drafts` with `Authorization: Bearer <QUO_BRIDGE_TOKEN>` (quo-bridge's
 `ZINGAS_OS_TOKEN`): Val's drafts waiting on Gerrit (name, last 4 digits of the phone, category, text, what the
-customer said, status, reasons, `edited`, `can_edit`). Shown on the Assistant section's Drafts tab.
+customer said, status, reasons, `edited`, `can_edit`). Shown on the Assistant section's Drafts tab. Follow-ups
+still on their day's list (`planned`, not approved yet) are in it too (2026-10-26), with `batch_id` (the list's day,
+YYYY-MM-DD), `touch`, `due_at`, and the email that goes with each (`email_subject`, `email_body`; "" when none).
 
 `POST {QUO_BRIDGE_URL}/api/os/drafts/action`, same code: Gerrit's button on one draft (Drafts tab, 2026-10-26).
-`{"id", "action": "edit" | "approve" | "send_now" | "skip", "text"?}`. `edit` saves new words (still waiting);
+`{"id", "action": "edit" | "approve" | "send_now" | "skip", "text"?}`, or `{"batch": "YYYY-MM-DD", "action":
+"approve_all"}`: a day's follow-up list, the same as Approve all on its Telegram card (each sends at its time, ones
+already due now; answers `{ok, approved, message}`). `edit` saves new words (still waiting);
 `approve` is Gerrit's approval, the same as his Telegram tap (with `text`, the new words go first); `send_now`
-sends a text held until 8 AM; `skip` never sends it. quo-bridge runs the same send gate as for a tap (quiet hours,
+sends a text held until 8 AM (409 for a follow-up: it waits for its time and its email); `skip` never sends it. quo-bridge runs the same send gate as for a tap (quiet hours,
 do-not-contact, the 8 AM hold) and updates the Telegram card. Answers `{ok, status, message}`; 409 when the
 draft was already handled. The website lets only people `ASSISTANT_USERS` names press these (Gerrit). Code:
 `quo-bridge/bridge.py` (`os_action`), `src/modules/assistant/bridge.ts`, `src/modules/assistant/actions.ts`.

@@ -273,5 +273,78 @@ class ValDoors(Base):
         self.assertEqual(c[OTHER]["thread"], [])
 
 
+class OnTheWebsite(Base):
+    """Gerrit, 2026-10-26: a day's follow-ups show on the website's Drafts tab with Approve all, so a list is never
+    only in one Telegram card. The website's buttons do exactly what the card's do."""
+
+    OS = "os-token-123"
+
+    def rig(self, **kw):
+        r = super().rig(**kw)
+        r.bridge.cfg.os_token = self.OS
+        return r
+
+    def os(self, r, method, path, body=b""):
+        return r.call(method, path, body, {"Authorization": "Bearer " + self.OS})
+
+    def test_waiting_follow_ups_are_listed_with_their_email(self):
+        r = self.rig()
+        self.submit(r, [item()])
+        drafts = self.os(r, "GET", "/api/os/drafts")[1]["drafts"]
+        self.assertEqual([(d["category"], d["status"], d["batch_id"], d["touch"]) for d in drafts],
+                         [("followup", "planned", DAY, "48 hours")])
+        self.assertEqual((drafts[0]["email_subject"], drafts[0]["body"]), ("Following up", item()["text"]))
+        self.assertTrue(drafts[0]["email_body"].startswith("Hi Pat"))
+        self.assertNotIn(CUSTOMER, str(drafts))                       # never the full phone
+
+    def test_approve_all_from_the_website_is_the_cards_approve_all(self):
+        r = self.rig()
+        self.submit(r, [item(), item("sam@example.com", "7 days", OTHER, due=TUE_11AM - timedelta(minutes=5),
+                                      customer_name="Sam Ray")])
+        st, out = self.os(r, "POST", "/api/os/drafts/action", {"batch": DAY, "action": "approve_all"})
+        self.assertEqual((st, out["approved"]), (200, 2))
+        sam, pat = followup_id("sam@example.com", "7 days", DAY), followup_id("pat@example.com", "48 hours", DAY)
+        self.assertEqual((r.status(sam), r.status(pat)), ("sent", "held"))
+        self.assertEqual(r.quo.sent, [(OTHER, item()["text"])])
+        self.assertNotIn("Approve all", str(r.tg.edits[-1].get("buttons")))   # the Telegram card shows it too
+        st, out = self.os(r, "POST", "/api/os/drafts/action", {"batch": DAY, "action": "approve_all"})
+        self.assertEqual(out["approved"], 0)                                   # never twice
+        self.assertEqual(len(r.quo.sent), 1)
+
+    def test_one_follow_up_approved_or_skipped_from_the_website(self):
+        r = self.rig()
+        self.submit(r, [item(due=TUE_11AM - timedelta(minutes=5)),
+                        item("sam@example.com", "7 days", OTHER, customer_name="Sam Ray")])
+        pat, sam = followup_id("pat@example.com", "48 hours", DAY), followup_id("sam@example.com", "7 days", DAY)
+        st, out = self.os(r, "POST", "/api/os/drafts/action", {"id": pat, "action": "approve"})
+        self.assertEqual((st, out["status"]), (200, "sent"))
+        st, out = self.os(r, "POST", "/api/os/drafts/action", {"id": sam, "action": "skip"})
+        self.assertEqual((st, out["status"]), (200, "skipped"))
+        self.assertEqual(r.quo.sent, [(CUSTOMER, item()["text"])])
+
+    def test_no_send_now_on_an_approved_follow_up(self):
+        r = self.rig()
+        self.submit(r, [item()])                                               # due later: approved, it waits
+        self.os(r, "POST", "/api/os/drafts/action", {"batch": DAY, "action": "approve_all"})
+        pat = followup_id("pat@example.com", "48 hours", DAY)
+        st, _ = self.os(r, "POST", "/api/os/drafts/action", {"id": pat, "action": "send_now"})
+        self.assertEqual((st, r.status(pat), r.quo.sent), (409, "held", []))
+
+    def test_the_send_gate_still_runs(self):
+        r = self.rig(now=TUE_9PM)
+        self.submit(r, [item(due=TUE_9PM - timedelta(minutes=5))])
+        self.os(r, "POST", "/api/os/drafts/action", {"batch": DAY, "action": "approve_all"})
+        self.assertEqual(r.quo.sent, [])                                       # after 8 PM their time: no text
+
+    def test_approve_all_needs_the_website_code_and_a_day(self):
+        r = self.rig()
+        self.submit(r, [item(due=TUE_11AM - timedelta(minutes=5))])
+        body = {"batch": DAY, "action": "approve_all"}
+        self.assertEqual(r.call("POST", "/api/os/drafts/action", body)[0], 401)
+        self.assertEqual(r.val("POST", "/api/os/drafts/action", body)[0], 401)
+        self.assertEqual(self.os(r, "POST", "/api/os/drafts/action", {"batch": "x", "action": "approve_all"})[0], 400)
+        self.assertEqual(r.quo.sent, [])
+
+
 if __name__ == "__main__":
     unittest.main()

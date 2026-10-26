@@ -38,7 +38,9 @@ TIMEOUT_SECONDS = 5.0
 # check in that time just counts as "unsure" (so: do not text). This keeps one
 # outage from making each check wait the full timeout.
 COOL_OFF_SECONDS = 30.0
-OPEN_STATUSES = ("pending", "editing", "held", "countdown", "failed")
+# "planned": a follow-up still on its day's list card, waiting for Approve all (Gerrit, 2026-10-26: approve them on
+# the website too, so a list is never only in one Telegram card).
+OPEN_STATUSES = ("planned", "pending", "editing", "held", "countdown", "failed")
 
 
 def last10(phone: str) -> str:
@@ -167,5 +169,11 @@ def drafts_for_os(store, limit: int = 100) -> dict:
             "edited": bool(d.get("edited")),
             # A follow-up with no phone is email only: its words can't be changed from the website.
             "can_edit": bool(phone),
+            # Follow-ups: the day's list, the touch, when it sends, and the email that goes with it.
+            "batch_id": d.get("batch_id") or "",
+            "touch": d.get("touch") or "",
+            "due_at": d.get("due_at"),
+            "email_subject": (d.get("email_subject") or "")[:200] if d.get("email_to") else "",
+            "email_body": (d.get("email_body") or "")[:2000] if d.get("email_to") else "",
         })
     return {"drafts": out}

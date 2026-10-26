@@ -471,8 +471,8 @@ class Bridge(FollowupMixin):
     def _act(self, action: str, draft_id: str, d: dict) -> str:
         """Approve (a), Send now (n), Skip (s) or Stop (x) on one draft: the same for a tap in Telegram and a
         button on the website's Drafts tab. Returns the short answer for Gerrit."""
-        if action == "a":
-            claimed = self.store.claim_draft(draft_id, ["pending", "failed"],
+        if action == "a":   # "planned": a follow-up still on its list card, approved alone from the website
+            claimed = self.store.claim_draft(draft_id, ["pending", "failed", "planned"],
                                              {"status": "approving", "approved_at": d.get("approved_at") or self._stamp()})
             if not claimed:
                 return BUSY
@@ -490,7 +490,8 @@ class Bridge(FollowupMixin):
             self._log("send_now", draft_id, "Gerrit tapped Send now outside 8am to 8pm.")
             return self._send_now(claimed, approved=True, send_now=True)
         if action == "s":
-            claimed = self.store.claim_draft(draft_id, ["pending", "editing", "held", "failed"], {"status": "skipped"})
+            claimed = self.store.claim_draft(draft_id, ["pending", "editing", "held", "failed", "planned"],
+                                             {"status": "skipped"})
             if not claimed:
                 return BUSY
             self._edit_card(claimed, self._card_text(claimed, "✖️ Skipped. Nothing was sent."))
@@ -521,9 +522,18 @@ class Bridge(FollowupMixin):
           {"id": "...", "action": "edit", "text": "..."}       save new words; it still needs approval
           {"id": "...", "action": "approve", "text": "..."}    approve and send (text optional: edit first)
           {"id": "...", "action": "send_now"}                  a held text, now
-          {"id": "...", "action": "skip"}                      never send it"""
-        draft_id = str(payload.get("id") or "").strip()
+          {"id": "...", "action": "skip"}                      never send it
+          {"batch": "2026-10-26", "action": "approve_all"}     a day's follow-up list, as the card's Approve all"""
         action = payload.get("action")
+        if action == "approve_all":
+            batch = str(payload.get("batch") or "").strip()
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", batch):
+                return 400, {"error": "send the list's day as batch: YYYY-MM-DD"}
+            self._log("website", None, f"approve_all {batch}")
+            n = self._fu_approve_all(batch, "on the website")
+            return 200, {"ok": True, "approved": n,
+                         "message": f"Approved {n}. Each one sends at its time." if n else "Nothing is waiting."}
+        draft_id = str(payload.get("id") or "").strip()
         if not draft_id or action not in ("edit", "approve", "send_now", "skip"):
             return 400, {"error": "send an id and an action: edit, approve, send_now or skip"}
         d = self.store.get_draft(draft_id)
@@ -533,6 +543,9 @@ class Bridge(FollowupMixin):
         if text is not None and not isinstance(text, str):
             return 400, {"error": "text must be words"}
         new_words = text is not None and text.strip() != self._text_of(d).strip()
+        if action == "send_now" and d["category"] == "followup":
+            # Send now skips the 8 AM to 8 PM rule and sends only the text; an approved follow-up waits for its time.
+            return 409, {"error": "An approved follow-up sends at its time, with its email. Send now is only for a held text."}
         if action == "edit" or (action == "approve" and new_words):
             if d["category"] == "followup" and not d.get("phone"):
                 return 409, {"error": "This one is email only. To change it, skip it and write it yourself."}
@@ -540,7 +553,7 @@ class Bridge(FollowupMixin):
             if not words or len(words) > MAX_TEXT:
                 return 400, {"error": f"The text must be 1 to {MAX_TEXT} characters."}
             if new_words:
-                claimed = self.store.claim_draft(draft_id, ["pending", "failed", "editing"],
+                claimed = self.store.claim_draft(draft_id, ["pending", "failed", "editing", "planned"],
                                                  {"status": "pending", "final_body": words, "edited": True,
                                                   "error": None})
                 if not claimed:

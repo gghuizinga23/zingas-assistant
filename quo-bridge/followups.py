@@ -259,21 +259,7 @@ class FollowupMixin:
     def _fu_tap(self, action: str, key: str, cq: dict) -> bool:
         """Batch buttons (fa, fr) and 'no more follow-ups' (q). True when handled."""
         if action == "fa":
-            n, sent = 0, []
-            for d in self.store.drafts_in_batch(key):
-                if d["status"] != "planned":
-                    continue
-                claimed = self.store.claim_draft(d["id"], ["planned"], {"status": "held",
-                                                                         "approved_at": self._stamp()})
-                if claimed:
-                    n += 1
-                    due = parse_time(claimed.get("due_at"))
-                    if due and due <= self.now():
-                        now_claim = self.store.claim_draft(d["id"], ["held"], {"status": "approving"})
-                        if now_claim:
-                            sent.append(self._send_followup(now_claim))
-            self._log("followups_approved", None, f"{key}: {n}")
-            self._render_batch(key)
+            n = self._fu_approve_all(key)
             self._answer(cq, f"Approved {n}. Each one sends at its time." if n else "Nothing is waiting.")
             return True
         if action == "fr":
@@ -310,6 +296,25 @@ class FollowupMixin:
             self._answer(cq, "No more follow-ups for them." if n else "Nothing was waiting for them.")
             return True
         return False
+
+    def _fu_approve_all(self, batch_id: str, where: str = "") -> int:
+        """Approve all: the button on the batch card in Telegram, and the same button on the website's Drafts tab.
+        Each planned follow-up is approved; one whose time has come sends now (the send gate still runs)."""
+        n = 0
+        for d in self.store.drafts_in_batch(batch_id):
+            if d["status"] != "planned":
+                continue
+            claimed = self.store.claim_draft(d["id"], ["planned"], {"status": "held", "approved_at": self._stamp()})
+            if claimed:
+                n += 1
+                due = parse_time(claimed.get("due_at"))
+                if due and due <= self.now():
+                    now_claim = self.store.claim_draft(d["id"], ["held"], {"status": "approving"})
+                    if now_claim:
+                        self._send_followup(now_claim)
+        self._log("followups_approved", None, f"{batch_id}: {n}" + (f" {where}" if where else ""))
+        self._render_batch(batch_id)
+        return n
 
     def _approve_followup(self, d: dict) -> str:
         """d was just claimed ('approving') from its own card."""
