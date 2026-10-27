@@ -332,6 +332,42 @@ Why: on the new Follow-Up page "how warm", "waiting on" and "next step" were emp
 | S3 | **Start it:** `bash files/install-sheet.sh`. It backs up the old files, copies the new ones and starts zingas-sheet | Gerrit says go, I run it and check | 3 min |
 | S4 | Check on the website: Follow-Up → Today shows "how warm" and a next step on your customers, each with "Set by Val · Undo" | Claude | 5 min |
 
+## Wrap-up, price answers, after-install texts, hot-lead alerts (built 2026-10-26, plan F3, F6, F4, F8)
+Why: Gerrit picked these four next. One installer puts all four on Val's computer
+(`files/install-four-features.sh`); the website part is branch `val-wrapup-hotleads` in `app/`.
+
+- **End-of-day wrap-up (F3, `zingas-wrapup`).** The 7 PM brief lists today's visits (Monday: Saturday's too) with
+  the result you entered in Salesforce and what Val does next: sold (after-install texts later), quoted
+  (follow-ups on, with the next touch, or "Val has not seen the estimate email yet"), no show, or "no result yet".
+  A visit with no result is checked again for 3 evenings, then one "still no result" line. **Val never asks you
+  Sold / Quoted / Lost** and adds no task for it. A visit recorded on Plaud points to its note in the Visits block.
+- **Price and competitor answers (F6, `zingas-answers`).** When a customer brings up price, Budget Blinds, Home
+  Depot / Lowe's / Menards, Costco, an online store or "a cheaper quote", the draft (text reply, missed-call text,
+  follow-up touch, email) uses **your own answer** for it, short, in your voice. Never a price, a discount, a
+  promise to match, or a bad word about the other company. **Until you give Val your answers** the draft says you
+  will go over it with them, and its note says "Your answers for this are not saved yet."
+- **After-install program (F4, `zingas-installs`).** From new emails under the Gmail label **Completed**:
+  day 3 "How are they working?"; a happy answer gets the Google review ask in the same reply (one card); a
+  problem goes to you and that customer gets no review or referral ask; no answer in 7 days, no review ask; a
+  week after the review ask, a referral ask; about 6 months on, an "other rooms" check-in (winter waits for
+  March 15 and asks about the patio too). Every text is a card you approve. Only customers Val knows (Salesforce,
+  her customer files, the follow-ups) get texts; a Completed email she can't match is one brief line.
+  Its first look starts only installs from the last 10 days.
+- **Hot-lead alerts (F8, `zingas-hotleads`).** From proposals made in the website's estimator: a question on a
+  proposal (right away, with a "now" task), opened 3 times in 48 hours ("Call now"), back after 7 quiet days, or
+  signed (today's follow-up text to them stops). Night alerts wait for the morning. **Proposals sent the old way
+  (a PDF by email) make no alerts**, so this shows nothing until you send proposals from the estimator.
+- **Cost:** one small Val run per after-install card. The wrap-up, the price answers and the alerts use no
+  extra AI.
+
+| Step | What to do | Who | Time |
+|---|---|---|---|
+| W1 | Say go to push the website branch `val-wrapup-hotleads` and the assistant branch `val-four-features` to `main` | Gerrit says go, I do the rest | 2 min |
+| W2 | **Put it on Val's computer, preview first:** `START=0 bash files/install-four-features.sh` copies the files and prints tonight's wrap-up and the Completed emails Val can match (nothing sent). Then `bash files/install-four-features.sh` starts it | Gerrit says go, I run both and check | 5 min |
+| W3 | **Your price and competitor answers (3 to 5).** Text Val in Telegram, one at a time, in your words, for example "When they say Budget Blinds, I tell them ...", "When it's too expensive, I say ...", and your main value points. Val saves each one (`zingas-answers`). No numbers in them | Gerrit | 10 min |
+| W4 | **Your Google review link** (Google Business Profile → **Ask for reviews** → copy the link) and, if there is one, the **referral reward** in words (no dollar amount, for example "a gift card as a thank-you"). Text both to Val | Gerrit | 3 min |
+| W5 | Check: the first evening brief has the wrap-up; the next Completed email gets its day-3 card 3 days later; a proposal you open 3 times from a test customer sends "Call now" | I check | |
+
 ## Money tracker (planned 2026-10-23; cost count built 2026-10-24)
 Val keeps a running total of everything you pay for: her own costs and your own AI and tool sign-ups. She
 counts her use every hour, reads the receipts herself, and checks her numbers against them each month. You

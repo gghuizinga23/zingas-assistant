@@ -22,11 +22,12 @@ and events also need the rep on `VAL_FOLLOWUP_USERS` (403 for anyone else; all f
 | `GET /api/assistant/contact?phone=` (key: `QUO_BRIDGE_TOKEN`) | quo-bridge, before every customer text | `{ doNotContact, sendWindow: {startHour: 8, endHour: 20} }`. An error means "don't text". | `src/app/api/assistant/contact/route.ts` |
 | `POST /api/assistant/contact` `{phone}` (writes; key: `QUO_BRIDGE_TOKEN`) | quo-bridge, when a customer texts STOP to Val's number | Puts them on the shared do-not-contact list, so the estimator never texts them either. | same |
 | `GET /api/assistant/appointments?day=YYYY-MM-DD&rep=` | Val's briefs | One day of the rep's Google Calendar (Indianapolis time): start, end, all-day, title, place, short note. Cancelled and declined entries left out, dollar amounts taken out. `{connected: false}` until the rep taps "Connect my calendar" (gear → My profile → Google Calendar); `reconnect: true` when Google stopped the link. | `src/app/api/assistant/appointments/route.ts`, `src/modules/assistant/calendar.ts`, `calendarStore.ts` |
+| `GET /api/assistant/day?day=YYYY-MM-DD&rep=` | Val's end-of-day wrap-up (F3) | Every Salesforce visit the rep had that day (Indianapolis day; today when `day` is left out), sold or not, Canceled and No Show too, earliest first: per visit the customer (name, first name, phone, email, city), product, result (`""` until the rep enters it), result detail, follow-up date, lead source and follow-up note. `day` at most 31 days back and 7 ahead, else 400. Never a price. The shape is below. | `src/app/api/assistant/day/route.ts`, `src/modules/assistant/day.ts`, `src/lib/assistant/door.ts` (`dayVisits`) |
 | `POST /api/assistant/cost` (writes; Val's key, or `QUO_BRIDGE_TOKEN` for quo-bridge) | Val's cost counter (`zingas_money.py`, plan C1) and quo-bridge, about every hour | Saves this month's cost count for the Assistant > Cost tab. Who sent it comes from the key. Each count replaces that sender's last one for the month. Only this month, and last month during the first 7 days. Answers `{ok, month, source}`; nothing to read back. 60 posts per 10 minutes. The shape is below. | `src/app/api/assistant/cost/route.ts`, `src/modules/assistant/cost.ts` |
 | `GET /api/assistant/followups?rep=&days=120` | Val, keeping the Follow-Up sheet | Her worklist for one rep: every quoted-but-not-sold visit in the last `days` (1 to 400) plus every follow-up file still open (sold care too). Per customer: name, phone, email, city, the visit, both notes (and whether Val wrote the follow-up note last), the follow-up date in effect and where it came from (`sheet` or `salesforce`), the follow-up file (stage, temperature, waiting on, next step, driver, pause, last contact, fields the rep holds), `valMay` (for each part of the plan: may Val change it today, and why not), the last 5 touches. Soonest follow-up first. Never a price. | `src/app/api/assistant/followups/route.ts`, `src/modules/followups/` |
 | `POST /api/assistant/followups/update` (writes) | Val | A note entry, the follow-up date, temperature, waiting on, next step, last contact. The shape and rules are below. | `src/app/api/assistant/followups/update/route.ts`, `src/modules/followups/rules.ts` |
 | `POST /api/assistant/followups/touch` (writes) | Val | Logs one touch (text, email, call, visit, note; planned or done). Always allowed. Shape below. | `src/app/api/assistant/followups/touch/route.ts` |
-| `GET /api/assistant/events?after=<id>&types=&limit=100` | Val | What happened since `after` (her own place, the last id she handled), oldest first: `{events, last}`. She may read `followup_rep_changed`, `customer_stopped_texts`, `proposal_viewed`, `proposal_signed`, `order_stage_changed`; asking for anything else is a 400. Follow-up events come only for her reps on `VAL_FOLLOWUP_USERS`. | `src/app/api/assistant/events/route.ts`, `src/core/events/store.ts` |
+| `GET /api/assistant/events?after=<id>&types=&limit=100` | Val | What happened since `after` (her own place, the last id she handled), oldest first: `{events, last}`. She may read `followup_rep_changed`, `customer_stopped_texts`, `proposal_viewed`, `proposal_question`, `proposal_signed`, `order_stage_changed`; asking for anything else is a 400. Follow-up events come only for her reps on `VAL_FOLLOWUP_USERS`. | `src/app/api/assistant/events/route.ts`, `src/core/events/store.ts` |
 | `POST /api/assistant/upcoming` (writes; Val's key) | Val's follow-ups program (`zingas_followups.py`), about every 15 minutes and right after the day's list is made or sent | Saves the follow-ups the coming weekday lists will hold (14 days ahead), for the Assistant > Drafts tab's "Coming up". Each list replaces the last, so a reply, a sale or a new estimate shows on the next one. Sends nothing: each follow-up still reaches Telegram on its day and needs Gerrit's tap. Answers `{ok, drafts}`; nothing to read back. 30 posts per 10 minutes. The shape is below. | `src/app/api/assistant/upcoming/route.ts`, `src/modules/assistant/upcoming.ts` |
 | `POST /api/assistant/todo` (writes; Val's key) | Val's to-do sender (`zingas-todo watch`, supervisord program `zingas-todo-post`), on every change to the list and at least every 10 minutes | Saves Gerrit's open to-do list for the Assistant > To-do tab. Each list replaces the last. The page moves a message with no answer past 24 hours to Now itself (Gerrit's rule, 2026-10-26), the same as Val. Answers `{ok, items}`; nothing to read back. 120 posts per 10 minutes. The shape is below. | `src/app/api/assistant/todo/route.ts`, `src/modules/assistant/todo.ts` |
 | `GET /api/assistant/issues?rep=` | Val's to-do sender (`zingas-todo watch`, `IssueSync`), every 2 minutes | The rep's blocked orders, as on the Issues tab (Gerrit, 2026-10-26: each one is a Today task, Now after 24 hours). Salesforce is read again at most every 2 minutes. Per order: id, customer, products, job number, `waitingOn`, `task`, turned in, days blocked, the last 5 comments, a link that opens it on the Issues tab. Never the balance due, never an amount. Shape below. | `src/app/api/assistant/issues/route.ts`, `src/modules/assistant/issues.ts`, `assistant/files/zingas_todo.py` (`IssueSync`) |
@@ -140,8 +141,34 @@ appointment (it proves the customer is one of her reps'). Unknown fields, bad va
 ## Events
 
 The website keeps "something happened" notes in `os_events` (`src/core/events/store.ts`). Names in use:
-`proposal_viewed`, `proposal_signed`, `order_stage_changed`, `customer_stopped_texts`, `fleet_issue_reported`,
-`followup_rep_changed`. Val reads them through `GET /api/assistant/events` (above); never `fleet_issue_reported`.
+`proposal_viewed`, `proposal_question`, `proposal_signed`, `order_stage_changed`, `customer_stopped_texts`,
+`fleet_issue_reported`, `followup_rep_changed`. Val reads them through `GET /api/assistant/events` (above); never
+`fleet_issue_reported`.
+
+What really writes each one today (2026-10-26):
+
+| Event | Written by | When |
+|---|---|---|
+| `followup_rep_changed` | the Follow-Up sheet and page (`src/modules/followups/service.ts`) | below |
+| `customer_stopped_texts` | the contact route (quo-bridge's STOP) and the estimator's own text inbox (`src/lib/inboundText.ts`) | a customer texts STOP |
+| `proposal_viewed` | the customer's proposal page (`src/app/(customer)/p/[token]/page.tsx`) | the customer opens their link, at most once per 30 minutes; never the rep's in-person hand-off |
+| `proposal_question` | "Ask a question" on that page (`askQuestion`, `src/actions/customer.ts`) | the customer sends a question |
+| `proposal_signed` | signing (`signCore`, `src/lib/proposal/signing.ts`) | the customer signs, on their link or the rep's iPad; never demo data |
+| `fleet_issue_reported` | Fleet (`src/modules/fleet/actions.ts`) | a car problem is reported |
+| `order_stage_changed` | nothing yet | (Val may ask for it; none come back until something writes it) |
+
+The three proposal events (`src/lib/assistant/proposalEvents.ts`) are written right after the page or the
+signing is done, at the same spots as the rep's alert and the old assistant webhook, and only when the proposal's
+rep is in `ASSISTANT_REP_EMAILS`. The estimator itself is still behind `ESTIMATOR_USERS` (Gerrit only). A write that
+fails is logged and dropped: it never breaks the customer's page or the signing. `source` is `estimator`;
+`prospect_id` is the customer's Salesforce Prospect id when the estimator customer has one (came from a Salesforce
+appointment), else null. `data` never holds a price, total or payment method:
+
+- `proposal_viewed`: `{proposalId, title, viewCount, firstViewedAt, lastViewedAt, sentAt, customerName, customerPhone,
+  customerEmail, repEmail}`. Times are ISO (UTC) or null; phone and email are null when the customer has none.
+- `proposal_question`: the same, plus `question` (the customer's words, cut to 500 characters; the whole question
+  is on the job in the estimator).
+- `proposal_signed`: `{proposalId, title, signedAt, customerName, customerPhone, customerEmail, repEmail}`.
 
 `followup_rep_changed`: a person changed the follow-up date or note on the sheet, undid one of Val's changes, or
 pressed a button on the Follow-Up page run by Val, on a customer Val keeps follow-ups for. `data`: `{appointmentId,
@@ -150,6 +177,30 @@ rep, by, fields: ["follow_up_date" | "followup_note" | "driver" | "paused_until"
 `mine` is "I've got this", `val` is "Val, take it back", `update` is "Tell Val what happened" (the rep's words are
 the newest entry on the follow-up note, never in the event). Val should re-read that customer (worklist) before
 doing anything else for them.
+
+## End-of-day wrap-up and hot-lead alerts (F3, F8)
+
+- **Wrap-up (F3).** For her end-of-day wrap-up Val reads `GET /api/assistant/day` for the rep's day: every visit,
+  with `result: ""` for the ones the rep hasn't resulted yet. The door is read-only; results are still entered in
+  Salesforce.
+
+```json
+{ "day": "2026-10-26", "rep": "gerrithuizinga@zingashome.com",
+  "visits": [{ "appointmentId": "a0Y5e000001", "prospectId": "a0X5e000001", "time": "15:00",
+               "customer": { "name": "Walter, Natalie", "firstName": "Natalie", "phone": "(317) 555-0101",
+                             "email": "natalie@example.com", "city": "Carmel" },
+               "product": "Int - Shutters", "result": "Demoed, Not Sold", "resultDetail": "Price",
+               "followUpDate": "2026-10-30", "leadSource": "Google",
+               "note": "10/26/26 - Wants samples; Gerrit" }] }
+```
+
+  `rep` is the rep's email. `prospectId`, `email`, `resultDetail`, `followUpDate` and `note` can be null; `time` is
+  24-hour `HH:MM`. `result` is one of `Sold`, `Demoed, Not Sold`, `Not Demoed`, `Canceled`, `No Show`, or `""`.
+- **Hot-lead alerts (F8).** Val reads `proposal_viewed`, `proposal_question` and `proposal_signed` from
+  `GET /api/assistant/events` for her hot-lead alerts (a customer looking at their proposal right now is a good
+  moment to call). The rep still gets the estimator's own text as before. The events route also needs the rep on
+  `VAL_FOLLOWUP_USERS`, like every follow-up route. These events only come for proposals made in the
+  estimator, so for now only Gerrit's (the estimator is his only until he says it is shipped).
 
 ## quo-bridge's door for the website
 

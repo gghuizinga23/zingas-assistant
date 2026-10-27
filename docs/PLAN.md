@@ -179,11 +179,15 @@ Highest priority first. Each step comes after what it needs. **Gerrit:** marks h
    vault, the product link and its size, and what payments@ needs (F12, "Gerrit's steps").
 10. **F1 know the customer**, with the read-only customer lookup.
 11. **B4** Salesforce and Estimator facts (needs F1 and step 9).
-12. **F3 end-of-day wrap-up**, rethought: Val reads results herself and never asks Sold / Lost.
-13. **F6 price and competitor answers.** Before it, Gerrit: his 3–5 best answers.
-14. **F4 after-install program.** Before it, Gerrit: Zinga's Google review link and the referral reward.
+12. **F3 end-of-day wrap-up**, rethought: Val reads results herself and never asks Sold / Lost. **Built 2026-10-26**
+    (`zingas-wrapup`, SETUP-VAL "Wrap-up, price answers, after-install texts, hot-lead alerts").
+13. **F6 price and competitor answers.** Before it, Gerrit: his 3–5 best answers. **Built 2026-10-26** (`zingas-answers`);
+    until Gerrit texts Val his answers, drafts say he will go over it.
+14. **F4 after-install program.** Before it, Gerrit: Zinga's Google review link and the referral reward. **Built 2026-10-26**
+    (`zingas-installs`); the review ask waits for the link.
 15. **F5 neighbor effect** (needs F4).
-16. **F8 hot-lead alerts** (needs step 9).
+16. **F8 hot-lead alerts** (needs step 9). **Built 2026-10-26** (`zingas-hotleads`, from the website estimator's
+    proposal events); the quiet-quote rescue part of F8 is not built.
 17. **F9 weather nudge** (needs F8; ready by about April 2027).
 18. **F7 Monday numbers.** Then money step C6: Val's ROI reads sale amounts from the same read-only view.
 19. **F10 spouse pack** (needs F3 and Plaud).

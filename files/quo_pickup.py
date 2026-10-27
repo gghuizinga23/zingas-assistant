@@ -66,10 +66,14 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, "/usr/local/lib/zingas")
 sys.path.insert(1, os.path.dirname(os.path.abspath(__file__)))
 import missed_call as mc  # noqa: E402
-import value_answers as va  # noqa: E402
 import zingas_customer as zc  # noqa: E402
 import zingas_todo as zt  # noqa: E402
 import zingas_voice as zv  # noqa: E402
+
+try:   # Gerrit's price and competitor answers (F6); a reply never waits on them
+    import value_answers as va  # noqa: E402
+except ImportError:      # pragma: no cover
+    va = None
 
 try:   # the after-install program (F4); a reply never waits on it
     import zingas_installs as zi  # noqa: E402
@@ -85,6 +89,8 @@ except ImportError:      # pragma: no cover
 def answers_block(*customer_words: str) -> str:
     """Gerrit's own price and competitor answers (F6) when the customer's words bring one up; "" otherwise.
     A draft never waits on it."""
+    if va is None:
+        return ""
     try:
         return va.prompt_block(*customer_words, vault=VAULT)
     except Exception as e:

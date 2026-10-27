@@ -63,6 +63,10 @@ lets only the folders above into git. Keep it that way.
 | `files/zingas_customer.py` | `/usr/local/lib/zingas/zingas_customer.py` (one file per customer: profile, timeline, visits; used by every pickup) |
 | `files/plaud_pickup.py` | `/usr/local/bin/zingas-plaud` and `/usr/local/lib/zingas/` (Plaud visit recordings into customer memory and to-dos, run by supervisord). Installed by `files/install-plaud.sh` |
 | `files/zingas_os.py` | `/usr/local/lib/zingas/zingas_os.py` and `/usr/local/bin/zingas-os` (Val's line to the company website: customer lookup, Monday numbers, calendar, and the Follow-Up sheet with skill `followup-sheet`). Installed by `files/install-zingas-os.sh` |
+| `files/zingas_wrapup.py` | `/usr/local/lib/zingas/` and `/usr/local/bin/zingas-wrapup` (end-of-day wrap-up in the evening brief, plan F3). Installed by `files/install-four-features.sh` |
+| `files/value_answers.py` | `/usr/local/lib/zingas/` and `/usr/local/bin/zingas-answers` (Gerrit's price and competitor answers for drafts, plan F6; his words live in the vault's `value-answers.md`) |
+| `files/zingas_installs.py` | `/usr/local/lib/zingas/` and `/usr/local/bin/zingas-installs` (the after-install texts from the Gmail label Completed, plan F4, run by supervisord) |
+| `files/zingas_hotleads.py` | `/usr/local/lib/zingas/` and `/usr/local/bin/zingas-hotleads` (hot-lead alerts from the website's proposal events, plan F8, run by supervisord) |
 | `files/zingas_money.py` | `/usr/local/lib/zingas/zingas_money.py` and `/usr/local/bin/zingas-money` (Val's hourly cost count to the company website, run by supervisord). With `files/money_prices.json` (public prices only) in `/usr/local/lib/zingas/`. Installed by `files/install-zingas-money.sh` |
 
 ## Tests
