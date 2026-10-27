@@ -179,6 +179,39 @@ class Calls(unittest.TestCase):
                                                         "status": "unanswered"}, secret=second)[0], 200)
         self.assertEqual(len(r.val("GET", "/api/val/updates")[1]["calls"]), 1)
 
+    def test_quos_ai_agent_hang_up_is_a_missed_call_and_its_message_a_voicemail(self):
+        """Gerrit's test 2026-10-26: the AI agent answered, so both calls were thrown away as 'answered'."""
+        r = Rig()
+        r.quo_event("call.completed", {"id": "CA1", "direction": "incoming", "status": "ai-handled",
+                                       "duration": 6, "hasVoicemail": False})       # hung up on the AI agent
+        r.quo_event("call.completed", {"id": "CA2", "direction": "incoming", "status": "ai-handled",
+                                       "duration": 75, "hasVoicemail": False})      # left it a message
+        r.quo_event("call.summary.completed", {"callId": "CA2", "processingStatus": "completed",
+                                               "handledByAiAgent": True, "fromPhoneNumber": CUSTOMER,
+                                               "summary": ["Asked about new blinds in Greenwood."],
+                                               "nextSteps": ["Call back early morning"]})
+        r.quo_event("call.summary.completed", {"callId": "CA3", "processingStatus": "failed",
+                                               "handledByAiAgent": True, "fromPhoneNumber": CUSTOMER})
+        got = {c["id"]: (c["kind"], c["text"]) for c in r.val("GET", "/api/val/updates")[1]["calls"]}
+        self.assertEqual(got, {
+            "CA1": ("missed", ""),
+            "ai-CA2": ("voicemail", "Quo's AI agent took this message: Asked about new blinds in Greenwood.\n"
+                                    "Next steps:\nCall back early morning"),
+            "ai-CA3": ("voicemail", "[Quo's AI agent answered. It has no summary. Listen in the Quo app.]")})
+        # Val's text back is made for the AI agent's message like for a voicemail
+        status, _ = r.val("POST", "/api/val/drafts", {"to": CUSTOMER, "text": "Got your message! Gerrit",
+                                                      "category": "missed_call", "about_call": "ai-CA2"})
+        self.assertEqual(status, 200)
+        self.assertIn("[Voicemail] Quo's AI agent took this message", r.tg.last_card()["text"])
+
+    def test_an_unknown_call_status_is_kept_as_a_trace(self):
+        r = Rig()
+        r.quo_event("call.completed", {"id": "CA4", "direction": "incoming", "status": "forwarded"})
+        r.quo_event("call.completed", {"id": "CA5", "direction": "incoming", "status": "answered"})
+        self.assertEqual(r.val("GET", "/api/val/updates")[1]["calls"], [])
+        traces = [e["detail"] for e in r.store.events if e["kind"] == "call_ignored"]
+        self.assertEqual(traces, ["call CA4 status 'forwarded'"])
+
 
 class MissedCallTextBack(unittest.TestCase):
     """F2: Val's "Sorry I missed you" text after a missed call or voicemail."""

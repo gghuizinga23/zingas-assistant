@@ -43,6 +43,9 @@ SENT_EVENTS = ("message.delivered",)     # a text that left the business number 
 WAITING = ("pending", "editing", "held", "countdown", "failed")
 AUTO_REPLY_SECONDS = 60
 MISSED_CALL = "missed_call"   # Val's text back after a missed call or voicemail (plan F2)    # an "outgoing" text this soon after theirs is Quo's auto-reply, not Gerrit
+# Quo's AI agent answers when Gerrit doesn't (status "ai-handled"). A call this short means they hung up on it
+# and left no message: a missed call. A longer one is a message; its summary brings it in as a voicemail.
+AI_HANGUP_SECONDS = 20
 
 Response = Tuple[int, dict]
 
@@ -293,7 +296,8 @@ class Bridge(FollowupMixin):
     def _on_call(self, event: dict) -> Response:
         """Calls and voicemails go on Val's to-do list. Only incoming calls from a US
         number are kept: a missed call with no voicemail, a voicemail (with Quo's
-        transcript), or an answered call's summary (Quo's Business plan)."""
+        transcript), or an answered call's summary (Quo's Business plan). When Quo's AI agent
+        answers for Gerrit, a quick hang-up is a missed call and a message (its summary) is a voicemail."""
         kind_of = event.get("type")
         data = event.get("data") or {}
         res, ctx = data.get("resource") or {}, data.get("context") or {}
@@ -303,7 +307,13 @@ class Bridge(FollowupMixin):
         if kind_of == "call.completed":
             if res.get("direction") != "incoming" or res.get("hasVoicemail"):
                 return 200, {"ignored": "not a missed call"}     # the voicemail alert covers it
-            if res.get("status") not in ("unanswered", "abandoned", "failed"):
+            status, secs = res.get("status"), res.get("duration")
+            if status == "ai-handled":
+                if not isinstance(secs, (int, float)) or secs >= AI_HANGUP_SECONDS:
+                    return 200, {"ignored": "Quo's AI agent took a message"}   # the summary alert brings it
+            elif status not in ("unanswered", "abandoned", "failed"):
+                if status != "answered":      # a word we don't know yet: keep a trace to look at
+                    self._log("call_ignored", None, f"call {res.get('id')} status {status!r}")
                 return 200, {"ignored": "answered call"}          # the summary alert covers it
             phone, kind, body, row_id = us_phone(external[0] if external else ""), "missed", "", res.get("id")
         elif kind_of == "call.voicemail.completed":
@@ -313,14 +323,21 @@ class Bridge(FollowupMixin):
             kind, row_id = "voicemail", res.get("id") or res.get("voicemailId")
             body = str(res.get("transcript") or "").strip() or "[Quo had no transcript yet. Listen in the Quo app.]"
         else:   # call.summary.completed
-            if res.get("processingStatus") != "completed":
+            done = res.get("processingStatus")
+            ai = bool(res.get("handledByAiAgent"))
+            if done != "completed" and not (ai and done == "failed"):
                 return 200, {"ignored": "summary not ready"}
             phone = us_phone(res.get("fromPhoneNumber") or (external[0] if external else ""))
-            kind, row_id = "call_summary", "sum-" + str(res.get("callId") or "")
-            lines = [str(x) for x in (res.get("summary") or [])]
-            steps = [str(x) for x in (res.get("nextSteps") or [])]
+            lines = [str(x) for x in (res.get("summary") or [])] if done == "completed" else []
+            steps = [str(x) for x in (res.get("nextSteps") or [])] if done == "completed" else []
             body = "\n".join(lines + (["Next steps:"] + steps if steps else []))
-        if not row_id or row_id == "sum-" or not phone:
+            if ai:      # Gerrit didn't answer and the AI agent took a message: Val treats it as a voicemail
+                kind, row_id = "voicemail", "ai-" + str(res.get("callId") or "")
+                body = ("Quo's AI agent took this message: " + body) if body else \
+                    "[Quo's AI agent answered. It has no summary. Listen in the Quo app.]"
+            else:
+                kind, row_id = "call_summary", "sum-" + str(res.get("callId") or "")
+        if not row_id or row_id in ("sum-", "ai-") or not phone:
             return 200, {"ignored": "no id or not a US number"}
         new = self.store.add_call({"id": str(row_id), "phone": phone, "kind": kind, "body": body[:4000],
                                    "created_at": res.get("createdAt") or res.get("completedAt") or self._stamp()})
