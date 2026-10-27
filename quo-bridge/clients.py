@@ -150,7 +150,8 @@ class QuoClient:
         return list(self._call("GET", "/webhooks").get("data") or [])
 
     def delete_webhook(self, webhook_id: str) -> None:
-        self._call("DELETE", "/v1/webhooks/" + webhook_id, versioned=False)
+        # The ids /webhooks lists are the 2026-03-30 version's (digits only); the old /v1 path refuses them.
+        self._call("DELETE", "/webhooks/" + webhook_id)
 
     def create_webhook(self, url: str, number_id: str, events=("message.received",),
                        label: str = "zingas-bridge") -> dict:

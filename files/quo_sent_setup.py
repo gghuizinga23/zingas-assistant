@@ -69,9 +69,42 @@ def main():
     qs.say(f"Removed {len(old)} old alert(s). Done: quo-bridge now hears about texts you send in the Quo app.")
 
 
+def leftovers(hooks):
+    """After a run that made the new alerts but couldn't remove the old ones: the old ones to remove.
+    For each of our three names, the newest alert (Quo's createdAt) stays; every older one at quo-bridge's
+    address goes, and so does an unnamed alert there. Stops, removing nothing, unless all three new ones
+    are there."""
+    url, ours = plan(hooks)
+    ours = [w for w in ours if w.get("url") == url]
+    newest = {}
+    for w in ours:
+        lab = w.get("label")
+        if lab in LABELS and str(w.get("createdAt") or "") > str((newest.get(lab) or {}).get("createdAt") or ""):
+            newest[lab] = w
+    missing = [lab for lab in LABELS if lab not in newest]
+    if missing:
+        raise qs.Stop(f"Quo has no {', '.join(missing)} alert, so nothing was removed. Tell Claude.")
+    keep = {w["id"] for w in newest.values()}
+    return [w for w in ours if w["id"] not in keep]
+
+
+def remove_old():
+    """quo-old-alerts.sh: only removes the old alerts (one key on stdin: the Quo key)."""
+    lines = sys.stdin.read().splitlines()
+    if not lines or not lines[0].strip():
+        raise qs.Stop("Nothing was pasted. Nothing was changed.")
+    quo = qs.QuoClient(lines[0].strip(), "")
+    old = leftovers(quo.list_webhooks())
+    for w in old:
+        quo.delete_webhook(w["id"])
+        qs.say(f"Removed the old {w.get('label') or 'unnamed'} alert (made {str(w.get('createdAt') or '?')[:10]}).")
+    qs.say(f"Done: {len(old)} old alert(s) removed. The three new ones stay." if old
+           else "Nothing to remove: only the three new alerts are there.")
+
+
 if __name__ == "__main__":
     try:
-        main()
+        remove_old() if sys.argv[1:] == ["--old-only"] else main()
     except qs.Stop as e:
         qs.say(str(e))
         sys.exit(1)
