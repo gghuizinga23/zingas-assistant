@@ -50,7 +50,9 @@ REP = os.environ.get("ZINGAS_SHEET_REP", "gerrithuizinga@zingashome.com")
 
 SHEET_EVERY, EVENTS_EVERY, LOOP_SLEEP = timedelta(minutes=10), timedelta(minutes=2), 30
 BATCH = 8                    # customers per Val run
-FIRST_TOUCHES = 15           # the first time, only the newest contacts go on the sheet
+FIRST_TOUCHES = 5            # the first time, only the newest contacts go on the sheet
+WRITES = 30                  # touches and last-contact writes per pass: Val's key shares 120 calls / 10 minutes
+                             # with all her programs, so the first fill takes about an hour, a little at a time
 TEMPERATURES = ("hot", "warm", "cold")
 WAITING_ON = ("customer", "spouse", "financing", "hoa", "quote_change", "timing", "other")
 CLOSED = ("closed_sold", "closed_lost")
@@ -353,6 +355,7 @@ class Sheet:
 
     def _once(self, write: bool) -> dict:
         today = self._today()
+        self.left = WRITES
         d = self.site.followups(rep=self.rep)
         done = {"customers": 0, "touches": 0, "judged": 0, "updated": 0, "refused": 0}
         waiting = []
@@ -375,7 +378,10 @@ class Sheet:
                 for e in new:
                     t = touch_for(e, appt, pid, (item.get("case") or {}).get("repEmail") or self.rep)
                     if t:
+                        if self.left <= 0:
+                            break                     # the rest go on the next pass
                         self.site.followup_touch(t)
+                        self.left -= 1
                         done["touches"] += 1
                     st["refs"].append(entry_ref(e))
                 st["refs"] = st["refs"][-200:]
@@ -408,6 +414,9 @@ class Sheet:
         have = (item.get("case") or {}).get("lastContactAt") or ""
         if not last or not last.get("at") or (have and have >= last["at"]) or st.get("sent_last") == last["at"]:
             return
+        if self.left <= 0:
+            return
+        self.left -= 1
         self.site.followup_update({"appointmentId": item["appointmentId"], "prospectId": item["prospectId"],
                                    "lastContact": last})
         st["sent_last"] = last["at"]

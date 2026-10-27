@@ -318,6 +318,8 @@ Why: on the new Follow-Up page "how warm", "waiting on" and "next step" were emp
 - **"Tell Val what happened"** on a customer: she looks again within 2 minutes and turns your words into the next
   step and date (no note: yours is already there).
 - It contacts **no customer**, and writes no price (amounts become "[amount]").
+- **The first fill takes about an hour,** a little every 10 minutes (the newest 5 contacts per customer), because
+  Val's website key is shared by all her programs and allows 120 calls per 10 minutes.
 - **Cost:** about 5 small runs the first time for your 35 customers, then one run per batch with news.
 
 | Step | What to do | Who | Time |

@@ -102,8 +102,18 @@ class Touches(Base):
         for n in range(20):
             self.contact("text_in", f"2026-10-21T{n:02d}:00:00-04:00", f"text {n}", f"quo:{n}")
         self.sheet.once()
-        self.assertEqual(len(self.site.touches), 15)
-        self.assertEqual(self.site.touches[0]["summary"], "text 5")
+        self.assertEqual([t["summary"] for t in self.site.touches], [f"text {n}" for n in range(15, 20)])
+
+    def test_writes_per_pass_stay_under_the_door_limit(self):
+        self.site.items = [item(appt=f"A{n}", pid="P-77") for n in range(10)]     # 10 files, 5 contacts each
+        for n in range(5):
+            self.contact("text_in", f"2026-10-21T{n:02d}:00:00-04:00", f"text {n}", f"quo:{n}")
+        self.answers = [{"results": []}, {"results": []}]
+        self.sheet.once()
+        self.assertEqual(len(self.site.touches), zs.WRITES)
+        self.sheet.once()
+        self.assertEqual(len(self.site.touches), 50)            # the rest on the next pass, none twice
+        self.assertEqual(len({(t["appointmentId"], t["summary"]) for t in self.site.touches}), 50)
 
     def test_a_text_matched_by_phone_only_is_found(self):
         os.remove(os.path.join(self.vault, "customers", "P-77.md"))
