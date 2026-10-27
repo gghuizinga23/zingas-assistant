@@ -91,5 +91,18 @@ class WordsTests(unittest.TestCase):
         self.assertIn("Do not name a day or a time", p)
 
 
+
+class FirstNameTests(unittest.TestCase):
+    def test_salesforce_last_comma_first(self):
+        """Gerrit's test 2026-10-27: the card said "Text to Huizinga,," from "Huizinga, Gerrit"."""
+        self.assertEqual(mc.first_name("Huizinga, Gerrit"), "Gerrit")
+        self.assertEqual(mc.first_name("Dennin, Jeff & Erika"), "Jeff")
+        self.assertEqual(mc.first_name("Pat Lee"), "Pat")
+        self.assertEqual(mc.first_name("Huizinga,"), "Huizinga")
+        self.assertEqual(mc.first_name("Caller at 317"), "")
+        self.assertEqual(mc.first_name(""), "")
+        self.assertTrue(mc.fallback_text("Huizinga, Gerrit", "missed", "", True).startswith("Hi Gerrit."))
+
+
 if __name__ == "__main__":
     unittest.main()

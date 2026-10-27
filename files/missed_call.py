@@ -117,7 +117,12 @@ def slot_words(slot: Optional[datetime], now: datetime) -> str:
 
 
 def first_name(name: str) -> str:
-    return (name or "").strip().split(" ")[0] if name and not re.search(r"\d", name) else ""
+    """ "Pat Lee" -> "Pat". Salesforce writes "Lee, Pat" (and "Dennin, Jeff & Erika"): the part after the comma."""
+    if not name or re.search(r"\d", name):
+        return ""
+    last, comma, rest = name.strip().partition(",")
+    words = (rest if comma and rest.strip() else last).split()
+    return words[0].strip(",") if words else ""
 
 
 def fallback_text(name: str, kind: str, when: str, known: bool) -> str:
