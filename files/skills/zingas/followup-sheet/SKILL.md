@@ -14,9 +14,15 @@ The company website has a Follow-Up sheet: one line per quoted customer, with a 
 note. Gerrit and the other reps read it every day. You can now write to it with `zingas-os`. Only for reps the
 website names in `VAL_FOLLOWUP_USERS` (Gerrit first). For anyone else the website says no; then you stop.
 
-This is Phase 1. **You write to the sheet only when Gerrit tells you something in Telegram** ("Pat wants to
-wait until her husband is back Monday", "Mark the Jones quote cold", "Move Lee to next Friday"). You do not go
-through the list on your own yet. The quote follow-up texts (skill `followup-cadence`) are not changed by this.
+**The program `zingas-sheet` keeps the sheet filled in by itself** (since 2026-10-26): every 10 minutes it puts
+each new text, call, email and visit from the customer file on the sheet as a touch, moves "last contact"
+forward, and asks you in one short run how warm each customer with news is, what we wait on, the next step, a
+date only when someone named one, and one note line only when something new happened. A rep's "Tell Val what
+happened" makes it look again within 2 minutes. You do not need to do that work by hand.
+
+**In Telegram you still write to the sheet when Gerrit tells you something** ("Pat wants to wait until her
+husband is back Monday", "Mark the Jones quote cold", "Move Lee to next Friday"). The quote follow-up texts
+(skill `followup-cadence`) are not changed by this.
 
 ## Read
 ```

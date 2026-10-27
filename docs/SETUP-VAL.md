@@ -303,6 +303,30 @@ Why: a missed call is a lead lost that day. Now:
 | T3 | **Put the text-back on Val's computer:** `bash files/install-missed-call.sh` (after T2). It backs up the old files, copies the new ones and restarts the text pickup | Gerrit says go, I run it and check | 3 min |
 | T4 | Check: call the Quo number from your cell and hang up. Within a minute a card says "[Missed call. No voicemail.]" with a call-back time that fits your calendar. Skip it (or call yourself back and see the card stop) | Gerrit makes the call, I check | 3 min |
 
+## Val keeps the Follow-Up sheet filled in (built 2026-10-26, Follow-Up plan Phase 3, first part)
+Why: on the new Follow-Up page "how warm", "waiting on" and "next step" were empty for every customer, and
+"Your calls" was picked by a plain rule. Now the program `zingas-sheet` (`files/zingas_sheet.py`) does it:
+
+- **Every 10 minutes**, for each of your open quotes: every new text, call, voicemail, email and visit in the
+  customer's file goes on the sheet as a touch, and "last contact" moves forward. No AI for that part.
+- **Customers with news** (and, the first time, everyone) get one short Val run per 8 customers: how warm
+  (hot, warm, cold), what we wait on, the next step (it shows on "Your calls" as the reason), a follow-up date
+  only when you or the customer named a day, and one note line only when something new happened (at most one
+  Val note a customer a day).
+- **The rep always wins**, as on the sheet today: a part you set, "I've got this", a pause, Sold or Lost is never
+  changed. Undo works on all of it.
+- **"Tell Val what happened"** on a customer: she looks again within 2 minutes and turns your words into the next
+  step and date (no note: yours is already there).
+- It contacts **no customer**, and writes no price (amounts become "[amount]").
+- **Cost:** about 5 small runs the first time for your 35 customers, then one run per batch with news.
+
+| Step | What to do | Who | Time |
+|---|---|---|---|
+| S1 | Say go to put branch `missed-call-textback` (it has this too) on `main` | Gerrit says go, I do the rest | 1 min |
+| S2 | **Look first:** `START=0 bash files/install-sheet.sh` copies the files without starting anything and prints what Val would write for up to 8 customers (`zingas-sheet preview`, writes nothing). I show you the list | Gerrit says go, I run it | 5 min |
+| S3 | **Start it:** `bash files/install-sheet.sh`. It backs up the old files, copies the new ones and starts zingas-sheet | Gerrit says go, I run it and check | 3 min |
+| S4 | Check on the website: Follow-Up → Today shows "how warm" and a next step on your customers, each with "Set by Val · Undo" | Claude | 5 min |
+
 ## Money tracker (planned 2026-10-23; cost count built 2026-10-24)
 Val keeps a running total of everything you pay for: her own costs and your own AI and tool sign-ups. She
 counts her use every hour, reads the receipts herself, and checks her numbers against them each month. You
