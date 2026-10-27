@@ -99,8 +99,33 @@ def digits10(phone) -> str:
 
 
 def first_of(name: str) -> str:
-    part = (name or "").strip().split(" ")[0]
-    return part if part and not re.search(r"[\d@]", part) else ""
+    """ "Pat Lee" -> "Pat". Salesforce writes "Lee, Pat" (and "Dennin, Jeff & Erika"): the part after the comma."""
+    name = (name or "").strip()
+    if not name or re.search(r"[\d@]", name):
+        return ""
+    last, comma, rest = name.partition(",")
+    words = (rest if comma and rest.strip() else last).split()
+    return words[0].strip(",") if words else ""
+
+
+def first_name(j: dict) -> str:
+    return first_of(j.get("name") or "")
+
+
+def product_words(product: str) -> str:
+    """Salesforce's product ("Int - Shutters", "Ext - Awning", "Int - Not Specified", "Ext - mSS") in a customer's
+    words, without "the" or "new": "shutters", "awning", "window coverings", "outdoor shades"."""
+    p = " ".join(str(product or "").split())
+    side, dash, rest = p.partition(" - ")
+    if not dash:
+        side, rest = "", p
+    outdoor = side.lower().startswith("ext")
+    words = rest.strip().lower()
+    plain = (len(words) >= 4 and re.fullmatch(r"[a-z &/]+", words) and "specified" not in words
+             and words not in ("other", "misc", "none", "unknown"))
+    if plain:
+        return words
+    return "outdoor shades" if outdoor else "window coverings"
 
 
 # ---------------------------------------------------------------- the files
@@ -213,7 +238,7 @@ def reply_context(phone, vault: Optional[str] = None, now: Optional[datetime] = 
     if how.get("state") != "sent" or not sent or now - sent > ANSWER_WAIT * 2:
         return ""
     link = settings(vault).get("review_link") or ""
-    what = j.get("product") or "their new window coverings"
+    what = "their new " + product_words(j.get("product"))
     happy = (f"- happy: thank them warmly, and ask for a Google review with this exact link on its own line: "
              f"{link}\n  Easy and short, no pressure."
              if link else
@@ -366,30 +391,31 @@ def _followup_people(vault: Optional[str]) -> List[dict]:
 # ---------------------------------------------------------------- the words
 
 PURPOSE = {
-    "how": "It is 3 days after Zinga's installed {what} at their home. Ask how everything is working and if anything "
+    "how": "It is 3 days after Zinga's installed their new {what}. Ask how everything is working and if anything "
            "needs a fix. One question. Do not ask for a review or a referral.",
     "review": "They told Gerrit the install went well. Thank them and ask for a Google review, with this exact link "
               "on its own line: {link}\nEasy and short, no pressure.",
     "referral": "About a week ago Gerrit asked them for a review. Now ask, lightly, if they know anyone (neighbors, "
                 "friends, family) who could use new window coverings, and that Gerrit would take good care of them. "
                 "{reward}No pressure, no follow-up question about the review.",
-    "rooms": "Zinga's installed {what} about 6 months ago. Check in like a friend: hope they still love them, and is "
+    "rooms": "Zinga's installed their new {what} about 6 months ago. Check in like a friend: hope they still love them, and is "
              "another room on their list? {season}Gerrit would be glad to come take a look. No price.",
 }
 
 
 def fallback(step: str, j: dict, link: str = "", reward: str = "") -> str:
-    hi = f"Hi {j['first']}" if j.get("first") else "Hi"
-    what = j.get("product") or "new window coverings"
+    first = first_name(j)
+    hi = f"Hi {first}" if first else "Hi"
+    what = product_words(j.get("product"))
     if step == "how":
-        return f"{hi}, it's Gerrit with Zinga's. How are the {what} working out? If anything needs a tweak, just let me know.\n\nThanks!\nGerrit"
+        return f"{hi}, it's Gerrit with Zinga's. How is everything working out with your new {what}? If anything needs a tweak, just let me know.\n\nThanks!\nGerrit"
     if step == "review":
         return f"{hi}, thanks so much! If you have a minute, a Google review would really help us:\n{link}\n\nThanks!\nGerrit"
     if step == "referral":
         extra = f" {reward}" if reward else ""
         return (f"{hi}, it's Gerrit with Zinga's. If you know anyone who could use new window coverings, I'd love to "
                 f"take care of them too.{extra}\n\nThanks!\nGerrit")
-    return (f"{hi}, it's Gerrit with Zinga's. Hope you're still loving the {what}! If another room is on your list, "
+    return (f"{hi}, it's Gerrit with Zinga's. Hope you're still loving your {what}! If another room is on your list, "
             f"I'd be glad to come take a look.\n\nGerrit")
 
 
@@ -400,7 +426,7 @@ def write_prompt(step: str, j: dict, customer: str, voice_rules: str, lessons: s
     season = ("It is spring: you may also ask if the patio is on their list (outdoor shades, screens, pergolas). "
               if spring else "")
     reward_words = (f"Gerrit gives this for a referral; say it in his words: \"{reward}\". " if reward else "")
-    purpose = PURPOSE[step].format(what=j.get("product") or "new window coverings", link=link, reward=reward_words,
+    purpose = PURPOSE[step].format(what=product_words(j.get("product")), link=link, reward=reward_words,
                                    season=season)
     return "\n\n".join(x for x in [
         "You are Val, Gerrit's assistant at Zinga's. Write ONE short text for Gerrit to approve, in Gerrit's voice. "
@@ -552,7 +578,7 @@ class Installs:
                     continue
                 try:
                     out = self.bridge.draft({"to": j["phone"], "text": text, "category": KINDS[step],
-                                             "customer_name": j.get("first") or "", "prospect_id": j.get("key") or "",
+                                             "customer_name": first_name(j), "prospect_id": j.get("key") or "",
                                              "time_zone": "America/Indiana/Indianapolis"})
                 except Exception as e:
                     status = getattr(e, "status", 0)

@@ -128,7 +128,7 @@ class CardTests(Base):
         self.assertEqual(i.cards(), 1)
         card = self.bridge.cards[0]
         self.assertEqual((card["to"], card["category"]), ("+13175550101", "after_install"))
-        self.assertIn("Roman shades", self.written[0])
+        self.assertIn("their new roman shades", self.written[0])
         self.assertIn("Do not ask for a review", self.written[0])
         self.assertEqual(i.cards(), 0)                       # one card at a time
 
@@ -138,7 +138,7 @@ class CardTests(Base):
         i.ask_val = lambda p: '{"action": "write", "text": "That was $3,000 well spent!"}'
         i.cards()
         self.assertNotIn("$", self.bridge.cards[0]["text"])
-        self.assertIn("How are the Roman shades working out?", self.bridge.cards[0]["text"])
+        self.assertIn("How is everything working out with your new roman shades?", self.bridge.cards[0]["text"])
 
     def test_do_not_contact_stops_the_job(self):
         i = self.started()
@@ -230,6 +230,27 @@ class CardTests(Base):
         self.now = self.now.replace(hour=15)
         self.assertEqual(i.cards(), 1)
         self.assertEqual(self.bridge.cards[-1]["category"], "install_checkin")
+
+
+class WordsTests(unittest.TestCase):
+    def test_first_name_from_salesforce_last_comma_first(self):
+        self.assertEqual(zi.first_of("Thibodeau, Sue"), "Sue")
+        self.assertEqual(zi.first_of("Dennin, Jeff & Erika"), "Jeff")
+        self.assertEqual(zi.first_of("Pat Lee"), "Pat")
+        self.assertEqual(zi.first_of("317-555-0101"), "")
+
+    def test_product_codes_become_plain_words(self):
+        self.assertEqual(zi.product_words("Int - Shutters"), "shutters")
+        self.assertEqual(zi.product_words("Ext - Awning"), "awning")
+        self.assertEqual(zi.product_words("Int - Not Specified"), "window coverings")
+        self.assertEqual(zi.product_words("Ext - mSS"), "outdoor shades")
+        self.assertEqual(zi.product_words(""), "window coverings")
+
+    def test_old_job_with_a_salesforce_name_and_code(self):
+        j = {"name": "Thibodeau, Sue", "first": "Thibodeau,", "product": "Int - Not Specified"}
+        self.assertTrue(zi.fallback("how", j).startswith("Hi Sue, it's Gerrit with Zinga's. How is everything "
+                                                         "working out with your new window coverings?"))
+        self.assertIn("installed their new window coverings", zi.write_prompt("how", j, "", "", ""))
 
 
 class CommandTests(unittest.TestCase):
