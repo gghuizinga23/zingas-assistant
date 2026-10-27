@@ -180,6 +180,63 @@ class Calls(unittest.TestCase):
         self.assertEqual(len(r.val("GET", "/api/val/updates")[1]["calls"]), 1)
 
 
+class MissedCallTextBack(unittest.TestCase):
+    """F2: Val's "Sorry I missed you" text after a missed call or voicemail."""
+
+    def setUp(self):
+        self.r = Rig()
+        self.r.quo_event("call.completed", {"id": "CA1", "direction": "incoming", "status": "unanswered",
+                                            "hasVoicemail": False})
+
+    def text_back(self, call_id="CA1", to=CUSTOMER, text="Sorry I missed your call! I'll call you back soon. Gerrit"):
+        return self.r.val("POST", "/api/val/drafts", {"to": to, "text": text, "category": "missed_call",
+                                                      "about_call": call_id})
+
+    def test_card_shows_the_call_not_an_old_text(self):
+        self.r.customer_texts("Thanks again for last week, how much was the quote?")
+        self.assertEqual(self.text_back()[0], 200)
+        d = [x for x in self.r.store.drafts_by_status(["pending"]) if x["category"] == "missed_call"][0]
+        self.assertEqual((d["customer_said"], d["reply_to"]), ("[Missed call. No voicemail.]", None))
+        card = self.r.tg.last_card()["text"]
+        self.assertIn("[Missed call. No voicemail.]", card)
+        self.assertNotIn("how much", card)
+
+    def test_one_waiting_text_per_person(self):
+        self.assertEqual(self.text_back()[0], 200)
+        self.r.quo_event("call.completed", {"id": "CA2", "direction": "incoming", "status": "unanswered",
+                                            "hasVoicemail": False})
+        status, body = self.text_back("CA2")
+        self.assertEqual(status, 409)
+        self.assertIn("already waits", body["error"])
+
+    def test_a_call_from_another_number_is_refused(self):
+        self.assertEqual(self.text_back(to="+13175550777")[0], 400)
+        self.assertEqual(self.text_back(call_id="nope")[0], 400)
+
+    def test_do_not_contact_is_refused(self):
+        self.r.store.set_dnc(CUSTOMER, True, "2026-10-01T00:00:00Z")
+        self.assertEqual(self.text_back()[0], 409)
+
+    def test_gerrit_calling_back_stops_the_text_and_nothing_else(self):
+        self.text_back()
+        other = self.r.draft("Hi! Thursday at 2 works great.", to="+13175550777")[1]["id"]
+        self.r.quo_event("call.completed", {"id": "CA9", "direction": "outgoing", "status": "completed"})
+        mc = [x for x in self.r.store.drafts.values() if x["category"] == "missed_call"][0]
+        self.assertEqual((mc["status"], mc["reasons"]), ("skipped", "Gerrit called them back."))
+        self.assertEqual(self.r.store.get_draft(other)["status"], "pending")
+        self.assertIn("📞 Not sent: you called them back.", self.r.tg.edits[-1]["text"])
+        self.r.tap("a", mc["id"])
+        self.assertEqual(self.r.quo.sent, [])
+
+    def test_voicemail_words_are_checked_like_a_text(self):
+        self.r.quo_event("call.voicemail.completed", {"id": "VM1", "from": "+13175550777", "direction": "incoming",
+                                                      "transcript": "I want to cancel my order."})
+        self.assertEqual(self.text_back("VM1", to="+13175550777")[0], 200)
+        card = self.r.tg.last_card()["text"]
+        self.assertIn("[Voicemail] I want to cancel my order.", card)
+        self.assertIn("angry or wants to cancel", card)
+
+
 class GerritsOwnTexts(unittest.TestCase):
     """Gerrit answers a customer himself in the Quo app: Val's waiting draft stops, and Val learns from it."""
 

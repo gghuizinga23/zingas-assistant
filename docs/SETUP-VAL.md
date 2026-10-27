@@ -278,6 +278,31 @@ writes the next one like it. Now:
 | V4 | **Put zingas-voice on Val's computer:** `bash files/install-voice.sh`. It backs up the old files, copies the new ones, restarts the text pickup, inbox and follow-ups programs and starts zingas-voice | Gerrit says go (or runs it), I check | 3 min |
 | V5 | Learn from the edits already saved (`zingas-voice backfill`), read the lessons, check a draft prompt and print Sunday's message without sending it (`zingas-voice weekly --dry`) | Claude | 10 min |
 
+## Missed-call text-back (built 2026-10-26, plan F2)
+Why: a missed call is a lead lost that day. Now:
+
+- **A missed call or a voicemail** on the Quo number becomes a "Sorry I missed you" card in Val Approvals, as
+  well as the "Call back" task it already made. Nothing sends until you tap Approve.
+- **The call-back time comes from your calendar:** your next free 15 minutes, at least 20 minutes away, Monday to
+  Saturday 9 AM to 7 PM, never in a visit, the 30 minutes before it (driving) or the 15 after. The "Call back"
+  task says the time the text promises. If the calendar doesn't answer, the text says "as soon as I can".
+  (Those hours are a guess: tell Claude yours and they change in `files/missed_call.py`.)
+- **A call after 8 PM:** the text waits for 8 AM like every text, and its time is counted from that morning.
+- **One text per person:** a second call while the first card waits gets no second card. If they texted too,
+  the reply to their text covers it.
+- **You call them back first** (from the Quo number): the card stops ("you called them back"), so they don't
+  get "I'll call you back" after the call.
+- A voicemail's words go through the same checks as a text: money, upset or cancelling shows ⚠️ on the card.
+- Do-not-contact numbers get no text, only the task.
+- **Cost:** one small Val run per missed call.
+
+| Step | What to do | Who | Time |
+|---|---|---|---|
+| T1 | Say go to put branch `missed-call-textback` on `main` (pushed to GitHub) | Gerrit says go, I do the rest | 1 min |
+| T2 | **Put the new quo-bridge online.** Make a Vercel token (vercel.com → Account Settings → **Tokens**, your Pro team, expires in 1 day). I start `files/quo-redeploy.sh` from a checkout of `main`; you paste the token into its hidden prompt. Then delete the token. Code only, nobody gets a text | Gerrit makes and pastes the token, I do the rest | 5 min |
+| T3 | **Put the text-back on Val's computer:** `bash files/install-missed-call.sh` (after T2). It backs up the old files, copies the new ones and restarts the text pickup | Gerrit says go, I run it and check | 3 min |
+| T4 | Check: call the Quo number from your cell and hang up. Within a minute a card says "[Missed call. No voicemail.]" with a call-back time that fits your calendar. Skip it (or call yourself back and see the card stop) | Gerrit makes the call, I check | 3 min |
+
 ## Money tracker (planned 2026-10-23; cost count built 2026-10-24)
 Val keeps a running total of everything you pay for: her own costs and your own AI and tool sign-ups. She
 counts her use every hour, reads the receipts herself, and checks her numbers against them each month. You

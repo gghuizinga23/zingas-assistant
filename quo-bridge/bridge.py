@@ -41,7 +41,8 @@ _CATEGORY_RE = re.compile(r"^[a-z_]{1,32}$")
 CALL_EVENTS = ("call.completed", "call.voicemail.completed", "call.summary.completed")
 SENT_EVENTS = ("message.delivered",)     # a text that left the business number (its own Quo alert)
 WAITING = ("pending", "editing", "held", "countdown", "failed")
-AUTO_REPLY_SECONDS = 60    # an "outgoing" text this soon after theirs is Quo's auto-reply, not Gerrit
+AUTO_REPLY_SECONDS = 60
+MISSED_CALL = "missed_call"   # Val's text back after a missed call or voicemail (plan F2)    # an "outgoing" text this soon after theirs is Quo's auto-reply, not Gerrit
 
 Response = Tuple[int, dict]
 
@@ -297,6 +298,8 @@ class Bridge(FollowupMixin):
         data = event.get("data") or {}
         res, ctx = data.get("resource") or {}, data.get("context") or {}
         external = (ctx.get("participants") or {}).get("external") or []
+        if kind_of == "call.completed" and res.get("direction") in ("outgoing", "outbound"):
+            return self._called_back(us_phone(external[0] if external else ""))
         if kind_of == "call.completed":
             if res.get("direction") != "incoming" or res.get("hasVoicemail"):
                 return 200, {"ignored": "not a missed call"}     # the voicemail alert covers it
@@ -322,6 +325,23 @@ class Bridge(FollowupMixin):
         new = self.store.add_call({"id": str(row_id), "phone": phone, "kind": kind, "body": body[:4000],
                                    "created_at": res.get("createdAt") or res.get("completedAt") or self._stamp()})
         return 200, ({"stored": True} if new else {"duplicate": True})
+
+    def _called_back(self, phone: Optional[str]) -> Response:
+        """Gerrit called someone from the business number. A missed-call text back to them that still waits
+        is not needed any more: it stops, so they don't get "I'll call you back" after the call."""
+        if not phone:
+            return 200, {"ignored": "outgoing call"}
+        stopped = []
+        for d in self.store.drafts_by_status(["pending", "editing", "held", "countdown", "failed"]):
+            if d["phone"] != phone or d.get("category") != MISSED_CALL:
+                continue
+            got = self.store.claim_draft(d["id"], [d["status"]], {
+                "status": "skipped", "send_after": None, "reasons": "Gerrit called them back."})
+            if got:
+                stopped.append(got["id"])
+                self._edit_card(got, self._card_text(got, "📞 Not sent: you called them back."))
+                self._log("called_back", got["id"], "")
+        return 200, ({"stopped": stopped} if stopped else {"ignored": "outgoing call"})
 
     # ------------------------------------------------------- 2. Val's computer
 
@@ -378,14 +398,28 @@ class Bridge(FollowupMixin):
         if len(waiting) >= MAX_PENDING:
             return 429, {"error": f"{MAX_PENDING} drafts are already waiting for Gerrit."}
 
+        # A text back after a missed call (F2): one at a time per person. What they "said" is the call itself,
+        # from our own records (the voicemail's words go through the same checks as a text).
+        call = None
+        if payload.get("about_call"):
+            call = self.store.get_call(str(payload["about_call"])[:80])
+            if not call or call["phone"] != phone:
+                return 400, {"error": "'about_call' is not a call from this number"}
+            if any(x["phone"] == phone and x.get("category") != "followup" for x in self.store.drafts_by_status(
+                    ["pending", "editing", "countdown", "held"], 200)):
+                return 409, {"error": "A text to this person already waits for Gerrit. No card was made."}
+
         # What the customer said comes from our own records, never from Val, so
         # the money / upset / "real person" checks can't be talked around.
         said_msg = None
-        if payload.get("reply_to"):
+        if call:
+            said_msg = {"id": None, "body": "[Voicemail] " + (call.get("body") or "") if call["kind"] == "voicemail"
+                        else "[Missed call. No voicemail.]"}
+        elif payload.get("reply_to"):
             said_msg = self.store.get_message(str(payload["reply_to"]))
             if said_msg and said_msg["phone"] != phone:
                 said_msg = None
-        if not said_msg:
+        if not said_msg and not call:
             said_msg = self.store.latest_inbound(phone)
 
         d = {

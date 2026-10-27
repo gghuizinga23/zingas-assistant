@@ -98,6 +98,10 @@ class MemoryStore:
             if i in self.calls and not self.calls[i].get("picked_at"):
                 self.calls[i]["picked_at"] = at
 
+    def get_call(self, call_id: str) -> Optional[dict]:
+        c = self.calls.get(call_id)
+        return copy.deepcopy(c) if c else None
+
     # drafts
     def insert_draft(self, row: dict) -> None:
         self.drafts[row["id"]] = copy.deepcopy(row)
@@ -300,6 +304,10 @@ class SupabaseStore:
         if ids:
             self._call("PATCH", f"calls?id={_in_list(ids)}&picked_at=is.null", {"picked_at": at},
                        prefer="return=minimal")
+
+    def get_call(self, call_id: str) -> Optional[dict]:
+        rows = self._call("GET", f"calls?id=eq.{_q(call_id)}&limit=1")
+        return rows[0] if rows else None
 
     # drafts
     def insert_draft(self, row: dict) -> None:

@@ -66,5 +66,12 @@ Example: "Tell Pat I'm running 10 minutes late."
 
 If `zingas-quo draft` says the customer is do-not-contact, tell Gerrit and stop. Never try another way.
 
+## Missed calls and voicemails (text-back)
+When Gerrit misses a call or gets a voicemail on the business number, the pickup program asks you for one short
+"Sorry I missed you" text (kind `missed_call`). It gives you the call-back time from Gerrit's calendar (his next
+free 15 minutes, not in or near a visit). Use that time as given; never make up another one. Without a time, say
+he will call back soon. For a voicemail, show in a few words that he heard it, and don't answer money questions
+or book, move or confirm a visit. Gerrit approves it like any text. If he calls them back first, the text stops.
+
 ## What happens next
 quo-bridge shows Gerrit the card with Approve, Edit and Skip. It holds texts outside 8am-8pm the customer's time, refuses do-not-contact numbers, and texts Gerrit's cell if a card waits 10 minutes. When a text is sent, edited or skipped, the pickup program saves the result in `voice-edits/`, and `zingas-voice` learns from every change Gerrit made (skill `zingas-voice`). If Gerrit texts the customer himself in the Quo app while your draft waits, the draft stops ("you texted them yourself") and you learn from what he wrote. Every text in and every text Gerrit approved out also goes in the customer's timeline.

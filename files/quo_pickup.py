@@ -35,7 +35,14 @@ said, their mood) go into the profile, tagged with the date.
 
 Gerrit's to-do list (zingas_todo): the same answer from Val also says whether
 the text puts a task on the list. Missed calls become "Call back" tasks with no
-AI. Voicemails and call summaries are judged by Val like emails. This program
+AI. Voicemails and call summaries are judged by Val like emails.
+
+Missed-call text-back (plan F2, missed_call.py): a missed call or a voicemail also
+becomes a "Sorry I missed you" draft in Val Approvals, with a call-back time from
+Gerrit's calendar (his next free 15 minutes). The "Call back" task says the time the
+text promises. A second call from the same person gets no second draft (quo-bridge
+refuses it while the first one waits), and if Gerrit calls them back first, quo-bridge
+stops the draft. This program
 writes the list and tells Gerrit; when Gerrit's approved reply goes out, the
 text's task closes by itself.
 """
@@ -58,6 +65,7 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0, "/usr/local/lib/zingas")
 sys.path.insert(1, os.path.dirname(os.path.abspath(__file__)))
+import missed_call as mc  # noqa: E402
 import zingas_customer as zc  # noqa: E402
 import zingas_todo as zt  # noqa: E402
 import zingas_voice as zv  # noqa: E402
@@ -71,6 +79,17 @@ except ImportError:      # pragma: no cover
 def website_lookup(phone: str) -> Optional[dict]:
     """The company website's Salesforce record for this number, or None when it can't be asked."""
     return zingas_os.lookup_phone(phone) if zingas_os else None
+
+
+def website_day(day) -> Optional[dict]:
+    """One day of Gerrit's calendar from the company website, or None when it can't be asked."""
+    site = zingas_os.Website.from_settings() if zingas_os else None
+    if site is None:
+        return None
+    try:
+        return site.appointments(day=day.isoformat())
+    except Exception:
+        return None
 
 VAULT = os.environ.get("ZINGAS_VAULT", "/root/Documents/ZingasVault")
 HERMES_HOME = os.environ.get("HERMES_HOME", "/root/.hermes")
@@ -358,8 +377,11 @@ class Pickup:
     def __init__(self, bridge: BridgeClient, ask_val: Callable[[str], str] = run_val,
                  notify: Callable[[str], None] = tell_gerrit, vault: str = VAULT, state_path: str = STATE,
                  skill_path: str = SKILL, todo: Optional[zt.TodoList] = None, todo_skill: str = zt.SKILL,
-                 lookup: Callable[[str], Optional[dict]] = website_lookup):
+                 lookup: Callable[[str], Optional[dict]] = website_lookup,
+                 calendar: Callable[..., Optional[dict]] = website_day,
+                 clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)):
         self.bridge, self.ask_val, self.notify, self.lookup = bridge, ask_val, notify, lookup
+        self.calendar, self.clock = calendar, clock
         self.vault, self.state_path, self.skill_path = vault, state_path, skill_path
         self.todo, self.todo_skill = todo or zt.TodoList(vault), todo_skill
         self.added: List[dict] = []         # new tasks not yet told to Gerrit
@@ -474,11 +496,17 @@ class Pickup:
                                         source=zt.make_source("call", c.get("created_at"), who, "",
                                                               "Missed call. No voicemail."))
                 else:
+                    promised = self._text_back(c, name, key, note)
+                    why = " ".join(x for x in ("" if note else "This is a new number. It can be a new lead.",
+                                               promised) if x)
                     self.added.append(self.todo.add("Call back", priority="today", who=who, source="call",
-                                                    ref=c["phone"], why="" if note else "This is a new number. It can be a new lead.",
+                                                    ref=c["phone"], why=why,
                                                     received=c.get("created_at"), said="Missed call. No voicemail."))
                 finished.append(c["id"])
                 continue
+            if c["kind"] == "voicemail" and not tries.get("tb:" + str(c["id"])):
+                self._text_back(c, name, key, note)
+                tries["tb:" + str(c["id"])] = 1      # one text-back, even if Val's judgement is tried again
             things.append({"id": c["id"], "kind": c["kind"], "from": f"{name} {pretty(c['phone'])}" if name else who,
                            "text": (c.get("text") or "")[:3000], "customer": key if name else "",
                            "note": self._context(key, 2500) if name else
@@ -508,12 +536,58 @@ class Pickup:
                      else "Check the notes from this call", "due": "", "why": "", "emergency": False,
                      "update_number": 0}
             tries.pop(c["id"], None)
+            tries.pop("tb:" + str(c["id"]), None)
             item = self._task(r, who, "voicemail" if c["kind"] == "voicemail" else "call", c["phone"],
                               received=c.get("created_at"), listed=listed, said=c.get("text") or "")
             if item:
                 self.added.append(item)
             finished.append(c["id"])
         return finished
+
+    def _text_back(self, c: dict, name: str, key: str, note: Optional[str]) -> str:
+        """The missed-call text-back (F2): one draft to Val Approvals. Returns the line for the "Call back"
+        task ("The text says that you call back today around 2:30pm."), or "" when no draft was made.
+        Never stops the call from reaching the to-do list."""
+        now = self.clock()
+        try:
+            when = mc.slot_words(mc.callback_slot(now, self.calendar), now)
+        except Exception as e:
+            log(f"text-back calendar: {type(e).__name__}")
+            when = ""
+        try:
+            record = self.lookup(c["phone"])
+        except Exception:
+            record = None
+        sf = zingas_os.matched(record) if zingas_os else None
+        known = bool(note or sf)
+        name = name or (sf or {}).get("name") or ""
+        try:
+            prompt = mc.call_prompt(
+                c, name, when, customer=self._context(key, 4000) if note else "",
+                website=zingas_os.customer_block(record) if zingas_os else "",
+                voice=zv.prompt_block(self.vault, "text", mc.CATEGORY, c.get("text") or "missed call"),
+                skill=_read(self.skill_path, 6000), voice_rules=_read(os.path.join(self.vault, "VOICE.md"), 8000),
+                examples=_read(os.path.join(self.vault, "voice-examples/gerrit-texts.md"), 4000))
+            ans = mc.parse_call_answer(self.ask_val(prompt))
+        except Exception as e:
+            log(f"text-back {c['id']}: Val's answer didn't work ({type(e).__name__}); plain text used")
+            ans = {"text": mc.fallback_text(name, c["kind"], when, known)}
+        payload = {"to": c["phone"], "text": ans["text"], "category": mc.CATEGORY,
+                   "customer_name": mc.first_name(name) or str(ans.get("customer_name") or "")[:40],
+                   "prospect_id": key if key and not zc.is_unmatched(key) else (sf or {}).get("prospectId") or "",
+                   "time_zone": mc.TZ.key, "about_call": str(c["id"])}
+        try:
+            self.bridge.draft(payload)
+        except BridgeError as e:
+            if e.status != 409:      # 409: do-not-contact, or a text to them already waits
+                log(f"text-back {c['id']}: quo-bridge did not take it ({e})")
+                return "Val could not make the text back. Text them in the Quo app."
+            return ""
+        if ans.get("note_for_gerrit"):
+            self.notify(f"🪟 The text back for {name or pretty(c['phone'])} is in Val Approvals.\n"
+                        f"{str(ans['note_for_gerrit'])[:300]}")
+        return f"The text in Val Approvals says that you call back {when}." if when else \
+            "The text in Val Approvals says that you call back soon."
 
     def _handle(self, t: dict, tries: dict) -> Optional[str]:
         """Returns 'draft' or 'skipped' when the text is dealt with, None to try again later."""

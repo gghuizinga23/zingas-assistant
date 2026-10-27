@@ -171,7 +171,8 @@ Highest priority first. Each step comes after what it needs. **Gerrit:** marks h
    P3 (a test recording).
 7. **Val's brain B1–B3.** B3 needs Calendar.
 8. **F2 missed-call text-back.** Ahead of F1: it needs only Calendar, it is small, and a missed call is a
-   lead lost that day.
+   lead lost that day. **Built 2026-10-26** (branch `missed-call-textback`: `files/missed_call.py`, the pickup and
+   quo-bridge; SETUP-VAL "Missed-call text-back" T1 to T4).
 9. **Estimator read access** (Phase 1.5). F1, F8, F12 and B4 need it.
    9b. **F12 temp shades by Amazon** (added 2026-10-26, see "F12" below). Needs the quote's window sizes from
    step 9. Gerrit: ask Zinga's for a company virtual card, the Amazon Business account, the login in Val's

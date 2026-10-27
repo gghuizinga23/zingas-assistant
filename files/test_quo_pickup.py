@@ -226,8 +226,14 @@ class TodoTests(Setup):
         self.assertEqual(len(self.notes), 1)                    # one note, with the task in it
         self.assertIn("📝 On your to-do list: 🟡 1. Pat: Answer the text from Pat", self.notes[0])
 
-    def test_missed_call_is_a_call_back_task_once(self):
+    def calendar(self, appointments=None, connected=True):
+        self.pickup.calendar = lambda day: {"connected": connected, "appointments": appointments or []}
+        self.pickup.clock = self.rig.clock
+
+    def test_missed_call_is_a_call_back_task_and_one_text_back(self):
         self.add_note("# Pat Smith\nphone: (317) 555-0123")
+        self.calendar([{"start": "11:00", "end": "13:00", "allDay": False, "title": "Visit"}])
+        self.answers = [{"text": "Hi Pat, sorry I missed your call! I'll call you back today around 1:15pm. Gerrit"}]
         for n in (1, 2):
             self.rig.quo_event("call.completed", {"id": f"CA{n}", "direction": "incoming", "status": "unanswered",
                                                   "hasVoicemail": False})
@@ -237,24 +243,82 @@ class TodoTests(Setup):
                          [("Call back", "Pat Smith", "call", "today")])
         self.assertEqual(items[0]["why"], "This person called two or more times.")
         self.assertEqual({(s["kind"], s["text"]) for s in items[0]["sources"]}, {("call", "Missed call. No voicemail.")})
-        self.assertEqual(self.prompts, [])                      # no AI for a missed call
+        self.assertEqual(len(self.prompts), 1)                  # one text back, not one per call
+        self.assertIn("call back today around 1:15pm", self.prompts[0])   # 11:00-1:00 visit, plus wrap-up
+        drafts = self.rig.store.drafts_by_status(["pending"])
+        self.assertEqual([(d["category"], d["customer_said"]) for d in drafts],
+                         [("missed_call", "[Missed call. No voicemail.]")])
+        self.assertIn("[Missed call. No voicemail.]", self.rig.tg.last_card()["text"])
+        self.assertEqual(self.rig.quo.sent, [])                 # nothing sends without Gerrit's tap
         self.assertEqual(len(self.notes), 1)
         self.assertEqual(self.rig.val("GET", "/api/val/updates")[1]["calls"], [])
 
-    def test_voicemail_and_call_summary_are_judged_together(self):
+    def test_call_back_task_says_the_time_the_text_promises(self):
+        self.add_note("# Pat Smith\nphone: (317) 555-0123")
+        self.calendar([])
+        self.answers = [{"text": "Hi Pat! Sorry I missed you. I'll call you back today around 11:30am. Gerrit"}]
+        self.rig.quo_event("call.completed", {"id": "CA1", "direction": "incoming", "status": "unanswered",
+                                              "hasVoicemail": False})
+        self.pickup.once()
+        self.assertEqual(self.todo.open_items()[0]["why"],
+                         "The text in Val Approvals says that you call back today around 11:30am.")
+
+    def test_gerrit_calls_back_first_and_the_text_stops(self):
+        self.calendar([])
+        self.rig.quo_event("call.completed", {"id": "CA1", "direction": "incoming", "status": "unanswered",
+                                              "hasVoicemail": False})
+        self.pickup.once()
+        d = self.rig.store.drafts_by_status(["pending"])[0]
+        self.assertEqual(d["category"], "missed_call")
+        self.rig.quo_event("call.completed", {"id": "CA2", "direction": "outgoing", "status": "completed"})
+        self.assertEqual(self.rig.store.get_draft(d["id"])["status"], "skipped")
+        self.assertIn("you called them back", self.rig.tg.edits[-1]["text"])
+        self.rig.tap("a", d["id"])
+        self.assertEqual(self.rig.quo.sent, [])                 # a late Approve tap can't send it
+
+    def test_broken_answer_and_no_calendar_still_give_a_plain_text_back(self):
+        self.calendar(connected=False)
+        self.answers = ["nope"]
+        self.rig.quo_event("call.completed", {"id": "CA1", "direction": "incoming", "status": "unanswered",
+                                              "hasVoicemail": False})
+        self.pickup.once()
+        d = self.rig.store.drafts_by_status(["pending"])[0]
+        self.assertEqual(d["body"], "Hi, this is Gerrit with Zinga's. Sorry I missed your call! "
+                                    "I'll call you back as soon as I can. - Gerrit")
+        self.assertIn("Do not name a day or a time", self.prompts[0])
+        self.assertEqual(self.todo.open_items()[0]["why"], "This is a new number. It can be a new lead. "
+                                                           "The text in Val Approvals says that you call back soon.")
+
+    def test_do_not_contact_caller_gets_no_text_back_but_still_a_task(self):
+        self.rig.store.set_dnc(CUSTOMER, True, "2026-10-01T00:00:00Z")
+        self.calendar([])
+        self.rig.quo_event("call.completed", {"id": "CA1", "direction": "incoming", "status": "unanswered",
+                                              "hasVoicemail": False})
+        self.pickup.once()
+        self.assertEqual(self.rig.store.drafts_by_status(["pending", "blocked"]), [])
+        self.assertEqual(self.todo.open_items()[0]["task"], "Call back")
+
+    def test_voicemail_gets_a_text_back_and_is_judged_with_the_call_summary(self):
+        self.calendar([])
         self.rig.quo_event("call.voicemail.completed", {"id": "VM1", "from": CUSTOMER, "direction": "incoming",
                                                         "transcript": "The crew never showed up today!"})
         self.rig.quo_event("call.summary.completed", {"callId": "CA3", "processingStatus": "completed",
                                                       "summary": ["Asked about shutters."], "nextSteps": ["Send quote"],
                                                       "fromPhoneNumber": CUSTOMER})
-        self.answers = [json.dumps({"results": [
+        self.answers = [{"text": "Hi, this is Gerrit with Zinga's. I got your message and I'm sorry about the crew. "
+                                 "I'll call you back today around 11:30am. Gerrit"},
+                        json.dumps({"results": [
             {"id": "VM1", "action": "add", "task": "Call about the crew no-show", "priority": "now", "emergency": True},
             {"id": "sum-CA3", "action": "add", "task": "Send the shutter quote", "priority": "today"}]})]
         self.night = True
         self.pickup.once()
-        self.assertEqual(len(self.prompts), 1)
-        self.assertIn('<item id="VM1" kind="voicemail">', self.prompts[0])
-        self.assertIn("The crew never showed up today!", self.prompts[0])
+        self.assertEqual(len(self.prompts), 2)                  # the text back, then one judgement for both
+        self.assertIn("<voicemail>\nThe crew never showed up today!\n</voicemail>", self.prompts[0])
+        self.assertIn('<item id="VM1" kind="voicemail">', self.prompts[1])
+        self.assertIn("The crew never showed up today!", self.prompts[1])
+        d = self.rig.store.drafts_by_status(["pending"])[0]
+        self.assertEqual(d["customer_said"], "[Voicemail] The crew never showed up today!")
+        self.assertIn("angry or wants to cancel", self.rig.tg.last_card()["text"])   # the voicemail's words are checked
         got = [(i["task"], i["source"], i["ref"]) for i in self.todo.open_items()]
         self.assertEqual(got, [("Call about the crew no-show", "voicemail", CUSTOMER),
                                ("Send the shutter quote", "call", CUSTOMER)])
@@ -262,12 +326,14 @@ class TodoTests(Setup):
         self.assertTrue(os.path.exists(os.path.join(self.vault, "customers", "unmatched-3175550123.md")))
 
     def test_voicemail_val_fails_three_times_then_a_plain_task(self):
+        self.calendar([])
         self.rig.quo_event("call.voicemail.completed", {"id": "VM1", "from": CUSTOMER, "transcript": "Call me"})
-        self.answers = ["nope", "nope", "nope"]
+        self.answers = ["nope", "nope", "nope", "nope"]       # the text back, then three judgements
         for _ in range(2):
             self.assertEqual(self.pickup.once()["retry"], 1)
         self.assertEqual(self.pickup.once()["calls"], 1)
         self.assertEqual(self.todo.open_items()[0]["task"], "Listen to the voicemail and call back")
+        self.assertEqual(len(self.rig.store.drafts_by_status(["pending"])), 1)   # one text back, not one per try
 
     def test_at_night_the_task_alert_still_goes_out(self):
         """Gerrit's rule (2026-10-23): every new to-do alerts him right away, any hour."""
