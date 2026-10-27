@@ -418,5 +418,50 @@ class PromptTests(unittest.TestCase):
             self.assertIsNone(quo_pickup.find_customer_note("+13175550000", v))
 
 
+
+class AfterInstallTests(Setup):
+    """F4: the answer to the day-3 check-in. A happy one becomes the review ask, in the same one card."""
+
+    def start_job(self, link="https://g.page/r/zingas/review"):
+        import zingas_installs as zi
+        from datetime import datetime, timedelta, timezone
+        if link:
+            zi.save_settings({"review_link": link}, self.vault)
+        with zi.locked(self.vault) as st:
+            j = zi.new_job("m1", {"name": "Pat Smith", "phone": "3175550123", "product": "roller shades"},
+                           datetime.now(timezone.utc) - timedelta(days=4))
+            j["touches"]["how"].update(state="sent", sent_at=zi.iso(datetime.now(timezone.utc) - timedelta(hours=3)))
+            st["jobs"]["m1"] = j
+        return zi
+
+    def test_happy_answer_is_one_review_ask_card(self):
+        zi = self.start_job()
+        self.answers.append({"action": "draft", "category": "reply", "after_install": "happy",
+                             "text": "So glad, Pat! Would you leave us a review?\nhttps://g.page/r/zingas/review\nGerrit",
+                             "customer_name": "Pat"})
+        self.rig.customer_texts("They look great, thank you!")
+        self.assertEqual(self.pickup.once()["drafts"], 1)
+        self.assertIn("after-install check-in", self.prompts[0])
+        d = self.rig.store.drafts_by_status(["pending"])[0]
+        self.assertEqual(d["category"], "review_ask")
+        self.assertEqual(zi.read_state(self.vault)["jobs"]["m1"]["verdict"], "happy")
+
+    def test_problem_answer_is_no_review(self):
+        zi = self.start_job()
+        self.answers.append({"action": "draft", "category": "reply", "after_install": "problem",
+                             "text": "So sorry, Pat. I'll call you today to fix it. Gerrit",
+                             "note_for_gerrit": "The left shade does not go down.", "customer_name": "Pat"})
+        self.rig.customer_texts("The left one won't go down")
+        self.pickup.once()
+        d = self.rig.store.drafts_by_status(["pending"])[0]
+        self.assertEqual(d["category"], "reply")
+        t = zi.read_state(self.vault)["jobs"]["m1"]["touches"]
+        self.assertEqual(t["review"]["state"], "skipped")
+
+    def test_other_customers_get_no_after_install_words(self):
+        self.rig.customer_texts("Does Thursday still work?")
+        self.pickup.once()
+        self.assertNotIn("after-install check-in", self.prompts[0])
+
 if __name__ == "__main__":
     unittest.main()

@@ -71,6 +71,11 @@ import zingas_customer as zc  # noqa: E402
 import zingas_todo as zt  # noqa: E402
 import zingas_voice as zv  # noqa: E402
 
+try:   # the after-install program (F4); a reply never waits on it
+    import zingas_installs as zi  # noqa: E402
+except ImportError:      # pragma: no cover
+    zi = None
+
 try:   # Val's read-only line to the company website (Salesforce records); optional
     import zingas_os  # noqa: E402
 except ImportError:      # pragma: no cover
@@ -306,7 +311,8 @@ TEXT_FACTS = ('"facts": {"talk": ["how they write: short or long, emojis or not,
 
 def build_prompt(text: dict, note_path: Optional[str], vault: str = VAULT, skill_path: str = SKILL,
                  open_items: Optional[List[dict]] = None, todo_skill: str = zt.SKILL,
-                 website: str = "", customer: str = "", voice: str = "", answers: str = "") -> str:
+                 website: str = "", customer: str = "", voice: str = "", answers: str = "",
+                 aftercare: str = "") -> str:
     """customer: the customer file as zingas_customer.context() gives it. Without it, the start of the note."""
     thread = "\n".join(f"[{t['at'][:16]}] {'Customer' if t['from'] == 'customer' else 'Gerrit'}: {t['text']}"
                        for t in text.get("thread") or [])
@@ -326,6 +332,7 @@ def build_prompt(text: dict, note_path: Optional[str], vault: str = VAULT, skill
         "## Real examples of Gerrit's texts\n" + _read(os.path.join(vault, "voice-examples/gerrit-texts.md"), 6000),
         voice or "## What Gerrit's edits taught you\nNothing yet.",
         answers,
+        aftercare,
         "## The customer (their whole file: read it, so the draft sounds like a person who remembers them. "
         "Mirror how they talk. Never quote a visit recording or use a detail that would feel like "
         "surveillance.)\n<customer_note>\n" + (note or "No memory note matches this number. Treat them as "
@@ -421,6 +428,11 @@ class Pickup:
 
         for o in up.get("outcomes") or []:
             save_outcome(o, self.vault)
+            if zi is not None:
+                try:   # what happened to an after-install card (F4)
+                    zi.note_outcome(o, self.vault)
+                except Exception as e:
+                    log(f"installs outcome: {type(e).__name__}")
             if o.get("status") in ("sent", "replaced", "own") and o.get("phone"):
                 self.todo.close_auto(o["phone"], "reply_sent")      # Gerrit's reply went out
                 self._log(zc.key_for(phone=o["phone"], vault=self.vault), "text_out", o.get("sent_at"),
@@ -626,6 +638,12 @@ class Pickup:
         self._log(key, "text_in", t.get("received_at") or t.get("created_at"), t["text"], "quo:" + str(t["id"]),
                   note_name(note) or "Customer")
         listed = self.todo.open_items()
+        aftercare = ""
+        if zi is not None:
+            try:   # is this the answer to the day-3 "How are they working?" text (F4)?
+                aftercare = zi.reply_context(t["phone"], self.vault)
+            except Exception as e:
+                log(f"installs context: {type(e).__name__}")
         try:
             ans = parse_answer(self.ask_val(build_prompt(t, note, self.vault, self.skill_path, listed,
                                                          self.todo_skill,
@@ -634,7 +652,8 @@ class Pickup:
                                                          voice=zv.prompt_block(self.vault, "text", "", t["text"]),
                                                          answers=answers_block(t["text"], *[
                                                              x.get("text") or "" for x in (t.get("thread") or [])[-6:]
-                                                             if x.get("from") == "customer"]))))
+                                                             if x.get("from") == "customer"]),
+                                                         aftercare=aftercare)))
         except Exception as e:
             n = tries.get(t["id"], 0) + 1
             tries[t["id"]] = n
@@ -645,6 +664,14 @@ class Pickup:
                         "Answer the text in the Quo app.")
             return "skipped"
 
+        if aftercare and ans.get("after_install"):
+            try:
+                kind = zi.record_answer(t["phone"], str(ans["after_install"]),
+                                        ans.get("text") if ans["action"] == "draft" else "", self.vault)
+                if kind and ans["action"] == "draft":
+                    ans["category"] = kind          # the reply carries the review link: a review ask
+            except Exception as e:
+                log(f"installs answer: {type(e).__name__}")
         self._facts(key, ans.get("facts"), f"text {zc.short_date(datetime.now(zt.TZ))}")
         who = note_name(note) or ans.get("customer_name") or pretty(t["phone"])
         extra = f"\n{ans['note_for_gerrit']}" if ans.get("note_for_gerrit") else ""

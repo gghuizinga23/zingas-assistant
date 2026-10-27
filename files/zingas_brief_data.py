@@ -67,6 +67,16 @@ def wrapup_block(now, vault: str = zt.VAULT) -> str:
         return ""
 
 
+def installs_block(now, vault: str = zt.VAULT) -> str:
+    """After-install lines (F4): new installs, a happy customer waiting for the review link, a problem, a
+    Completed email Val could not match. Each shows once; "" when there is nothing."""
+    try:
+        import zingas_installs as zi
+        return zi.brief_block(now, vault)
+    except Exception:  # the brief must never fail because of this block
+        return ""
+
+
 def numbers_block(now) -> str:
     """Gerrit's numbers from the company website, Monday mornings only (plan F7); "" otherwise."""
     if now.weekday() != 0 or now.hour >= 12:
@@ -113,6 +123,9 @@ def main(vault: str = zt.VAULT, now=None) -> str:
     visits = visits_block(now, vault)
     if visits:
         out.append(visits)
+    installs = installs_block(now, vault)
+    if installs:
+        out.append(installs)
     numbers = numbers_block(now)
     if numbers:
         out.append(numbers)

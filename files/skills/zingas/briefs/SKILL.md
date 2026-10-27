@@ -25,6 +25,8 @@ Right before you start, a program puts Gerrit's to-do list in your instructions,
 
 <the follow-ups block, as written, if there is one>
 
+<the installs block, as written, if there is one>
+
 <Email: only if something isn't on the list yet, see below>
 
 <the Monday numbers block, as written, Monday mornings only>
@@ -43,6 +45,8 @@ Idea: <at most 2 ideas, each on its own line>
 <the follow-ups block, as written, if there is one>
 
 <the wrap-up block, as written, if there is one>
+
+<the installs block, as written, if there is one>
 
 <Email: only if something isn't on the list yet>
 
@@ -85,6 +89,13 @@ Your instructions can have a block between `--- VISITS STARTS` and `--- VISITS E
 - **Morning:** recordings Val could not match to a customer ("The Thu Oct 23, 2:10 PM recording (34 min): Smith or Jones?"), facts that do not agree, and recording problems. This is the only place Val asks about a recording: never send Gerrit a separate question. When Gerrit answers, file it (skill `customer-memory`, "When Gerrit says whose a recording is"). If he says nothing, leave it.
 - **Evening:** the notes from today's visits to paste into Salesforce, in the house format (`10/23/26 - ...; GH`), with the follow-up date and the spouse name. Never change the wording.
 - **A Plaud warning line** ("⚠️ Plaud: Val cannot read your recordings...") goes in as written, and its first words also go in the brief's first line.
+
+## Installs (both briefs, when there is a block)
+Your instructions can have a block between `--- INSTALLS STARTS` and `--- INSTALLS ENDS` (program `zingas-installs`,
+plan F4): new installs under the Gmail label Completed, a happy customer waiting for Gerrit's Google review link, a
+problem after an install, or a Completed email Val could not match. Put the lines between the markers in the brief
+**as written**, after the visits block (never the two marker lines). Each line shows once. When there is no such
+block, say nothing about installs.
 
 ## Monday numbers (Monday morning brief only)
 On Monday mornings your instructions also have a block between `--- MONDAY NUMBERS STARTS` and `--- MONDAY NUMBERS ENDS`.
