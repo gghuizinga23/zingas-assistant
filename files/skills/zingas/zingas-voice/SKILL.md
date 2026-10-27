@@ -43,6 +43,24 @@ Emails are a little longer and can carry quote details from the Estimator summar
 - **They bowed out** (went elsewhere, or not now): one kind thank-you and good-luck text. Then they are done for good.
 - **They said a quote or document never arrived:** this stays at the top of the list until Gerrit confirms it was sent. A reply that is just an email address means "send it here".
 
+## Gerrit's own price and competitor answers (plan F6)
+Gerrit's best answers for price and for each competitor are in `/root/Documents/ZingasVault/value-answers.md`.
+Text drafts and follow-ups get the right one by themselves when the customer brings it up. For an email, run
+`zingas-answers for --about "<what the customer wrote>"`. Use the ideas, short, in his voice. Never a price, a
+discount, a promise to match a price, or a bad word about the other company.
+
+When Gerrit gives you an answer in Telegram ("When they say Budget Blinds, I tell them ..."), save his words as he
+said them, one topic at a time, and confirm in one line with what the program prints:
+```
+zingas-answers set budget_blinds --text-file - <<'ANSWER'
+<Gerrit's words>
+ANSWER
+```
+Topics: `price`, `budget_blinds`, `big_box` (Home Depot, Lowe's, Menards), `costco`, `online` (Blinds.com,
+Amazon), `other_quote` (any other company or a cheaper quote), `general` (his main value points, used with every
+one). `zingas-answers show` lists what is saved; `zingas-answers remove <topic>` takes one out. If the program
+says the answer has a price or a percent, tell Gerrit and ask him for it without the number.
+
 ## Before you show a draft
 Check it against `VOICE.md` in the vault (`/root/Documents/ZingasVault/VOICE.md`). That file holds Gerrit's real phrases, sign-offs and the rules Gerrit added. It overrides this skill when they disagree, except the "never" rules in SOUL.md.
 

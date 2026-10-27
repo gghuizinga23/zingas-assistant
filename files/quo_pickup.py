@@ -66,6 +66,7 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, "/usr/local/lib/zingas")
 sys.path.insert(1, os.path.dirname(os.path.abspath(__file__)))
 import missed_call as mc  # noqa: E402
+import value_answers as va  # noqa: E402
 import zingas_customer as zc  # noqa: E402
 import zingas_todo as zt  # noqa: E402
 import zingas_voice as zv  # noqa: E402
@@ -74,6 +75,16 @@ try:   # Val's read-only line to the company website (Salesforce records); optio
     import zingas_os  # noqa: E402
 except ImportError:      # pragma: no cover
     zingas_os = None
+
+
+def answers_block(*customer_words: str) -> str:
+    """Gerrit's own price and competitor answers (F6) when the customer's words bring one up; "" otherwise.
+    A draft never waits on it."""
+    try:
+        return va.prompt_block(*customer_words, vault=VAULT)
+    except Exception as e:
+        log(f"price answers: {type(e).__name__}")
+        return ""
 
 
 def website_lookup(phone: str) -> Optional[dict]:
@@ -295,12 +306,12 @@ TEXT_FACTS = ('"facts": {"talk": ["how they write: short or long, emojis or not,
 
 def build_prompt(text: dict, note_path: Optional[str], vault: str = VAULT, skill_path: str = SKILL,
                  open_items: Optional[List[dict]] = None, todo_skill: str = zt.SKILL,
-                 website: str = "", customer: str = "", voice: str = "") -> str:
+                 website: str = "", customer: str = "", voice: str = "", answers: str = "") -> str:
     """customer: the customer file as zingas_customer.context() gives it. Without it, the start of the note."""
     thread = "\n".join(f"[{t['at'][:16]}] {'Customer' if t['from'] == 'customer' else 'Gerrit'}: {t['text']}"
                        for t in text.get("thread") or [])
     note = customer or (_read(note_path, 3000) if note_path else "")
-    return "\n\n".join([
+    return "\n\n".join(x for x in [
         "You are Val, Gerrit's assistant at Zinga's. A customer just texted Zinga's business number. "
         "Write ONE reply for Gerrit to approve, in Gerrit's voice. You can't send anything: your draft "
         "goes to Gerrit's Approve button.",
@@ -314,6 +325,7 @@ def build_prompt(text: dict, note_path: Optional[str], vault: str = VAULT, skill
         "## Gerrit's voice\n" + (_read(os.path.join(vault, "VOICE.md"), 8000) or "(VOICE.md missing)"),
         "## Real examples of Gerrit's texts\n" + _read(os.path.join(vault, "voice-examples/gerrit-texts.md"), 6000),
         voice or "## What Gerrit's edits taught you\nNothing yet.",
+        answers,
         "## The customer (their whole file: read it, so the draft sounds like a person who remembers them. "
         "Mirror how they talk. Never quote a visit recording or use a detail that would feel like "
         "surveillance.)\n<customer_note>\n" + (note or "No memory note matches this number. Treat them as "
@@ -340,7 +352,7 @@ def build_prompt(text: dict, note_path: Optional[str], vault: str = VAULT, skill
         '"due": "YYYY-MM-DD only if the text gives a date, else empty", "why": "one short line or empty", '
         '"update_number": "for update: the open task number", "emergency": true | false}, '
         + TEXT_FACTS + '}',
-    ])
+    ] if x)
 
 
 def parse_answer(raw: str) -> dict:
@@ -567,7 +579,8 @@ class Pickup:
                 website=zingas_os.customer_block(record) if zingas_os else "",
                 voice=zv.prompt_block(self.vault, "text", mc.CATEGORY, c.get("text") or "missed call"),
                 skill=_read(self.skill_path, 6000), voice_rules=_read(os.path.join(self.vault, "VOICE.md"), 8000),
-                examples=_read(os.path.join(self.vault, "voice-examples/gerrit-texts.md"), 4000))
+                examples=_read(os.path.join(self.vault, "voice-examples/gerrit-texts.md"), 4000),
+                answers=answers_block(c.get("text") or ""))
             ans = mc.parse_call_answer(self.ask_val(prompt))
         except Exception as e:
             log(f"text-back {c['id']}: Val's answer didn't work ({type(e).__name__}); plain text used")
@@ -618,7 +631,10 @@ class Pickup:
                                                          self.todo_skill,
                                                          zingas_os.customer_block(record) if zingas_os else "",
                                                          customer=customer,
-                                                         voice=zv.prompt_block(self.vault, "text", "", t["text"]))))
+                                                         voice=zv.prompt_block(self.vault, "text", "", t["text"]),
+                                                         answers=answers_block(t["text"], *[
+                                                             x.get("text") or "" for x in (t.get("thread") or [])[-6:]
+                                                             if x.get("from") == "customer"]))))
         except Exception as e:
             n = tries.get(t["id"], 0) + 1
             tries[t["id"]] = n

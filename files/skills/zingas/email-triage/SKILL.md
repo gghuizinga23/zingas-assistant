@@ -40,6 +40,9 @@ Office and manager emails that ask Gerrit for something (paperwork, a missing da
 
 ## Step 4: draft
 - Customer replies use skill `zingas-voice`: read `voice-lessons/LESSONS.md` first. When Gerrit sends your Gmail draft, zingas-voice compares it with what he sent and learns from his changes. Match the customer to a Salesforce Prospect first (skill `customer-memory`).
+- When the customer brings up price or another company (Budget Blinds, Home Depot, Costco, an online store, "too
+  expensive", "a cheaper quote"), run `zingas-answers for --about "<their words>"` and use Gerrit's own answer it
+  gives, short and in his voice (plan F6). Never a price, a discount or a bad word about the other company.
 - Save each draft as a Gmail draft in the same thread, and list it in Telegram with one plain line about what the person needs.
 - Email is never sent by you. Gerrit sends it from the Gmail app.
 
