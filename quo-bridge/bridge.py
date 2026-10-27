@@ -38,7 +38,7 @@ BUSY = "Someone already did an action on this draft."
 STOP_WORDS = {"STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT", "OPTOUT", "REVOKE"}
 START_WORDS = {"START", "UNSTOP"}
 _CATEGORY_RE = re.compile(r"^[a-z_]{1,32}$")
-CALL_EVENTS = ("call.completed", "call.voicemail.completed", "call.summary.completed")
+CALL_EVENTS = ("call.completed", "call.missed", "call.voicemail.completed", "call.summary.completed")
 SENT_EVENTS = ("message.delivered",)     # a text that left the business number (its own Quo alert)
 WAITING = ("pending", "editing", "held", "countdown", "failed")
 AUTO_REPLY_SECONDS = 60
@@ -324,7 +324,33 @@ class Bridge(FollowupMixin):
         external = (ctx.get("participants") or {}).get("external") or []
         if kind_of == "call.completed" and res.get("direction") in ("outgoing", "outbound"):
             return self._called_back(us_phone(external[0] if external else ""))
-        if kind_of == "call.completed":
+        if kind_of == "call.missed":
+            # Quo sends this, not call.completed, for a call nobody answered (Gerrit's test 2026-10-26). It
+            # carries only the call's id, so the caller's number (and any voicemail) come from Quo's call record.
+            row_id = res.get("id")
+            if not row_id:
+                return 200, {"ignored": "no call id"}
+            try:
+                call = self.quo.get_call(str(row_id))
+                business = us_phone(self.quo.business_number())
+            except QuoError as e:
+                self._log("call_ignored", None, f"call.missed: Quo didn't give call {row_id} ({e}); Quo retries")
+                return 503, {"error": "Quo didn't give the call yet"}        # Quo sends the alert again
+            if call.get("direction") not in (None, "incoming"):
+                return 200, {"ignored": "outgoing"}
+            outside = [us_phone(p.get("phoneNumber")) for p in (call.get("participants") or [])
+                       if not p.get("actorId")]
+            outside = [n for n in outside if n and n != business]
+            phone = outside[0] if outside else None
+            vm = call.get("voicemail") or {}
+            if vm:
+                text = vm.get("transcript")
+                kind, body = "voicemail", (str(text).strip() if isinstance(text, str) else "") or \
+                    "[Quo had no transcript yet. Listen in the Quo app.]"
+            else:
+                kind, body = "missed", ""
+            res = {"createdAt": call.get("createdAt") or res.get("createdAt")}
+        elif kind_of == "call.completed":
             if res.get("direction") != "incoming" or res.get("hasVoicemail"):
                 return 200, {"ignored": "not a missed call"}     # the voicemail alert covers it
             status, secs = res.get("status"), res.get("duration")
@@ -338,7 +364,8 @@ class Bridge(FollowupMixin):
             if res.get("direction") not in (None, "incoming"):
                 return 200, {"ignored": "outgoing"}
             phone = us_phone(res.get("from") or (external[0] if external else ""))
-            kind, row_id = "voicemail", res.get("id") or res.get("voicemailId")
+            # the call's id when Quo has it, so the missed-call alert for the same call is not a second item
+            kind, row_id = "voicemail", res.get("callId") or res.get("id") or res.get("voicemailId")
             body = str(res.get("transcript") or "").strip() or "[Quo had no transcript yet. Listen in the Quo app.]"
         else:   # call.summary.completed
             done = res.get("processingStatus")

@@ -39,6 +39,16 @@ class FakeQuo:
     def __init__(self):
         self.sent = []
         self.fail_with = []
+        self.calls = {}           # call id -> Quo's call record (GET /calls/{id})
+        self.call_fails = []
+
+    def get_call(self, call_id):
+        if self.call_fails:
+            raise self.call_fails.pop(0)
+        return self.calls.get(call_id, {})
+
+    def business_number(self):
+        return "+13175550100"
 
     def send_text(self, to, text):
         if self.fail_with:
@@ -147,16 +157,16 @@ class Calls(unittest.TestCase):
                                        "hasVoicemail": True})            # the voicemail alert covers it
         r.quo_event("call.voicemail.completed", {"id": "VM1", "callId": "CA2", "direction": "incoming",
                                                  "from": CUSTOMER, "transcript": "Hi Gerrit, call me back."})
-        self.assertEqual(r.quo_event("call.voicemail.completed", {"id": "VM1", "from": CUSTOMER,
+        self.assertEqual(r.quo_event("call.voicemail.completed", {"id": "VM1", "callId": "CA2", "from": CUSTOMER,
                                                                   "transcript": "again"})[1], {"duplicate": True})
         r.quo_event("call.summary.completed", {"callId": "CA3", "processingStatus": "completed",
                                                "summary": ["Asked about shutters."], "nextSteps": ["Send quote"],
                                                "fromPhoneNumber": CUSTOMER})
         _, up = r.val("GET", "/api/val/updates")
         got = {c["id"]: (c["kind"], c["text"]) for c in up["calls"]}
-        self.assertEqual(got, {"CA1": ("missed", ""), "VM1": ("voicemail", "Hi Gerrit, call me back."),
+        self.assertEqual(got, {"CA1": ("missed", ""), "CA2": ("voicemail", "Hi Gerrit, call me back."),
                                "sum-CA3": ("call_summary", "Asked about shutters.\nNext steps:\nSend quote")})
-        r.val("POST", "/api/val/ack", {"calls": ["CA1", "VM1", "sum-CA3"]})
+        r.val("POST", "/api/val/ack", {"calls": ["CA1", "CA2", "sum-CA3"]})
         self.assertEqual(r.val("GET", "/api/val/updates")[1]["calls"], [])
 
     def test_outgoing_answered_and_unsigned_calls_are_not_kept(self):
@@ -203,6 +213,40 @@ class Calls(unittest.TestCase):
                                                       "category": "missed_call", "about_call": "ai-CA2"})
         self.assertEqual(status, 200)
         self.assertIn("[Voicemail] Quo's AI agent took this message", r.tg.last_card()["text"])
+
+    def test_quo_missed_call_alert_looks_up_the_caller(self):
+        """Gerrit's tests 2026-10-26: Quo sent no call.completed for his hang-ups, only (once subscribed)
+        call.missed, which carries just the call's id."""
+        r = Rig()
+        r.quo.calls["AC9"] = {"id": "AC9", "direction": "incoming", "status": "no-answer",
+                              "createdAt": "2026-10-27T03:47:52Z",
+                              "participants": [{"phoneNumber": "+13175550100", "actorId": None},
+                                               {"phoneNumber": CUSTOMER, "actorId": None}]}
+        self.assertEqual(r.quo_event("call.missed", {"id": "AC9", "createdAt": "2026-10-27T03:47:52Z"},
+                                     external=())[1], {"stored": True})
+        r.quo.calls["AC8"] = {"id": "AC8", "direction": "incoming", "participants": [
+            {"phoneNumber": "+13175550100", "actorId": "US1"}, {"phoneNumber": CUSTOMER, "actorId": None}],
+            "voicemail": {"id": "VM8", "transcript": "Hi, call me about blinds."}}
+        r.quo_event("call.missed", {"id": "AC8"}, external=())
+        # the voicemail alert for the same call later is the same item, not a second one
+        self.assertEqual(r.quo_event("call.voicemail.completed", {"id": "VM8", "callId": "AC8", "from": CUSTOMER,
+                                                                  "direction": "incoming", "transcript": "x"})[1],
+                         {"duplicate": True})
+        got = {c["id"]: (c["kind"], c["phone"], c["text"]) for c in r.val("GET", "/api/val/updates")[1]["calls"]}
+        self.assertEqual(got, {"AC9": ("missed", CUSTOMER, ""),
+                               "AC8": ("voicemail", CUSTOMER, "Hi, call me about blinds.")})
+        # and the text back can be made for it
+        self.assertEqual(r.val("POST", "/api/val/drafts", {"to": CUSTOMER, "text": "Sorry I missed you! Gerrit",
+                                                           "category": "missed_call", "about_call": "AC9"})[0], 200)
+
+    def test_quo_missed_call_lookup_failing_asks_quo_to_send_again(self):
+        r = Rig()
+        r.quo.call_fails.append(QuoError("No answer from Quo (URLError).", unknown=True))
+        self.assertEqual(r.quo_event("call.missed", {"id": "AC7"}, external=())[0], 503)
+        self.assertEqual(r.val("GET", "/api/val/updates")[1]["calls"], [])
+        self.assertIn("Quo didn't give call AC7", r.val("GET", "/api/val/updates")[1]["call_notes"][0]["detail"])
+        r.quo.calls["AC7"] = {"direction": "incoming", "participants": [{"phoneNumber": CUSTOMER, "actorId": None}]}
+        self.assertEqual(r.quo_event("call.missed", {"id": "AC7"}, external=())[1], {"stored": True})
 
     def test_every_call_alert_not_used_leaves_a_note_val_can_read(self):
         """Gerrit's hang-up test 2026-10-26 reached nobody and left no trace: now each one says why."""

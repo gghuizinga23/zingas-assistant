@@ -16,6 +16,7 @@ import hmac
 import json
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import List, Mapping, Optional
 
@@ -145,6 +146,18 @@ class QuoClient:
 
     def list_numbers(self) -> List[dict]:
         return list(self._call("GET", "/phone-numbers?limit=50").get("data") or [])
+
+    def get_call(self, call_id: str) -> dict:
+        """One call with its voicemail, if one was left (call.missed alerts carry only the call's id)."""
+        return self._call("GET", "/calls/" + urllib.parse.quote(call_id, safe="") + "?include=voicemail"
+                          ).get("data") or {}
+
+    def business_number(self) -> str:
+        """The business number's own phone number (QUO_PHONE_NUMBER_ID is only its id). Looked up once."""
+        if getattr(self, "_business", None) is None:
+            self._business = next((str(n.get("phoneNumber") or "") for n in self.list_numbers()
+                                   if n.get("id") == self.from_number_id), "")
+        return self._business
 
     def list_webhooks(self) -> List[dict]:
         return list(self._call("GET", "/webhooks").get("data") or [])

@@ -187,6 +187,17 @@ class QuoClientTests(unittest.TestCase):
         self.assertEqual(net.requests[1]["body"]["events"], ["message.received"])
         self.assertEqual(net.requests[1]["body"]["resourceIds"], ["PN1"])
 
+    def test_get_call_and_business_number(self):
+        q = clients.QuoClient("key", "PN2")
+        net = FakeNet(b'{"data":{"id":"AC/1","direction":"incoming"}}',
+                      b'{"data":[{"id":"PN1","phoneNumber":"+13175550000"},{"id":"PN2","phoneNumber":"+13176622590"}]}')
+        with mock.patch("urllib.request.urlopen", net):
+            self.assertEqual(q.get_call("AC/1")["direction"], "incoming")
+            self.assertEqual(q.business_number(), "+13176622590")
+            self.assertEqual(q.business_number(), "+13176622590")      # looked up once
+        self.assertTrue(net.requests[0]["url"].endswith("/calls/AC%2F1?include=voicemail"))
+        self.assertEqual(len(net.requests), 2)
+
     def test_errors_explained_and_unknown_flagged(self):
         e400 = urllib.error.HTTPError("u", 400, "x", {}, None)
         with mock.patch("urllib.request.urlopen", FakeNet(e400)):
