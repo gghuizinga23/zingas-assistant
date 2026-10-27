@@ -73,6 +73,8 @@ PLAN_AT, SUBMIT_AT = time(7, 40), time(8, 1)
 SCAN_EVERY, REPLY_EVERY, LOOP_SLEEP = timedelta(minutes=15), timedelta(minutes=60), 120
 UPCOMING_DAYS = 14          # how far ahead the Drafts tab shows the coming lists
 INTERNAL = ("zingashome.com", "zingas.com")
+# The installers' "job complete" emails sit under the Gmail label "Customers/Completed".
+COMPLETED = "label:customers-completed"
 SOLD_TO = ("payments@zingashome.com", "insidesalessupport@zingashome.com",
            "customersuccess@zingas.com", "customersuccess@zingashome.com")
 STATE_TZ = {"IN": "America/Indiana/Indianapolis", "OH": "America/New_York", "KY": "America/Kentucky/Louisville",
@@ -417,7 +419,7 @@ class Followups:
         to = " OR ".join(SOLD_TO)
         for m in search(self.gmail, f"in:sent to:({to}) after:{after}"):
             blobs.append(letters(m.get("subject") or ""))
-        for m in search(self.gmail, "label:Completed newer_than:180d"):
+        for m in search(self.gmail, f"{COMPLETED} newer_than:180d"):
             emails.update(external_emails(f"{m.get('to')} {m.get('sender')}"))
             blobs.append(letters(m.get("subject") or ""))
         n = 0

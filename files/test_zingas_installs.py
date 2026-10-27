@@ -18,7 +18,7 @@ class FakeGmail:
         self.msgs, self.bodies = msgs, bodies or {}
 
     def call(self, tool, args):
-        assert tool == "GMAIL_FETCH_EMAILS" and "label:Completed" in args["query"]
+        assert tool == "GMAIL_FETCH_EMAILS" and "label:customers-completed" in args["query"]
         return {"messages": self.msgs}
 
     def body(self, mid):

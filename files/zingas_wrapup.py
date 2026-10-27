@@ -279,10 +279,8 @@ def main(argv=None) -> int:
     pv = sub.add_parser("preview")
     pv.add_argument("--day", default="")
     a = p.parse_args(argv)
-    now = datetime.now(TZ)
-    if a.day:
-        d = date.fromisoformat(a.day)
-        now = datetime(d.year, d.month, d.day, 19, 0, tzinfo=TZ)
+    d = date.fromisoformat(a.day) if a.day else datetime.now(TZ).date()
+    now = datetime(d.year, d.month, d.day, 19, 0, tzinfo=TZ)      # as the evening brief would see it
     print(brief_block(now, save=False) or "Nothing to wrap up for that day.")
     return 0
 

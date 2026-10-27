@@ -61,7 +61,7 @@ class FakeGmail:
             msgs = self.payment
         elif q.startswith("in:sent to:(payments@"):
             msgs = self.contracts
-        elif q.startswith("label:Completed"):
+        elif q.startswith("label:customers-completed"):
             msgs = self.completed
         elif q.startswith("from:("):
             msgs = [m for m in self.inbox if m["sender"] in q]

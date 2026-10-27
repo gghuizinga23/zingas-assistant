@@ -102,5 +102,17 @@ class WrapupTests(unittest.TestCase):
         self.assertNotIn("$", out)
 
 
+class PreviewTests(unittest.TestCase):
+    def test_preview_reads_the_day_as_the_evening_brief_would(self):
+        from unittest import mock
+        seen = []
+        with mock.patch.object(zw, "brief_block", lambda now, **k: seen.append(now) or ""), \
+                mock.patch("builtins.print"):
+            zw.main(["preview"])
+            zw.main(["preview", "--day", "2026-10-26"])
+        self.assertEqual(seen[0].hour, 19)          # also in the morning: not empty because it is before noon
+        self.assertEqual(seen[1], at(2026, 10, 26))
+
+
 if __name__ == "__main__":
     unittest.main()

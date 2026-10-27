@@ -466,7 +466,7 @@ class Installs:
     def scan(self) -> int:
         import zingas_followups as zf
         now = self.clock()
-        msgs = zf.search(self.gmail, "label:Completed newer_than:45d", cap=100)
+        msgs = zf.search(self.gmail, f"{zf.COMPLETED} newer_than:45d", cap=100)
         made: List[str] = []
         with locked(self.vault) as st:
             first = not st.get("first_look")
@@ -738,7 +738,7 @@ def main(argv=None) -> int:
     if a.cmd == "preview":
         import zingas_followups as zf
         g = _gmail()
-        for m in zf.search(g, "label:Completed newer_than:45d", cap=30):
+        for m in zf.search(g, f"{zf.COMPLETED} newer_than:45d", cap=30):
             mid = str(m.get("messageId") or m.get("id") or "")
             who = identify(m, g.body(mid) if mid else "", _website_lookup)
             at = _msg_time(m)
