@@ -204,13 +204,25 @@ class Calls(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("[Voicemail] Quo's AI agent took this message", r.tg.last_card()["text"])
 
-    def test_an_unknown_call_status_is_kept_as_a_trace(self):
+    def test_every_call_alert_not_used_leaves_a_note_val_can_read(self):
+        """Gerrit's hang-up test 2026-10-26 reached nobody and left no trace: now each one says why."""
         r = Rig()
         r.quo_event("call.completed", {"id": "CA4", "direction": "incoming", "status": "forwarded"})
-        r.quo_event("call.completed", {"id": "CA5", "direction": "incoming", "status": "answered"})
-        self.assertEqual(r.val("GET", "/api/val/updates")[1]["calls"], [])
-        traces = [e["detail"] for e in r.store.events if e["kind"] == "call_ignored"]
-        self.assertEqual(traces, ["call CA4 status 'forwarded'"])
+        r.quo_event("call.completed", {"id": "CA5", "direction": "incoming", "status": "unanswered",
+                                       "hasVoicemail": True, "duration": 3})
+        r.quo_event("call.completed", {"id": "CA6", "direction": "incoming", "status": "unanswered"},
+                    external=("not-a-phone",))
+        _, up = r.val("GET", "/api/val/updates")
+        self.assertEqual(up["calls"], [])
+        notes = [n["detail"] for n in up["call_notes"]]
+        self.assertEqual(len(notes), 3)
+        self.assertIn("call.completed: answered call, id CA4, direction 'incoming', status 'forwarded'", notes[2])
+        self.assertIn("not a missed call, id CA5", notes[1])
+        self.assertIn("hasVoicemail True, duration 3, number ...", notes[1])
+        self.assertTrue(notes[1].endswith(CUSTOMER[-4:]))
+        self.assertNotIn(CUSTOMER[2:], " ".join(notes))          # never the whole number
+        self.assertIn("no id or not a US number, id CA6", notes[0])
+        self.assertIn("no US number", notes[0])
 
 
 class MissedCallTextBack(unittest.TestCase):

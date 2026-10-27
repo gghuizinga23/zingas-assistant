@@ -206,6 +206,11 @@ class MemoryStore:
     def log_many(self, rows: List[dict]) -> None:
         self.events.extend(dict(r) for r in rows)
 
+    def recent_events(self, kind: str, limit: int = 10) -> List[dict]:
+        rows = [(parse_time(e["at"]), n, e) for n, e in enumerate(self.events) if e["kind"] == kind]
+        return [{"at": e["at"], "detail": e.get("detail")} for _, _, e in sorted(rows, key=lambda r: r[:2],
+                                                                                 reverse=True)[:limit]]
+
     def last_event(self, kind: str, detail_prefix: str = "") -> Optional[dict]:
         rows = [(parse_time(e["at"]), n, e) for n, e in enumerate(self.events)
                 if e["kind"] == kind and (e.get("detail") or "").startswith(detail_prefix)]
@@ -424,6 +429,9 @@ class SupabaseStore:
         self._call("POST", "events", [{"at": r["at"], "kind": r["kind"], "draft_id": r.get("draft_id"),
                                        "detail": (r.get("detail") or "")[:2000]} for r in rows],
                    prefer="return=minimal")
+
+    def recent_events(self, kind: str, limit: int = 10) -> List[dict]:
+        return self._call("GET", f"events?kind=eq.{_q(kind)}&select=at,detail&order=at.desc&limit={int(limit)}")
 
     def last_event(self, kind: str, detail_prefix: str = "") -> Optional[dict]:
         like = ""

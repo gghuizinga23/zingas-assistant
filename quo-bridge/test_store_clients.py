@@ -147,6 +147,13 @@ class SupabaseStoreTests(unittest.TestCase):
         with mock.patch("urllib.request.urlopen", net):
             self.assertEqual([m["id"] for m in self.s.recent_messages("+1")], ["old", "new"])
 
+    def test_recent_events_newest_first_and_capped(self):
+        net = FakeNet(b'[{"at":"2026-10-27T03:00:00Z","detail":"x"}]')
+        with mock.patch("urllib.request.urlopen", net):
+            self.assertEqual(self.s.recent_events("call_ignored", 10)[0]["detail"], "x")
+        self.assertTrue(net.requests[0]["url"].endswith(
+            "/rest/v1/events?kind=eq.call_ignored&select=at,detail&order=at.desc&limit=10"))
+
     def test_http_error_hides_details(self):
         err = urllib.error.HTTPError("https://abc.supabase.co/rest/v1/drafts?id=eq.x", 500, "boom", {}, None)
         with mock.patch("urllib.request.urlopen", FakeNet(err)):

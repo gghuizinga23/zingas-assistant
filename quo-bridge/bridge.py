@@ -92,6 +92,20 @@ def us_phone(value) -> Optional[str]:
     return "+1" + digits if len(digits) == 10 else None
 
 
+def call_note(event: dict, why: str) -> str:
+    """One line about a call alert quo-bridge didn't use: what Quo said, never the whole number."""
+    data = event.get("data") or {}
+    res = data.get("resource") or {}
+    ext = ((data.get("context") or {}).get("participants") or {}).get("external") or []
+    num = us_phone(res.get("from") or res.get("fromPhoneNumber") or (ext[0] if ext else ""))
+    bits = [f"{event.get('type')}: {why}", f"id {res.get('id') or res.get('callId')}"]
+    for k in ("direction", "status", "hasVoicemail", "duration", "processingStatus", "handledByAiAgent"):
+        if k in res:
+            bits.append(f"{k} {res[k]!r}")
+    bits.append(f"number ...{num[-4:]}" if num else "no US number")
+    return ", ".join(bits)[:500]
+
+
 def pretty_phone(e164: str) -> str:
     d = e164[-10:]
     return f"({d[:3]}) {d[3:6]}-{d[6:]}" if len(d) == 10 else e164
@@ -294,6 +308,12 @@ class Bridge(FollowupMixin):
         return 200, {"stored": True, "replaced": replaced}
 
     def _on_call(self, event: dict) -> Response:
+        status, body = self._call_event(event)
+        if "ignored" in body:       # every call alert we don't use leaves a short note (Val reads the newest)
+            self._log("call_ignored", None, call_note(event, body["ignored"]))
+        return status, body
+
+    def _call_event(self, event: dict) -> Response:
         """Calls and voicemails go on Val's to-do list. Only incoming calls from a US
         number are kept: a missed call with no voicemail, a voicemail (with Quo's
         transcript), or an answered call's summary (Quo's Business plan). When Quo's AI agent
@@ -312,8 +332,6 @@ class Bridge(FollowupMixin):
                 if not isinstance(secs, (int, float)) or secs >= AI_HANGUP_SECONDS:
                     return 200, {"ignored": "Quo's AI agent took a message"}   # the summary alert brings it
             elif status not in ("unanswered", "abandoned", "failed"):
-                if status != "answered":      # a word we don't know yet: keep a trace to look at
-                    self._log("call_ignored", None, f"call {res.get('id')} status {status!r}")
                 return 200, {"ignored": "answered call"}          # the summary alert covers it
             phone, kind, body, row_id = us_phone(external[0] if external else ""), "missed", "", res.get("id")
         elif kind_of == "call.voicemail.completed":
@@ -382,7 +400,8 @@ class Bridge(FollowupMixin):
                     for d in self.store.unreported_outcomes(20, exclude_category="followup")]
         calls = [{"id": c["id"], "phone": c["phone"], "kind": c["kind"], "text": c.get("body") or "",
                   "received_at": c["created_at"]} for c in self.store.unpicked_calls(20)]
-        return 200, {"texts": texts, "outcomes": outcomes, "calls": calls}
+        notes = self.store.recent_events("call_ignored", 10)     # why recent call alerts were not used
+        return 200, {"texts": texts, "outcomes": outcomes, "calls": calls, "call_notes": notes}
 
     def val_ack(self, payload: dict) -> Response:
         texts = [str(i) for i in (payload.get("texts") or [])][:100]
