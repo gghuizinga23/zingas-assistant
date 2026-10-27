@@ -51,9 +51,9 @@ copy_one() {   # $1 = "src|dst|mode": keep the old file, then put the new one in
 finish() {
   echo "echo 'Saved the old files in $B'"
   echo 'supervisorctl reread | tail -2; supervisorctl update | tail -2'
-  echo 'supervisorctl restart zingas-quo zingas-inbox zingas-followups | tail -3   # pick up the new code'
+  echo 'supervisorctl restart zingas-quo-pickup zingas-inbox zingas-followups | tail -3   # pick up the new code'
   echo 'supervisorctl restart zingas-voice | tail -1'
-  echo 'sleep 8; supervisorctl status zingas-voice zingas-quo zingas-inbox zingas-followups | awk "{print \$1, \$2}"'
+  echo 'sleep 8; supervisorctl status zingas-voice zingas-quo-pickup zingas-inbox zingas-followups | awk "{print \$1, \$2}"'
   echo 'PYTHONPATH=/usr/local/lib/zingas zingas-voice list | wc -l | xargs echo "lessons now:"'
 }
 
