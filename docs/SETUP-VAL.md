@@ -309,6 +309,8 @@ Why: on the new Follow-Up page "how warm", "waiting on" and "next step" were emp
 
 - **Every 10 minutes**, for each of your open quotes: every new text, call, voicemail, email and visit in the
   customer's file goes on the sheet as a touch, and "last contact" moves forward. No AI for that part.
+- **What Val judges from:** the sheet, her customer file, and each customer's Salesforce record (visits, results
+  and your follow-up note from each visit; never prices), read once for each customer she judges.
 - **Customers with news** (and, the first time, everyone) get one short Val run per 8 customers: how warm
   (hot, warm, cold), what we wait on, the next step (it shows on "Your calls" as the reason), a follow-up date
   only when you or the customer named a day, and one note line only when something new happened (at most one

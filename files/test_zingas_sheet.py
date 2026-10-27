@@ -46,6 +46,14 @@ class FakeSite:
         applied = [k for k in body if k not in ("appointmentId", "prospectId")]
         return 200, {"ok": True, "applied": applied, "refused": []}
 
+    def customer(self, phone="", prospect_id=""):
+        self.lookups = getattr(self, "lookups", []) + [prospect_id]
+        if getattr(self, "sf_fail", False):
+            raise WebsiteError(502, "no answer")
+        return {"customer": {"prospectId": prospect_id, "name": "Pat Smith", "city": "Carmel", "visits": [
+            {"date": "2026-10-20", "product": "Shades", "rep": "Gerrit", "result": "Demoed, Not Sold",
+             "followUpDate": "2026-11-15", "note": "Wants to wait for spring. Quote was $3,200. Wife likes linen."}]}}
+
     def events(self, after=0, types=""):
         got = [e for e in self.event_list if e["id"] > after]
         return {"events": got, "last": got[-1]["id"] if got else after}
@@ -232,6 +240,36 @@ class Judging(Base):
         self.assertEqual((self.site.touches, self.site.updates), ([], []))
         self.assertEqual(done["preview"][0]["customer"], "Pat Smith")
         self.assertFalse(os.path.exists(os.path.join(self.vault, "state.json")))
+
+
+class SalesforceNotes(Base):
+    def test_val_reads_the_reps_salesforce_note_without_the_price(self):
+        self.sheet.once()
+        p = self.prompts[0]
+        inside = p.split('<customer id="c1">')[1].split("</customer>")[0]
+        self.assertIn("Follow-up note: Wants to wait for spring. Quote was [amount]. Wife likes linen.", inside)
+        self.assertNotIn("$3,200", p)
+        self.assertEqual(self.site.lookups, ["P-77"])
+
+    def test_one_lookup_per_judged_customer_only(self):
+        self.site.items = [item(appt=f"A{n}", pid=f"P-{n}") for n in range(11)]
+        self.answers = [{"results": [{"id": f"c{n}", "temperature": "warm"} for n in range(1, 9)]}]
+        self.sheet.once()
+        self.assertEqual(len(self.site.lookups), zs.BATCH)
+        self.answers = [{"results": [{"id": f"c{n}", "temperature": "warm"} for n in range(1, 4)]}]
+        self.sheet.once()
+        self.assertEqual(len(self.site.lookups), zs.BATCH + 3)
+
+    def test_no_answer_from_salesforce_still_judges(self):
+        self.site.sf_fail = True
+        self.answers = [{"results": [{"id": "c1", "temperature": "warm"}]}]
+        self.sheet.once()
+        self.assertEqual(self.site.updates[0]["temperature"], "warm")
+        self.assertNotIn("Salesforce record", self.prompts[0].split('<customer id="c1">')[1])
+
+    def test_preview_says_which_had_a_record(self):
+        done = self.sheet.once(write=False)
+        self.assertTrue(done["preview"][0]["salesforce"])
 
 
 class Problems(Base):
