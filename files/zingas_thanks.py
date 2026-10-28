@@ -257,6 +257,11 @@ def write_prompt(c: dict, file_text: str, voice: str, now: datetime) -> str:
         "- Never a price, amount, discount, percent or monthly payment. Product words only.\n"
         "- Never quote the recording word for word, and nothing that would feel like being listened to "
         "(health, money troubles, arguments). Warm, light things only: their family, work, service, hobbies, plans.\n"
+        "- Say what was quoted in plain everyday words, the way Gerrit says it out loud (\"the track and "
+        "cable-guided screens\", \"the light filtering roller shades\"), never catalog names or brand codes like "
+        "\"Z-Motion\" or \"Z-Lift\".\n"
+        "- Greet them by the name Gerrit used with them in the visit or the name the file says they go by "
+        "(\"Mike\" for a Michael who goes by Mike), else the first name above.\n"
         "- Gerrit's texting voice: warm, exclamation marks, \"I'd\" and \"haha\" are fine. No em dashes. "
         f"At most {MAX_CHARS} characters.",
         "## Gerrit's voice notes\n" + (voice or "(VOICE.md missing)"),

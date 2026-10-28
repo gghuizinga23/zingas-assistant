@@ -387,7 +387,7 @@ estimate. One installer (`files/install-thanks.sh`), nothing on the website.
 - **No double thank-you:** the Plaud pickup's own "great to meet you" draft now waits 2 hours. An estimate email in
   that time replaces it; with none (Sign now, sold on the spot) it goes on the card as before.
 - **Cost:** one small Val run per estimate.
-- **Mike's text as the example:** it goes into Val's vault `VOICE.md` on install (customer words stay out of git).
+- **Checked on Mike's real visit (Oct 27, read-only replay on a copy of Val's files):** Val wrote "Hey Mike!" ... "thank you again for your 26 years of service" ... "your quotes for both the track and cable-guided screens and emailed them over to you" ... the screen-colors offer. Only the golf send-off was missing (not in the visit summary).
 
 | Step | What to do | Who | Time |
 |---|---|---|---|
