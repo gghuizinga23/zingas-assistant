@@ -277,26 +277,32 @@ class FollowupMixin:
             self._answer(cq, f"{n} cards below." if n else "Nothing is waiting.")
             return True
         if action == "q":
-            d = self.store.get_draft(key)
-            if not d or d["category"] != "followup":
-                self._answer(cq, "I cannot find that follow-up.")
-                return True
-            n, batches = 0, set()
-            for other in self.store.followups_for(OPEN, phone=d["phone"], email=d.get("email_to") or ""):
-                if other.get("customer_key") != d.get("customer_key"):
-                    continue
-                c = self.store.claim_draft(other["id"], [other["status"]], {
-                    "status": "stopped_customer", "reasons": "Gerrit said: no more follow-ups."})
-                if c:
-                    n += 1
-                    batches.add(c.get("batch_id"))
-                    self._edit_card(c, self._fu_card_text(c, "🛑 No more follow-ups for them. Nothing was sent."))
-            for b in batches:
-                self._render_batch(b)
-            self._log("followups_stopped", key, d.get("customer_key") or "")
-            self._answer(cq, "No more follow-ups for them." if n else "Nothing was waiting for them.")
+            _, message = self._fu_stop_customer(key)
+            self._answer(cq, message)
             return True
         return False
+
+    def _fu_stop_customer(self, draft_id: str):
+        """'No more follow-ups for them': the card's button in Telegram and the same button on the website.
+        Every open follow-up for this customer stops; nothing is sent. Returns (how many, Gerrit's answer),
+        or (None, answer) when the draft isn't a follow-up."""
+        d = self.store.get_draft(draft_id)
+        if not d or d["category"] != "followup":
+            return None, "I cannot find that follow-up."
+        n, batches = 0, set()
+        for other in self.store.followups_for(OPEN, phone=d["phone"], email=d.get("email_to") or ""):
+            if other.get("customer_key") != d.get("customer_key"):
+                continue
+            c = self.store.claim_draft(other["id"], [other["status"]], {
+                "status": "stopped_customer", "reasons": "Gerrit said: no more follow-ups."})
+            if c:
+                n += 1
+                batches.add(c.get("batch_id"))
+                self._edit_card(c, self._fu_card_text(c, "🛑 No more follow-ups for them. Nothing was sent."))
+        for b in batches:
+            self._render_batch(b)
+        self._log("followups_stopped", draft_id, d.get("customer_key") or "")
+        return n, ("No more follow-ups for them." if n else "Nothing was waiting for them.")
 
     def _fu_approve_all(self, batch_id: str, where: str = "") -> int:
         """Approve all: the button on the batch card in Telegram, and the same button on the website's Drafts tab.

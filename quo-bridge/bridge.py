@@ -790,8 +790,18 @@ class Bridge(FollowupMixin):
           {"id": "...", "action": "approve", "text": "..."}    approve and send (text optional: edit first)
           {"id": "...", "action": "send_now"}                  a held text, now
           {"id": "...", "action": "skip"}                      never send it
+          {"id": "...", "action": "stop"}                      Stop a text in its 5-minute auto-send countdown
+          {"id": "...", "action": "stop_customer"}             a follow-up: no more follow-ups for this customer
           {"batch": "2026-10-26", "action": "approve_all"}     a day's follow-up list, as the card's Approve all"""
         action = payload.get("action")
+        if action == "stop_customer":
+            draft_id = str(payload.get("id") or "").strip()
+            self._log("website", draft_id or None, "stop_customer")
+            n, message = self._fu_stop_customer(draft_id)
+            if n is None:
+                return 404, {"ok": False, "error": message, "message": message}
+            fresh = self.store.get_draft(draft_id) or {}
+            return 200, {"ok": True, "stopped": n, "status": fresh.get("status"), "message": message}
         if action == "approve_all":
             batch = str(payload.get("batch") or "").strip()
             if not re.match(r"^\d{4}-\d{2}-\d{2}$", batch):
@@ -801,8 +811,9 @@ class Bridge(FollowupMixin):
             return 200, {"ok": True, "approved": n,
                          "message": f"Approved {n}. Each one sends at its time." if n else "Nothing is waiting."}
         draft_id = str(payload.get("id") or "").strip()
-        if not draft_id or action not in ("edit", "approve", "send_now", "skip", "draft_now", "wait"):
-            return 400, {"error": "send an id and an action: edit, approve, send_now, skip, draft_now or wait"}
+        if not draft_id or action not in ("edit", "approve", "send_now", "skip", "stop", "draft_now", "wait"):
+            return 400, {"error": "send an id and an action: edit, approve, send_now, skip, stop, stop_customer, "
+                                  "draft_now or wait"}
         d = self.store.get_draft(draft_id)
         if not d:
             return 404, {"error": "I cannot find that draft."}
@@ -840,9 +851,9 @@ class Bridge(FollowupMixin):
             if action == "edit":
                 return 200, {"ok": True, "status": d.get("status"), "message": "Saved. It still needs your approval."}
         self._log("website", draft_id, action)
-        message = self._act({"approve": "a", "send_now": "n", "skip": "s"}[action], draft_id, d)
+        message = self._act({"approve": "a", "send_now": "n", "skip": "s", "stop": "x"}[action], draft_id, d)
         fresh = self.store.get_draft(draft_id) or {}
-        ok = message != BUSY
+        ok = message != BUSY and not (action == "stop" and message != "Stopped.")
         return (200 if ok else 409), {"ok": ok, "status": fresh.get("status"), "message": message}
 
     def _on_message(self, msg: dict) -> None:

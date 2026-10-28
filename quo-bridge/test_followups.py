@@ -225,6 +225,19 @@ class Review(Base):
         self.assertEqual(r.status(sam7), "sent")
         self.assertEqual([t[0] for t in r.quo.sent], [OTHER])
 
+    def test_no_more_followups_from_the_website(self):
+        r = self.rig()
+        self.submit(r, [item(), item("sam@example.com", "7 days", OTHER, customer_name="Sam Ray"),
+                        item("pat@example.com", "day 14", due=TUE_11AM + timedelta(hours=3))])
+        pat48, sam7, pat14 = (followup_id("pat@example.com", "48 hours", DAY), followup_id("sam@example.com", "7 days", DAY),
+                              followup_id("pat@example.com", "day 14", DAY))
+        status, body = r.bridge.os_action({"id": pat48, "action": "stop_customer"})
+        self.assertEqual((status, body["stopped"]), (200, 2))
+        self.assertEqual((r.status(pat48), r.status(pat14), r.status(sam7)), ("stopped_customer", "stopped_customer", "planned"))
+        status, body = r.bridge.os_action({"id": pat48, "action": "stop_customer"})
+        self.assertEqual((status, body["stopped"]), (200, 0))      # a second tap: nothing left
+        self.assertEqual(r.bridge.os_action({"id": "nope", "action": "stop_customer"})[0], 404)
+
     def test_edit_text_then_approve(self):
         r = self.rig()
         self.submit(r, [item(due=TUE_11AM - timedelta(minutes=1))])

@@ -755,6 +755,18 @@ class AutoSend(unittest.TestCase):
         self.assertEqual(r.status(d["id"]), "stopped")
         self.assertFalse(r.store.get_stats("on_my_way")["enabled"])
 
+    def test_stop_from_the_website(self):
+        r = self.r
+        _, d = self.on_my_way()
+        status, body = r.bridge.os_action({"id": d["id"], "action": "stop"})
+        self.assertEqual((status, body["ok"], body["status"]), (200, True, "stopped"))
+        r.clock.t += timedelta(minutes=10)
+        r.tick()
+        self.assertEqual(r.quo.sent, [])
+        self.assertFalse(r.store.get_stats("on_my_way")["enabled"])
+        status, body = r.bridge.os_action({"id": d["id"], "action": "stop"})   # too late now
+        self.assertFalse(body["ok"])
+
     def test_real_person_question_always_goes_to_gerrit(self):
         r = self.r
         r.customer_texts("Is this a real person or a bot?")
