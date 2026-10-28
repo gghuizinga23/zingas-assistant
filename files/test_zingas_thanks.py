@@ -35,6 +35,19 @@ def z(dt):
 class FakeBridge:
     def __init__(self, fail=None):
         self.drafts, self.fail = [], fail
+        self.asks, self.closed = {}, {}
+
+    def call(self, method, path, body):
+        assert (method, path) == ("POST", "/api/val/asks")
+        if body["op"] == "open":
+            i = "q" + str(len(self.asks) + 1)
+            self.asks[i] = {"to": body["to"], "name": body["customer_name"], "status": "asking"}
+            return {"id": i, "status": "asking"}
+        if body["op"] == "status":
+            return {"asks": {i: self.asks[i]["status"] for i in body["ids"] if i in self.asks}}
+        self.asks[body["id"]]["status"] = "closed"
+        self.closed[body["id"]] = body["note"]
+        return {"id": body["id"], "status": "closed"}
 
     def draft(self, payload):
         if self.fail:
@@ -168,6 +181,60 @@ class ThanksTests(unittest.TestCase):
         self.assertIn("say 'on Friday'", th.write_prompt(late, "", "", at(27, 15)))
         moved_up = {"est_sent_at": z(at(27, 15)), "appt_at": z(at(28, 10)), "quoted": []}
         self.assertIn("say 'today'", th.write_prompt(moved_up, "", "", at(27, 15)))
+
+    # Gerrit's "no recording yet" card ------------------------------------
+    def test_no_recording_puts_up_the_question_at_once(self):
+        t = self.make()
+        self.assertEqual(t.once()["waiting"], 1)
+        self.assertEqual(list(self.bridge.asks.values()), [{"to": "+13175550142", "name": "Pat", "status": "asking"}])
+        self.now += timedelta(minutes=2)
+        t.once()
+        self.assertEqual(len(self.bridge.asks), 1)                # one card per estimate
+        self.assertEqual(self.bridge.drafts, [])
+
+    def test_draft_now_writes_it_without_the_recording(self):
+        t = self.make()
+        t.once()
+        self.bridge.asks["q1"]["status"] = "draft_now"            # Gerrit tapped Draft now
+        self.now += timedelta(minutes=2)
+        self.assertEqual(t.once()["thanked"], 1)
+        self.assertIn("no recording of this visit yet", self.prompts[0])
+        self.assertIn("Gerrit: draft now", list(th.read_state(self.vault)["done"].values())[0]["what"])
+        self.assertIn("no recording", self.bridge.closed["q1"])
+        self.assertEqual(th.read_state(self.vault)["asks"], {})
+
+    def test_wait_then_the_recording_comes_in(self):
+        t = self.make()
+        t.once()
+        self.bridge.asks["q1"]["status"] = "waiting_recording"
+        self.now += timedelta(minutes=30)
+        self.assertEqual(t.once()["waiting"], 1)
+        self.add_visit()
+        self.now += timedelta(minutes=2)
+        self.assertEqual(t.once()["thanked"], 1)
+        self.assertIn("Biscuit", self.prompts[0])
+        self.assertIn("recording came in", self.bridge.closed["q1"])
+
+    def test_no_tap_still_drafts_after_two_hours(self):
+        t = self.make()
+        t.once()
+        self.now = at(27, 16, 31)
+        self.assertEqual(t.once()["thanked"], 1)
+        self.assertIn("q1", self.bridge.closed)
+
+    def test_a_recording_already_in_needs_no_question(self):
+        self.add_visit()
+        self.make().once()
+        self.assertEqual(self.bridge.asks, {})
+
+    def test_old_quo_bridge_without_questions_still_waits(self):
+        class Old(FakeBridge):
+            call = None
+        b = Old()
+        t = self.make(b)
+        self.assertEqual(t.once()["waiting"], 1)
+        self.now = at(27, 16, 31)
+        self.assertEqual(t.once()["thanked"], 1)
 
     def test_old_estimates_no_phone_or_sold_are_left_alone(self):
         self.add_customer(email="old@example.com", phone="+13175550101", sent=at(27, 5))    # before install

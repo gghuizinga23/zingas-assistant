@@ -220,6 +220,16 @@ do-not-contact, the 8 AM hold) and updates the Telegram card. Answers `{ok, stat
 draft was already handled. The website lets only people `ASSISTANT_USERS` names press these (Gerrit). Code:
 `quo-bridge/bridge.py` (`os_action`), `src/modules/assistant/bridge.ts`, `src/modules/assistant/actions.ts`.
 
+**Val's "no recording yet" question (2026-10-28).** When an estimate goes out and the visit has no Plaud recording
+yet, Val's `zingas-thanks` calls `POST {QUO_BRIDGE_URL}/api/val/asks` (Val's `VAL_DRAFT_TOKEN`):
+`{"op": "open", "to", "customer_name", "prospect_id", "time_zone"}` makes one card per number (Telegram buttons
+`rd:` Draft now, `rw:` Wait for recording), `{"op": "status", "ids": [...]}` reads the answers
+(`asking`, `waiting_recording`, `draft_now`, `closed`), `{"op": "close", "id", "note"}` closes it once the
+thank-you is on its own card. It is a row in `drafts` with category `recording_wait` that is never a text: no send
+path, reminder or outcome uses its statuses. `GET /api/os/drafts` lists it while `asking` or `waiting_recording`;
+the website's buttons send `{"id", "action": "draft_now" | "wait"}` to `/api/os/drafts/action` (409 on any other
+draft). The Follow-Up pages leave it out (`textsOnly` in `src/modules/assistant/bridge.ts`).
+
 When quo-bridge can't reach the website's contact route, it treats the customer as do-not-contact (never text
 when unsure), for 30 seconds before trying again.
 

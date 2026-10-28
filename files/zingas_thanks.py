@@ -10,7 +10,9 @@ Every 2 minutes:
      in the last day (a PDF one or the new estimator's "Your proposal from Zinga's"). The estimate email going out is
      the trigger; the appointment's time never holds it back, since visits get moved up, back or around (Gerrit,
      2026-10-28);
-  2. waits for the visit's Plaud recording to be filed, up to 2 hours after the estimate email;
+  2. waits for the visit's Plaud recording to be filed, up to 2 hours after the estimate email. With no recording
+     yet, a question card goes to Gerrit at once (Telegram and the website's Drafts tab, Gerrit 2026-10-28):
+     "Draft now" writes it without the recording; "Wait for recording" (or no tap) keeps the 2-hour wait;
   3. asks Val once for the text, in the six-part shape, from the estimate (what was quoted, never a price) and the
      customer file (the visit's summary); checks it; with no good answer after 2 tries uses a plain fallback;
   4. hands it to quo-bridge as kind "thank_you": the normal Approve / Edit / Skip card. quo-bridge checks
@@ -390,6 +392,8 @@ class Thanks:
         n = {"thanked": 0, "waiting": 0, "plaud_sent": 0, "plaud_dropped": 0}
         with locked(self.vault) as st:
             st.setdefault("since", iso(now))     # first run: never thank estimates from before it was installed
+            asks = st.setdefault("asks", {})
+            self._read_answers(asks)
             for c in self.due(st, now):
                 if digits10(c.get("phone")) in st.get("plaud_sent", {}):
                     st["done"][done_key(c)] = {"at": iso(now), "phone": digits10(c.get("phone")),
@@ -397,16 +401,27 @@ class Thanks:
                     continue                     # the estimate came after the hold: never two thank-yous
                 file_text = visit_file(c, self.vault)
                 c = dict(c, visit_day=visit_day(c, self.vault))
-                if not file_text and now - parse_iso(c["est_sent_at"]) < PLAUD_WAIT:
+                key = done_key(c)
+                if not file_text and key not in asks:
+                    self._ask(c, asks)           # "No recording yet": Draft now / Wait for recording
+                draft_now = (asks.get(key) or {}).get("status") == "draft_now"
+                if not file_text and not draft_now and now - parse_iso(c["est_sent_at"]) < PLAUD_WAIT:
                     n["waiting"] += 1
                     continue                     # the recording may still be on its way
                 text = self.words(c, file_text, st, now)
                 if text is None or not self._hand(c, text, bool(file_text)):
                     continue
-                st["done"][done_key(c)] = {"at": iso(now), "phone": digits10(c.get("phone")),
-                                           "what": "drafted" if file_text else "drafted, no recording"}
-                st["tries"].pop(done_key(c), None)
+                st["done"][key] = {"at": iso(now), "phone": digits10(c.get("phone")),
+                                   "what": "drafted" if file_text else
+                                   "drafted, no recording" + (" (Gerrit: draft now)" if draft_now else "")}
+                st["tries"].pop(key, None)
                 n["thanked"] += 1
+                if key in asks:
+                    self._close(asks.pop(key), "The recording came in. The thank-you is on its own card."
+                                if file_text else "The thank-you is on its own card (no recording).")
+            due = {done_key(c) for c in self.due(st, now)}
+            for k in [k for k in asks if k not in due]:      # sold, too old, or done another way
+                self._close(asks.pop(k), "Nothing more to do for this one.")
             self._held(st, now, n)
         return n
 
@@ -440,6 +455,35 @@ class Thanks:
                     st.setdefault("plaud_sent", {})[h["phone"]] = iso(now)
         st["plaud_sent"] = {k: v for k, v in st.get("plaud_sent", {}).items()
                             if now - (parse_iso(v) or now) < FRESH}
+
+    # Gerrit's "no recording yet" card (quo-bridge /api/val/asks). An older quo-bridge without it: no card, the
+    # 2-hour wait as before.
+    def _asks(self, body: dict) -> Optional[dict]:
+        call = getattr(self.bridge, "call", None)
+        if call is None:
+            return None
+        try:
+            return call("POST", "/api/val/asks", body)
+        except Exception as e:
+            log(f"thanks: question card not reached ({type(e).__name__} {getattr(e, 'status', 0)})")
+            return None
+
+    def _ask(self, c: dict, asks: dict) -> None:
+        got = self._asks({"op": "open", "to": "+1" + digits10(c["phone"]), "customer_name": first_of(c),
+                          "prospect_id": self._key(c),
+                          "time_zone": c.get("time_zone") or "America/Indiana/Indianapolis"})
+        if got and got.get("id"):
+            asks[done_key(c)] = {"id": str(got["id"]), "status": str(got.get("status") or "asking")}
+
+    def _read_answers(self, asks: dict) -> None:
+        if not asks:
+            return
+        got = self._asks({"op": "status", "ids": [a["id"] for a in asks.values()]}) or {}
+        for a in asks.values():
+            a["status"] = (got.get("asks") or {}).get(a["id"], a["status"])
+
+    def _close(self, ask: dict, note: str) -> None:
+        self._asks({"op": "close", "id": ask["id"], "note": note})
 
     def _hand(self, c: dict, text: str, recorded: bool) -> bool:
         if self.bridge is None:

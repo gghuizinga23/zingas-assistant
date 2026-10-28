@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 import app as wsgi
 from bridge import Bridge, Config
 from clients import QuoError, sign_quo_body
+from os_link import drafts_for_os
 from store import MemoryStore
 
 QUO_SECRET = "whsec_" + base64.b64encode(b"q" * 24).decode()
@@ -824,3 +825,78 @@ class Health(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RecordingQuestion(unittest.TestCase):
+    """Gerrit (2026-10-28): an estimate went out with no Plaud recording yet: Draft now or Wait for recording."""
+
+    def ask(self, r, **extra):
+        return r.val("POST", "/api/val/asks", dict({"op": "open", "to": CUSTOMER, "customer_name": "Gina"}, **extra))
+
+    def answers(self, r, *ids):
+        return r.val("POST", "/api/val/asks", {"op": "status", "ids": list(ids)})[1]["asks"]
+
+    def test_card_with_two_buttons_and_one_per_customer(self):
+        r = Rig()
+        status, body = self.ask(r)
+        self.assertEqual((status, body["status"]), (200, "asking"))
+        card = r.tg.last_card()
+        self.assertIn("No recording yet for Gina", card["text"])
+        self.assertEqual([b["callback_data"] for b in card["buttons"][0]], ["rd:" + body["id"], "rw:" + body["id"]])
+        self.assertEqual(self.ask(r)[1]["id"], body["id"])                  # asked again: the same card
+        self.assertEqual(len([m for m in r.tg.sent if m["buttons"]]), 1)
+
+    def test_draft_now_from_telegram_and_val_reads_it(self):
+        r = Rig()
+        i = self.ask(r)[1]["id"]
+        self.assertEqual(self.answers(r, i), {i: "asking"})
+        r.tap("rd", i)
+        self.assertEqual(self.answers(r, i), {i: "draft_now"})
+        self.assertIn("writing it now", r.tg.edits[-1]["text"])
+        r.tap("rw", i)                                                       # too late to wait
+        self.assertEqual(self.answers(r, i), {i: "draft_now"})
+        r.val("POST", "/api/val/asks", {"op": "close", "id": i, "note": "The thank-you is on its card."})
+        self.assertEqual(self.answers(r, i), {i: "closed"})
+        self.assertIn("The thank-you is on its card.", r.tg.edits[-1]["text"])
+
+    def test_wait_keeps_draft_now(self):
+        r = Rig()
+        i = self.ask(r)[1]["id"]
+        r.tap("rw", i)
+        self.assertEqual(self.answers(r, i), {i: "waiting_recording"})
+        self.assertEqual([b["callback_data"] for b in r.tg.edits[-1]["buttons"][0]], ["rd:" + i])
+        r.tap("rd", i)
+        self.assertEqual(self.answers(r, i), {i: "draft_now"})
+
+    def test_website_buttons(self):
+        r = Rig()
+        i = self.ask(r)[1]["id"]
+        listed = {d["id"]: d for d in drafts_for_os(r.store)["drafts"]}
+        self.assertEqual((listed[i]["category"], listed[i]["status"]), ("recording_wait", "asking"))
+        status, body = r.bridge.os_action({"id": i, "action": "wait"})
+        self.assertEqual((status, body["status"]), (200, "waiting_recording"))
+        status, body = r.bridge.os_action({"id": i, "action": "draft_now"})
+        self.assertEqual((status, body["status"]), (200, "draft_now"))
+        self.assertNotIn(i, {d["id"] for d in drafts_for_os(r.store)["drafts"]})   # off the Drafts tab
+        self.assertEqual(r.bridge.os_action({"id": i, "action": "draft_now"})[0], 409)
+
+    def test_a_question_never_sends_a_text(self):
+        r = Rig()
+        i = self.ask(r)[1]["id"]
+        for action in ("a", "n", "e", "s", "x"):
+            r.tap(action, i)
+        for action in ("approve", "send_now", "skip", "edit"):
+            r.bridge.os_action({"id": i, "action": action, "text": "hello"})
+        r.clock.t += timedelta(hours=3)
+        r.tick()
+        self.assertEqual(r.quo.sent, [])
+        self.assertEqual(self.answers(r, i), {i: "asking"})
+        d = r.draft()[1]                                                     # a real draft can't take these buttons
+        self.assertEqual(r.bridge.os_action({"id": d["id"], "action": "draft_now"})[0], 409)
+        self.assertEqual(r.val("GET", "/api/val/updates")[1]["outcomes"], [])
+
+    def test_only_vals_key_and_good_numbers(self):
+        r = Rig()
+        self.assertEqual(r.val("POST", "/api/val/asks", {"op": "open", "to": CUSTOMER}, token="wrong")[0], 401)
+        self.assertEqual(self.ask(r, to="12")[0], 400)
+        self.assertEqual(r.val("POST", "/api/val/asks", {"op": "nope"})[0], 400)

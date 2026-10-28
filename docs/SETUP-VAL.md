@@ -385,7 +385,9 @@ estimate. One installer (`files/install-thanks.sh`), nothing on the website.
   thing from the visit / "I just finished putting together your quotes for <what you quoted> and emailed them over
   to you." / an offer if something is still open / a friendly send-off / "Thanks! Gerrit". Never a price.
 - **From what:** the option names on the estimate and the visit's Plaud recording. Val waits up to 2 hours for the
-  recording; with none, she writes it from the estimate alone. If her answer breaks a rule twice, a plain version
+  recording; with none, she writes it from the estimate alone. **No recording yet (2026-10-28):** a "No recording
+  yet" card goes to you at once (Telegram and the Drafts tab): Draft now (she writes it without the recording) or
+  Wait for recording. With no tap she waits the 2 hours as before. If her answer breaks a rule twice, a plain version
   goes on the card instead.
 - **Approval:** always a card in Val Approvals (kind `thank_you`): Approve, Edit or Skip. quo-bridge checks
   do-not-contact and 8 AM to 8 PM before it sends.

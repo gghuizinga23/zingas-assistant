@@ -40,7 +40,8 @@ TIMEOUT_SECONDS = 5.0
 COOL_OFF_SECONDS = 30.0
 # "planned": a follow-up still on its day's list card, waiting for Approve all (Gerrit, 2026-10-26: approve them on
 # the website too, so a list is never only in one Telegram card).
-OPEN_STATUSES = ("planned", "pending", "editing", "held", "countdown", "failed")
+OPEN_STATUSES = ("planned", "pending", "editing", "held", "countdown", "failed",
+                 "asking", "waiting_recording")      # the last two: Val's "no recording yet" question cards
 
 
 def last10(phone: str) -> str:

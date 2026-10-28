@@ -35,6 +35,13 @@ DEFAULT_TIME_ZONE = "America/Indiana/Indianapolis"
 MAX_PENDING = 30           # if Val's code leaked, the worst case is this many cards
 MAX_TEXT = 1600            # Quo's limit for one text
 BUSY = "Someone already did an action on this draft."
+# A question card, never a text (Gerrit, 2026-10-28): an estimate went out and the visit has no Plaud recording yet.
+# Draft now = Val writes the thank-you without the recording; Wait = she waits for it (up to 2 hours). Its statuses
+# are in no send path and never reach Val's outcomes: asking -> draft_now | waiting_recording -> closed.
+ASK_CATEGORY = "recording_wait"
+ASK_OPEN = ("asking", "waiting_recording")
+ASK_STATUSES = ASK_OPEN + ("draft_now", "closed")
+ASK_DONE = "Already answered: Val is writing it, or it's done."
 STOP_WORDS = {"STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT", "OPTOUT", "REVOKE"}
 START_WORDS = {"START", "UNSTOP"}
 _CATEGORY_RE = re.compile(r"^[a-z_]{1,32}$")
@@ -523,6 +530,97 @@ class Bridge(FollowupMixin):
         self._log("draft", d["id"], d["status"])
         return 200, {"id": d["id"], "status": d["status"]}
 
+    # ----------------------------------------------------------- Val's questions
+
+    @staticmethod
+    def _ask_text(d: dict, footer: str = "") -> str:
+        who = d.get("customer_name") or "a customer"
+        lines = [f"🎙️ No recording yet for {who}, {pretty_phone(d['phone'])}",
+                 "Their estimate just went out. Val can write the thank-you text now, without anything personal "
+                 "from the visit, or wait for the Plaud recording (up to 2 hours after the estimate, then she "
+                 "writes it anyway)."]
+        if footer:
+            lines += ["", footer]
+        return "\n".join(lines)
+
+    @staticmethod
+    def _ask_buttons(d: dict) -> list:
+        row = [{"text": "📝 Draft now", "callback_data": "rd:" + d["id"]}]
+        if d.get("status") == "asking":
+            row.append({"text": "⏳ Wait for recording", "callback_data": "rw:" + d["id"]})
+        return [row]
+
+    def val_ask(self, payload: dict) -> Response:
+        """Val's question cards (Gerrit, 2026-10-28). One door, three steps:
+          {"op": "open", "to": "+1...", "customer_name": "Gina", "prospect_id": "...", "time_zone": "..."}
+              the card (Telegram and the website's Drafts tab); an open one for this number is reused
+          {"op": "status", "ids": ["..."]}       Gerrit's answers: asking, waiting_recording, draft_now or closed
+          {"op": "close", "id": "...", "note": "..."}   Val is done with it (the thank-you is on its card)"""
+        op = payload.get("op")
+        if op == "status":
+            ids = [str(i)[:40] for i in (payload.get("ids") or [])][:50]
+            out = {}
+            for i in ids:
+                d = self.store.get_draft(i)
+                if d and d.get("category") == ASK_CATEGORY:
+                    out[i] = d["status"]
+            return 200, {"asks": out}
+        if op == "close":
+            d = self.store.get_draft(str(payload.get("id") or "")[:40])
+            if not d or d.get("category") != ASK_CATEGORY:
+                return 404, {"error": "I cannot find that question."}
+            note = str(payload.get("note") or "Done.")[:200]
+            claimed = self.store.claim_draft(d["id"], list(ASK_OPEN) + ["draft_now"], {"status": "closed"})
+            if claimed:
+                self._edit_card(claimed, self._ask_text(claimed, "✔️ " + note))
+                self._log("ask_closed", d["id"], note)
+            return 200, {"id": d["id"], "status": "closed"}
+        if op != "open":
+            return 400, {"error": "op must be open, status or close"}
+        phone = us_phone(payload.get("to"))
+        if not phone:
+            return 400, {"error": "'to' must be a US phone number"}
+        tz_name = str(payload.get("time_zone") or DEFAULT_TIME_ZONE)
+        try:
+            ZoneInfo(tz_name)
+        except Exception:
+            return 400, {"error": "unknown 'time_zone'"}
+        for x in self.store.drafts_by_status(list(ASK_OPEN), 200):
+            if x["phone"] == phone and x.get("category") == ASK_CATEGORY:
+                return 200, {"id": x["id"], "status": x["status"]}
+        d = {"id": secrets.token_hex(5), "phone": phone,
+             "customer_name": str(payload.get("customer_name") or "")[:80] or None,
+             "prospect_id": str(payload.get("prospect_id") or "")[:40] or None, "time_zone": tz_name,
+             "category": ASK_CATEGORY, "body": "No recording yet: draft the thank-you now, or wait for the recording?",
+             "final_body": None, "edited": False, "reply_to": None, "customer_said": "", "status": "asking",
+             "reasons": "", "created_at": self._stamp()}
+        self.store.insert_draft(d)
+        msg_id = self._tell_gerrit(self._ask_text(d), buttons=self._ask_buttons(d))
+        if msg_id:
+            self.store.update_draft(d["id"], {"tg_message_id": msg_id})
+        self._log("ask", d["id"], "asking")
+        return 200, {"id": d["id"], "status": "asking"}
+
+    def _ask_act(self, action: str, d: dict) -> str:
+        """Draft now (rd) or Wait for recording (rw): a tap in Telegram or a button on the website."""
+        if d.get("category") != ASK_CATEGORY:
+            return "?"
+        if action == "rd":
+            claimed = self.store.claim_draft(d["id"], list(ASK_OPEN), {"status": "draft_now"})
+            if not claimed:
+                return ASK_DONE
+            self._edit_card(claimed, self._ask_text(claimed, "📝 Val is writing it now, without the recording. "
+                                                             "It comes as its own card."))
+            self._log("ask_answer", d["id"], "draft_now")
+            return "Val is writing it now. It comes as its own card in a few minutes."
+        claimed = self.store.claim_draft(d["id"], ["asking"], {"status": "waiting_recording"})
+        if not claimed:
+            return ASK_DONE
+        self._edit_card(claimed, self._ask_text(claimed, "⏳ Waiting for the recording. Tap Draft now any time."),
+                        self._ask_buttons(claimed))
+        self._log("ask_answer", d["id"], "wait")
+        return "Val waits for the recording (up to 2 hours after the estimate)."
+
     # ----------------------------------------------------------- sending
 
     def _send_now(self, d: dict, approved: bool, send_now: bool = False) -> str:
@@ -613,6 +711,12 @@ class Bridge(FollowupMixin):
         if not d:
             self._answer(cq, "I cannot find that draft.")
             return
+        if action in ("rd", "rw"):
+            self._answer(cq, self._ask_act(action, d))
+            return
+        if d.get("category") == ASK_CATEGORY:
+            self._answer(cq, "?")
+            return
         if action in ("a", "n", "s", "x"):
             self._answer(cq, self._act(action, draft_id, d))
         elif action == "e":
@@ -697,11 +801,19 @@ class Bridge(FollowupMixin):
             return 200, {"ok": True, "approved": n,
                          "message": f"Approved {n}. Each one sends at its time." if n else "Nothing is waiting."}
         draft_id = str(payload.get("id") or "").strip()
-        if not draft_id or action not in ("edit", "approve", "send_now", "skip"):
-            return 400, {"error": "send an id and an action: edit, approve, send_now or skip"}
+        if not draft_id or action not in ("edit", "approve", "send_now", "skip", "draft_now", "wait"):
+            return 400, {"error": "send an id and an action: edit, approve, send_now, skip, draft_now or wait"}
         d = self.store.get_draft(draft_id)
         if not d:
             return 404, {"error": "I cannot find that draft."}
+        if (action in ("draft_now", "wait")) != (d.get("category") == ASK_CATEGORY):
+            return 409, {"error": "Draft now and Wait are only for a 'no recording yet' card."}
+        if action in ("draft_now", "wait"):
+            self._log("website", draft_id, action)
+            message = self._ask_act("rd" if action == "draft_now" else "rw", d)
+            fresh = self.store.get_draft(draft_id) or {}
+            ok = message not in (BUSY, ASK_DONE)
+            return (200 if ok else 409), {"ok": ok, "status": fresh.get("status"), "message": message}
         text = payload.get("text")
         if text is not None and not isinstance(text, str):
             return 400, {"error": "text must be words"}
