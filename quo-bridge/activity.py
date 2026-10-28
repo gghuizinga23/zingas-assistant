@@ -80,18 +80,24 @@ def _clock(dt: datetime, now: datetime) -> str:
     return out if local.date() == today else local.strftime("%a ") + out
 
 
-def _text(store, quo, cell: str, now: datetime, key: str, message: str) -> str:
+def _text(store, quo, cell: str, now: datetime, key: str, message: str, notify=None) -> str:
     try:
         quo.send_text(cell, message)
     except QuoError as e:
         store.log("watchdog_failed", None, f"{key}: {e}"[:300], utc_iso(now))
         return ""
     store.log("watchdog", None, key, utc_iso(now))
+    if notify:
+        try:   # the same words on the website's From Val page; the text to the cell already went
+            notify(message)
+        except Exception:
+            pass
     return key
 
 
-def watch(store, quo, cell: str, now: datetime) -> str:
-    """One look, from the every-minute timer. Returns what it texted ("" for nothing)."""
+def watch(store, quo, cell: str, now: datetime, notify=None) -> str:
+    """One look, from the every-minute timer. Returns what it texted ("" for nothing). notify(message) also puts
+    each alert on the website."""
     if not cell:
         return ""
     last = store.last_event("val:checkin")
@@ -109,11 +115,11 @@ def watch(store, quo, cell: str, now: datetime) -> str:
             return ""
         return _text(store, quo, cell, now, "down",
                      f"Val watchdog: Val hasn't checked in since {_clock(seen, now)}. Her computer may be off "
-                     f"(on 10/25 it was Orgo credits running out). Tell Claude.")
+                     f"(on 10/25 it was Orgo credits running out). Tell Claude.", notify=notify)
     if alerted:
         if not awake:
             return ""
-        return _text(store, quo, cell, now, "back", f"Val watchdog: Val is back. She checked in at {_clock(seen, now)}.")
+        return _text(store, quo, cell, now, "back", f"Val watchdog: Val is back. She checked in at {_clock(seen, now)}.", notify=notify)
     if not awake:
         return ""
 
@@ -124,12 +130,12 @@ def watch(store, quo, cell: str, now: datetime) -> str:
         key = f"stopped {today}: {names}"
         if not store.last_event("watchdog", key):
             return _text(store, quo, cell, now, key,
-                         f"Val watchdog: on Val's computer, {names} stopped over 30 minutes ago. Tell Claude.")
+                         f"Val watchdog: on Val's computer, {names} stopped over 30 minutes ago. Tell Claude.", notify=notify)
 
     settled = not back or now - parse_time(back["at"]) >= SETTLE
     if local.weekday() < 5 and local.time() >= LIST_BY and settled:
         if not store.last_event("val:followups", f"list made for {today}") \
                 and not store.last_event("watchdog", f"no list {today}"):
             return _text(store, quo, cell, now, f"no list {today}",
-                         "Val watchdog: Val hasn't made today's follow-up list (it's due at 7:40 AM). Tell Claude.")
+                         "Val watchdog: Val hasn't made today's follow-up list (it's due at 7:40 AM). Tell Claude.", notify=notify)
     return ""

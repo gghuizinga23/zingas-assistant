@@ -28,7 +28,7 @@ import activity
 import cost_count
 import send_gate
 from clients import QuoError, TelegramError, verify_quo_signature
-from followups import FollowupMixin
+from followups import PAUSED_NOTE, PAUSED_RETRY, FollowupMixin
 from store import parse_time, utc_iso
 
 DEFAULT_TIME_ZONE = "America/Indiana/Indianapolis"
@@ -55,6 +55,16 @@ MISSED_CALL = "missed_call"   # Val's text back after a missed call or voicemail
 AI_HANGUP_SECONDS = 20
 
 Response = Tuple[int, dict]
+
+
+_PHONE_RE = re.compile(r"\+?\d[\d\s().-]{7,}\d")
+_EMAIL_RE = re.compile(r"([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*@([A-Za-z0-9.-]+)")
+
+
+def mask_contact(text: str) -> str:
+    """Phone numbers keep their last 4 digits (…0123); emails keep their first letter and domain (p…@gmail.com)."""
+    text = _PHONE_RE.sub(lambda m: "…" + re.sub(r"\D", "", m.group(0))[-4:], str(text))
+    return _EMAIL_RE.sub(lambda m: f"{m.group(1)}…@{m.group(2)}", text)
 
 
 @dataclass
@@ -147,6 +157,29 @@ class Bridge(FollowupMixin):
             self.store.log(kind, draft_id, detail, self._stamp())
         except Exception as e:  # the log must never stop a send or a reply
             print(f"log failed: {type(e).__name__}", file=sys.stderr)
+
+    def _controls(self) -> dict:
+        """Gerrit's switches on the website (Assistant > Settings): Pause all customer texts, and auto-send.
+        Without the website link (tests, or before it is set up) nothing is paused and AUTO_SEND_ENABLED decides."""
+        link = getattr(self.store, "link", None)
+        if link is None or not hasattr(link, "controls"):
+            return {"paused": False, "autoSend": True}
+        try:
+            return link.controls()
+        except Exception as e:   # never text when unsure
+            print(f"controls check failed: {type(e).__name__}", file=sys.stderr)
+            return {"paused": True, "autoSend": False}
+
+    def _paused(self) -> bool:
+        return bool(self._controls().get("paused"))
+
+    def _auto_send_on(self) -> bool:
+        return self.cfg.auto_send_enabled and bool(self._controls().get("autoSend"))
+
+    def _note_site(self, kind: str, text: str) -> None:
+        link = getattr(self.store, "link", None)
+        if link is not None and hasattr(link, "note"):
+            link.note(kind, text)
 
     def _tell_gerrit(self, text: str, buttons=None, force_reply: bool = False) -> int:
         try:
@@ -515,7 +548,7 @@ class Bridge(FollowupMixin):
             self.store.insert_draft(d)
             self._log("blocked", d["id"], d["reasons"])
             return 200, {"id": d["id"], "status": "blocked", "reasons": decision.reasons}
-        if decision.action == "countdown" and self.cfg.auto_send_enabled:
+        if decision.action == "countdown" and self._auto_send_on():
             d["status"] = "countdown"
             d["send_after"] = utc_iso(decision.send_after)
             self.store.insert_draft(d)
@@ -629,6 +662,8 @@ class Bridge(FollowupMixin):
         send_now=True means Gerrit tapped Send now on a held text."""
         if d.get("category") == "followup":
             return self._send_followup(d)
+        if self._paused():
+            return self._hold_paused(d, approved)
         decision = send_gate.decide(self._outgoing(d, approved, send_now), self.now(),
                                     None if approved else self._stats(d["category"]))
         ok_to_send = decision.action == "send" or (not approved and decision.action == "countdown")
@@ -676,6 +711,22 @@ class Bridge(FollowupMixin):
         self._edit_card(d, self._card_text(d, f"✅ Sent {_local(self.now(), DEFAULT_TIME_ZONE)}."))
         self._log("sent", d["id"], quo_id)
         return "Sent."
+
+    def _hold_paused(self, d: dict, approved: bool) -> str:
+        """Pause all customer texts is on (website Settings). An approved text waits and goes out by itself once
+        texts are back on (the every-minute timer tries again); an auto-send goes back to Gerrit."""
+        first = d.get("reasons") != PAUSED_NOTE
+        if approved:
+            self.store.update_draft(d["id"], {"status": "held", "reasons": PAUSED_NOTE,
+                                              "send_after": utc_iso(self.now() + PAUSED_RETRY)})
+            if first:
+                self._edit_card(d, self._card_text(d, "⏸ " + PAUSED_NOTE), self._held_buttons(d))
+                self._log("paused_hold", d["id"], "")
+            return "Approved. Customer texts are paused, so it waits until you turn them back on."
+        self.store.update_draft(d["id"], {"status": "pending", "reasons": PAUSED_NOTE, "send_after": None})
+        self._edit_card(d, self._card_text(d, "⏸ " + PAUSED_NOTE + " This needs your OK."), self._buttons(d))
+        self._log("paused_hold", d["id"], "auto")
+        return "Paused: back to Gerrit."
 
     # ------------------------------------------------------- 3. Gerrit's taps
 
@@ -856,6 +907,46 @@ class Bridge(FollowupMixin):
         ok = message != BUSY and not (action == "stop" and message != "Stopped.")
         return (200 if ok else 409), {"ok": ok, "status": fresh.get("status"), "message": message}
 
+    # ------------------------------------------- 3c. the website's Settings and Activity pages
+
+    def os_autosend(self) -> Response:
+        """Each kind that can earn auto-send: approvals in a row with no edits, and whether it has earned it.
+        The two main switches too: AUTO_SEND_ENABLED here, and the website's own (both must be on)."""
+        kinds = []
+        for category in sorted(send_gate.AUTO_SEND_CATEGORIES):
+            st = self._stats(category)
+            kinds.append({"category": category, "streak": st.approvals_in_a_row_unedited, "enabled": st.enabled,
+                          "unlockAt": send_gate.AUTO_SEND_UNLOCK_STREAK})
+        return 200, {"envOn": self.cfg.auto_send_enabled, "websiteOn": bool(self._controls().get("autoSend")),
+                     "delayMinutes": int(send_gate.AUTO_SEND_DELAY.total_seconds() // 60), "kinds": kinds,
+                     "never": sorted(send_gate.NEVER_SEND_CATEGORIES)}
+
+    def os_autosend_set(self, payload: dict) -> Response:
+        """Gerrit turns one kind's auto-send off from the website: its streak starts again from 0, the same as a
+        Stop. Turning one on is never a button: a kind earns it with 20 approvals in a row (send_gate)."""
+        category = str(payload.get("category") or "")
+        if category not in send_gate.AUTO_SEND_CATEGORIES:
+            return 400, {"error": "unknown kind"}
+        if payload.get("enabled") is not False:
+            return 400, {"error": "a kind earns auto-send by itself; the website can only turn it off"}
+        self._save_stats(send_gate.AutoSendStats(category, 0, False))
+        self._log("autosend_off", None, f"{category} on the website")
+        return 200, {"ok": True, "category": category, "enabled": False, "streak": 0}
+
+    def os_activity(self, hours) -> Response:
+        """What Val's programs and quo-bridge did lately, newest first (what files/val-log.sh prints), and the
+        last check-in from Val's computer. Phone numbers keep only their last 4 digits."""
+        try:
+            h = max(1, min(int(hours), 24 * 7))
+        except (TypeError, ValueError):
+            h = 24
+        since = utc_iso(self.now() - timedelta(hours=h))
+        rows = [r for r in self.store.events_since(since, 500) if r.get("kind") not in ("cost_posted",)]
+        out = [{"at": r["at"], "kind": r["kind"], "detail": mask_contact(r.get("detail") or "")[:300]} for r in rows]
+        last = self.store.last_event("val:checkin")
+        return 200, {"hours": h, "events": out,
+                     "checkin": {"at": last["at"], "detail": mask_contact(last.get("detail") or "")} if last else None}
+
     def _on_message(self, msg: dict) -> None:
         if int((msg.get("from") or {}).get("id") or 0) != self.cfg.approver_id:
             return
@@ -923,7 +1014,7 @@ class Bridge(FollowupMixin):
 
         for d in self.store.drafts_by_status(["countdown"]):
             due = parse_time(d.get("send_after"))
-            if not self.cfg.auto_send_enabled:
+            if not self._auto_send_on():
                 claimed = self.store.claim_draft(d["id"], ["countdown"], {"status": "pending", "send_after": None})
                 if claimed:
                     self._edit_card(claimed, self._card_text(claimed, "👀 Auto-send is off. This needs your OK."),
@@ -964,7 +1055,8 @@ class Bridge(FollowupMixin):
                     self._log("escalate_failed", None, str(e))
         done["followups_expired"] = self._fu_tick()
         try:   # the watchdog must never stop the timer's other work
-            done["watchdog"] = activity.watch(self.store, self.quo, self.cfg.gerrit_cell, now)
+            done["watchdog"] = activity.watch(self.store, self.quo, self.cfg.gerrit_cell, now,
+                                              notify=lambda text: self._note_site("watchdog", text))
         except Exception as e:
             print(f"watchdog failed: {type(e).__name__}", file=sys.stderr)
         done["cost_count"] = cost_count.hourly(self.store, self.cost, now)   # last: it never raises

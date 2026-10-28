@@ -13,6 +13,12 @@ The rule is "never text when unsure": if the website can't be reached, answers
 with an error, or answers with something we can't read, the number counts as
 do-not-contact.
 
+It also reads Gerrit's two switches on the website's Assistant > Settings page (controls(), cached 15 seconds):
+  - paused: "Pause all customer texts". Nothing reaches a customer while it is on; approved texts wait.
+  - autoSend: auto-send allowed at all. It works only when AUTO_SEND_ENABLED is also true here.
+Unsure (the website can't be reached) counts as paused, the same "never text when unsure" rule. And note()
+puts a watchdog alert on the website's "From Val" page too, next to the text to Gerrit's cell.
+
 drafts_for_os() is what the website's door (GET /api/os/drafts) shows: the
 drafts waiting on Gerrit, without full phone numbers. Gerrit's buttons there
 come back through POST /api/os/drafts/action (Bridge.os_action).
@@ -38,6 +44,8 @@ TIMEOUT_SECONDS = 5.0
 # check in that time just counts as "unsure" (so: do not text). This keeps one
 # outage from making each check wait the full timeout.
 COOL_OFF_SECONDS = 30.0
+CONTROLS_CACHE_SECONDS = 15.0
+UNSURE_CONTROLS = {"paused": True, "autoSend": False, "unsure": True}
 # "planned": a follow-up still on its day's list card, waiting for Approve all (Gerrit, 2026-10-26: approve them on
 # the website too, so a list is never only in one Telegram card).
 OPEN_STATUSES = ("planned", "pending", "editing", "held", "countdown", "failed",
@@ -59,20 +67,23 @@ class OsLink:
 
     def __init__(self, url: str, token: str, timeout: float = TIMEOUT_SECONDS,
                  clock: Callable[[], float] = time.monotonic):
-        self.url = url.rstrip("/") + "/api/assistant/contact"
+        self.base = url.rstrip("/")
+        self.url = self.base + "/api/assistant/contact"
         self.token = token
         self.timeout = timeout
         self.clock = clock
         self._quiet_until = 0.0
+        self._controls: Optional[dict] = None
+        self._controls_at = -1e9
 
-    def _call(self, method: str, query: str = "", body=None):
+    def _call(self, method: str, query: str = "", body=None, url: str = ""):
         headers = {"Authorization": "Bearer " + self.token, "Accept": "application/json",
                    "User-Agent": USER_AGENT}
         data = None
         if body is not None:
             headers["Content-Type"] = "application/json"
             data = json.dumps(body).encode()
-        req = urllib.request.Request(self.url + query, data=data, method=method, headers=headers)
+        req = urllib.request.Request((url or self.url) + query, data=data, method=method, headers=headers)
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
             return json.loads(resp.read() or b"null")
 
@@ -94,6 +105,42 @@ class OsLink:
         if not isinstance(out, dict) or not isinstance(out.get("doNotContact"), bool):
             return self._unsure("answer had no doNotContact")
         return out["doNotContact"]
+
+    def controls(self) -> dict:
+        """{"paused": bool, "autoSend": bool} from the website's Settings page. Unsure counts as paused."""
+        now = self.clock()
+        if self._controls is not None and now - self._controls_at < CONTROLS_CACHE_SECONDS:
+            return dict(self._controls)
+        if now < self._quiet_until:
+            return dict(UNSURE_CONTROLS)
+        try:
+            out = self._call("GET", "?controls=1")
+        except urllib.error.HTTPError as e:
+            return self._unsure_controls(f"HTTP {e.code}")
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            return self._unsure_controls(type(e).__name__)
+        except ValueError:
+            return self._unsure_controls("answer was not JSON")
+        if not isinstance(out, dict) or not isinstance(out.get("paused"), bool):
+            return self._unsure_controls("answer had no paused")
+        self._controls = {"paused": out["paused"], "autoSend": out.get("autoSend") is True}
+        self._controls_at = now
+        return dict(self._controls)
+
+    def _unsure_controls(self, reason: str) -> dict:
+        self._quiet_until = self.clock() + COOL_OFF_SECONDS
+        _warn(f"settings check failed ({reason}); holding customer texts until it answers")
+        return dict(UNSURE_CONTROLS)
+
+    def note(self, kind: str, text: str) -> bool:
+        """One line on the website's From Val page (a watchdog alert). Never raises."""
+        try:
+            out = self._call("POST", body={"op": "note", "notes": [{"kind": kind, "text": text[:1000]}]},
+                             url=self.base + "/api/assistant/desk")
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
+            _warn(f"note to the website failed ({type(e).__name__})")
+            return False
+        return isinstance(out, dict) and out.get("ok") is True
 
     def _unsure(self, reason: str) -> None:
         self._quiet_until = self.clock() + COOL_OFF_SECONDS

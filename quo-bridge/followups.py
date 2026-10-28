@@ -36,6 +36,9 @@ EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TOUCH_RE = re.compile(r"^[A-Za-z0-9 ]{1,24}$")
 THREAD_RE = re.compile(r"^[A-Za-z0-9]{1,40}$")
+# Pause all customer texts (website Settings): approved texts wait, and the timer looks again this often.
+PAUSED_NOTE = "Customer texts are paused (Assistant > Settings). It goes out once you turn them back on."
+PAUSED_RETRY = timedelta(minutes=1)
 OPEN = ("planned", "pending", "editing", "held", "failed")
 GERRIT_TZ = ZoneInfo("America/Indiana/Indianapolis")
 ICON = {"planned": "⏳", "pending": "👀", "editing": "✏️", "held": "⏰", "approving": "📤", "sending": "📤",
@@ -345,6 +348,15 @@ class FollowupMixin:
     def _send_followup(self, d: dict) -> str:
         """d is claimed ('approving'). Checks once more, then sends the text and the email."""
         now = self.now()
+        if self._paused():   # Pause all customer texts (website Settings): it stays approved and waits
+            first = d.get("reasons") != PAUSED_NOTE
+            self.store.update_draft(d["id"], {"status": "held", "reasons": PAUSED_NOTE,
+                                              "send_after": utc_iso(now + PAUSED_RETRY)})
+            if first:
+                d.update(status="held", reasons=PAUSED_NOTE)
+                self._edit_card(d, self._fu_card_text(d, "⏸ " + PAUSED_NOTE))
+                self._log("paused_hold", d["id"], "followup")
+            return "Approved. Customer texts are paused, so it waits until you turn them back on."
         tz = _tz(d["time_zone"])
         local = now.astimezone(tz)
         phone = d["phone"]

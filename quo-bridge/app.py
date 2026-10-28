@@ -15,7 +15,11 @@
   POST /api/val/followups/contacts  last text in/out and do-not-contact, for a list of phones
   Zinga's OS (the company website), only with ZINGAS_OS_TOKEN:
   GET  /api/os/drafts    drafts waiting on Gerrit, last 4 digits of the phone only
-  POST /api/os/drafts/action  Gerrit's button on the website's Drafts tab: edit, approve, send now, skip
+  POST /api/os/drafts/action  Gerrit's button on the website's Drafts tab: edit, approve, send now, skip, stop,
+                              stop_customer
+  GET  /api/os/autosend  each kind's auto-send progress (20 approvals in a row with no edits) and switch
+  POST /api/os/autosend  {"category": "...", "enabled": false}: Gerrit turns a kind's auto-send off
+  GET  /api/os/activity?hours=24  what Val and quo-bridge did (the events table), last 4 digits of phones only
 
 Optional: with ZINGAS_OS_URL and ZINGAS_OS_TOKEN both set, every do-not-contact
 check also asks the website's shared list, and a STOP adds the number to it
@@ -29,6 +33,7 @@ never "let it through".
 from __future__ import annotations
 
 import json
+import urllib.parse
 import os
 import sys
 import traceback
@@ -99,7 +104,8 @@ def make_app(get_bridge):
                   ("POST", "/api/val/followups"), ("GET", "/api/val/followups/outcomes"),
                   ("POST", "/api/val/followups/pause"), ("POST", "/api/val/followups/contacts"),
                   ("GET", "/api/os/drafts"), ("POST", "/api/os/drafts/action"), ("POST", "/api/val/activity"),
-                  ("POST", "/api/val/asks")}
+                  ("POST", "/api/val/asks"), ("GET", "/api/os/autosend"), ("POST", "/api/os/autosend"),
+                  ("GET", "/api/os/activity")}
         if (method, path) not in routes:
             known = {p for _, p in routes}
             return _reply(start_response, 405 if path in known else 404, {"error": "no such door"})
@@ -132,6 +138,20 @@ def make_app(get_bridge):
                 if not bearer_ok(headers, bridge.cfg.os_token):
                     return _reply(start_response, 401, {"error": "bad code"})
                 status, body = 200, drafts_for_os(bridge.store)
+            elif path in ("/api/os/autosend", "/api/os/activity"):   # the website's Settings and Activity pages
+                if not bearer_ok(headers, bridge.cfg.os_token):
+                    return _reply(start_response, 401, {"error": "bad code"})
+                if path == "/api/os/activity":
+                    query = urllib.parse.parse_qs(environ.get("QUERY_STRING") or "")
+                    status, body = bridge.os_activity((query.get("hours") or ["24"])[0])
+                elif method == "GET":
+                    status, body = bridge.os_autosend()
+                else:
+                    try:
+                        payload = json.loads(raw or b"{}")
+                    except ValueError:
+                        return _reply(start_response, 400, {"error": "not json"})
+                    status, body = bridge.os_autosend_set(payload if isinstance(payload, dict) else {})
             elif path == "/api/os/drafts/action":   # Gerrit's button on the website (it checks who he is)
                 if not bearer_ok(headers, bridge.cfg.os_token):
                     return _reply(start_response, 401, {"error": "bad code"})

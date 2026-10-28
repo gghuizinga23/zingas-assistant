@@ -206,6 +206,11 @@ class MemoryStore:
     def log_many(self, rows: List[dict]) -> None:
         self.events.extend(dict(r) for r in rows)
 
+    def events_since(self, since: str, limit: int = 500) -> List[dict]:
+        rows = [(parse_time(e["at"]), n, e) for n, e in enumerate(self.events) if parse_time(e["at"]) >= parse_time(since)]
+        return [{"at": e["at"], "kind": e["kind"], "detail": e.get("detail")}
+                for _, _, e in sorted(rows, key=lambda r: r[:2], reverse=True)[:limit]]
+
     def recent_events(self, kind: str, limit: int = 10) -> List[dict]:
         rows = [(parse_time(e["at"]), n, e) for n, e in enumerate(self.events) if e["kind"] == kind]
         return [{"at": e["at"], "detail": e.get("detail")} for _, _, e in sorted(rows, key=lambda r: r[:2],
@@ -429,6 +434,9 @@ class SupabaseStore:
         self._call("POST", "events", [{"at": r["at"], "kind": r["kind"], "draft_id": r.get("draft_id"),
                                        "detail": (r.get("detail") or "")[:2000]} for r in rows],
                    prefer="return=minimal")
+
+    def events_since(self, since: str, limit: int = 500) -> List[dict]:
+        return self._call("GET", f"events?at=gte.{_q(since)}&select=at,kind,detail&order=at.desc&limit={int(limit)}")
 
     def recent_events(self, kind: str, limit: int = 10) -> List[dict]:
         return self._call("GET", f"events?kind=eq.{_q(kind)}&select=at,detail&order=at.desc&limit={int(limit)}")
