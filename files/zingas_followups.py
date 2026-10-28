@@ -408,8 +408,10 @@ class Followups:
                         "sent_at": m.get("messageTimestamp") or iso(now), "subject": m.get("subject") or "",
                         "product": product_of(m.get("subject") or ""), "email": emails[0], "pdfs": pdfs},
                        appts, now, found)
-        # the new estimator's email: from Gerrit's own Gmail, a link and no PDF (Gerrit, 2026-10-28)
-        for m in search(self.gmail, f'in:sent subject:"your proposal from" after:{after}'):
+        # the new estimator's email: from Gerrit's own Gmail, a link and no PDF (Gerrit, 2026-10-28). The first
+        # scan with it looks back to START: every estimator email before it was missed.
+        p_after = after if self.st.get("proposals_from") else epoch(START - timedelta(days=1))
+        for m in search(self.gmail, f'in:sent subject:"your proposal from" after:{p_after}'):
             mid = m.get("messageId")
             if not mid or mid in seen:
                 continue
@@ -438,6 +440,7 @@ class Followups:
                     fresh = new_customer(est, appt, now)
                     self.st["customers"][c["email"]] = fresh
                     self.event(fresh, "appointment found")
+        self.st.setdefault("proposals_from", iso(now))
         self.sold_check()
         self.st["last_scan"] = iso(now)
         return found

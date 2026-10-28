@@ -255,6 +255,19 @@ class FollowupTests(unittest.TestCase):
         self.assertNotIn("$", json.dumps(c))
         self.assertEqual(f.scan()["new_customers"], 0)      # seen once
 
+    def test_first_scan_with_proposals_looks_back_to_the_start(self):
+        f = self.make()
+        f.scan()                                   # an older install already scanned...
+        f.st.pop("proposals_from")                 # ...before it knew the estimator's emails
+        self.g.queries.clear()
+        f.scan()
+        q = [q for q in self.g.queries if "your proposal from" in q][0]
+        self.assertIn(f"after:{zf.epoch(zf.START - timedelta(days=1))}", q)
+        self.g.queries.clear()
+        f.scan()
+        q = [q for q in self.g.queries if "your proposal from" in q][0]
+        self.assertNotIn(f"after:{zf.epoch(zf.START - timedelta(days=1))}", q)
+
     def test_proposal_first_name_alone_needs_the_same_day(self):
         self.g.estimates.clear()
         self.g.appts.append(appt_msg("a2", at(2026, 10, 14, 9), "Kim Example"))

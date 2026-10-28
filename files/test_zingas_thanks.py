@@ -173,6 +173,13 @@ class ThanksTests(unittest.TestCase):
         self.assertIn(", ", th.check_text(GOOD.replace("today haha", "today — haha"), "Pat"))
         self.assertEqual(send_gate.money_terms(GOOD), [])
 
+    def test_the_name_they_go_by(self):
+        mike = GOOD.replace("Hey Pat!", "Hey Mike!")
+        self.assertIsNone(th.check_text(mike, "Michael"))
+        self.assertEqual(th.check_text(mike, "Michael", "talk: goes by Mike, short texts"), mike)
+        self.assertIsNone(th.check_text(mike, "Michael", "Mikey called"))
+        self.assertIsNone(th.check_text(GOOD.replace("Hey Pat!", "Hey there!"), "Pat", "there"))
+
     def test_names(self):
         self.assertEqual(th.first_name("Testerson, Pat"), "Pat")
         self.assertEqual(th.first_name("Dennin, Jeff & Erika"), "Jeff")
