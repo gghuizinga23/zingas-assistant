@@ -343,6 +343,57 @@ def candidate_lines(cands: List[dict]) -> str:
     return "\n".join(rows) or "(no appointment on this day)"
 
 
+# Gerrit's rule (2026-10-28): one visit put 4 tasks on his list for one thing he said ("I'd have to call and confirm
+# with our manufacturer"). A promise is only what he said he will do and is still left; a step that can only start
+# after another one waits until that one is Done (it is its own task then, never merged into another one).
+PROMISE_RULES = (
+    "## Promises: only what Gerrit still has to do (Gerrit's rule, 2026-10-28)\n"
+    "- A promise is a thing Gerrit SAID he will do (\"I'll...\", \"I will...\", \"I'd have to...\", \"let me...\"). "
+    "Copy his words into \"said\". If you cannot find his words, it is not a promise: leave it out.\n"
+    "- Leave out what was already done at the visit: he measured, explained, showed samples, or offered something and "
+    "the customer said yes or no. An offer that was made is not a task.\n"
+    "- One thing he said is one promise. Do not split it into small steps, and do not add steps he did not say.\n"
+    "- When a promise can only start after another promise is done (call the customer with the manufacturer's "
+    "answer, after the call to the manufacturer; send the quote, after the price is known), put the other "
+    "promise's task words in \"after\". Val adds it to the list when the first one is done.\n"
+    "- \"lead\": buying when the customer said they want to buy or go ahead; quote when the customer waits on a "
+    "quote or a price from Gerrit; else empty.")
+LEADS = ("buying", "quote")
+WORD_RE = re.compile(r"[a-z0-9']+")
+
+
+def heard(said: str, transcript: str) -> bool:
+    """True when Gerrit's words in a promise are in the transcript: most of the longer words are there, in any
+    order (Plaud's transcripts are rough, so an exact match would miss real promises)."""
+    have = set(WORD_RE.findall(transcript.lower()))
+    words = [w for w in WORD_RE.findall(said.lower()) if len(w) >= 3]
+    if len(words) < 2:
+        return bool(said.strip()) and " ".join(WORD_RE.findall(said.lower())) in " ".join(WORD_RE.findall(
+            transcript.lower()))
+    return sum(w in have for w in words) / len(words) >= 0.7
+
+
+def nest_steps(promises: List[dict]) -> List[dict]:
+    """Promises with an "after" go under the promise they wait on, as its "next" steps. Anything that waits on
+    nothing on the list (or on itself, in a loop) stays a task of its own."""
+    by_task = {p["task"].lower(): p for p in promises}
+    top = []
+    for p in promises:
+        parent = by_task.get(p.get("after", "").lower())
+        seen, q = {id(p)}, parent
+        while q is not None and id(q) not in seen:     # a loop: everything in it stays on the list
+            seen.add(id(q))
+            q = by_task.get(q.get("after", "").lower())
+        if parent is None or parent is p or q is not None:
+            top.append(p)
+        else:
+            parent["next"].append(p)
+    def tidy(p: dict) -> dict:
+        return {"task": p["task"], "due": p["due"], "said": p["said"], "lead": p["lead"],
+                "next": [tidy(n) for n in p["next"]][:5]}
+    return [tidy(p) for p in top]
+
+
 def visit_prompt(transcript: str, start: datetime, minutes: int, cands: List[dict], plaud_summary: str,
                  vault: str = VAULT, skill_path: str = SKILL, today: Optional[datetime] = None,
                  title: str = "", others: Optional[List[str]] = None) -> str:
@@ -380,7 +431,8 @@ def visit_prompt(transcript: str, start: datetime, minutes: int, cands: List[dic
         "summary, sale_stage, the promises, match_reason and conflicts in ASD-STE100 Simplified Technical "
         "English (Gerrit's rule): simple common words, full sentences, no -ing forms, no contractions. Drafts "
         "to the customer are in Gerrit's own voice instead (rules below).",
-        "## Rules\n" + (zc._read(skill_path, 9000) or "(customer-memory skill missing)"),
+        PROMISE_RULES,
+        "## Rules\n" + (zc._read(skill_path, 16000) or "(customer-memory skill missing)"),
         "## Gerrit's voice (for the drafts only)\n" + (zc._read(os.path.join(vault, "VOICE.md"), 6000)
                                                        or "(VOICE.md missing)"),
         "## Gerrit's appointments that day\n<appointments>\n" + candidate_lines(cands) + "\n</appointments>",
@@ -407,8 +459,12 @@ def visit_prompt(transcript: str, start: datetime, minutes: int, cands: List[dic
         '"house": ["rooms, windows with hot sun, pets or kids, the problem they want solved"], '
         '"gerrit_said": ["promises and answers Gerrit gave, and how warm or formal he was"], '
         '"mood": "warm | cooling | unhappy, a few words why"}, '
-        '"promises": [{"task": "a thing Gerrit promised that Val cannot do herself, starts with a verb, '
-        '12 words or less", "due": "YYYY-MM-DD only if Gerrit said a day, else empty"}], '
+        '"promises": [{"task": "a thing Gerrit said he will do and has not done yet, that Val cannot do '
+        'herself, starts with a verb, 12 words or less", '
+        '"said": "Gerrit\'s own words from the transcript where he promised it, copied exactly, 25 words or less", '
+        '"after": "empty, or the exact task words of the other promise in this list that must be done first", '
+        '"lead": "buying | quote | empty", '
+        '"due": "YYYY-MM-DD only if Gerrit said a day, else empty"}], '
         '"drafts": ["a same-day great-to-meet-you text, and at most one more text Val can do for Gerrit '
         '(for example: the care guide or photo he promised). Never say the quote was emailed: the thank-you '
         'after his estimate email says that"], '
@@ -449,7 +505,19 @@ def house_note(note: str, start: datetime) -> str:
     return note
 
 
-def parse_visit(raw: str, start: datetime) -> dict:
+def promise_lines(promises: List[dict], depth: int = 0) -> List[str]:
+    """The visit file's list: each promise, his words, and the steps that wait on it, indented."""
+    out = []
+    for p in promises:
+        out.append("  " * depth + f"- {'Then: ' if depth else ''}{p['task']}" + (f" (due {p['due']})" if p["due"] else "")
+                   + (f' (he said: "{p["said"]}")' if p.get("said") else ""))
+        out += promise_lines(p.get("next") or [], depth + 1)
+    return out
+
+
+def parse_visit(raw: str, start: datetime, transcript: Optional[str] = None) -> dict:
+    """transcript: when given, a promise counts only when Gerrit's own words in it ("said") are in the transcript.
+    Left out for an answer that was checked already (a recording filed later)."""
     a, b = raw.find("{"), raw.rfind("}")
     if a < 0 or b <= a:
         raise ValueError("no JSON in Val's answer")
@@ -464,9 +532,20 @@ def parse_visit(raw: str, start: datetime) -> dict:
     facts = j.get("facts") if isinstance(j.get("facts"), dict) else {}
     promises = []
     for p in j.get("promises") or [] if isinstance(j.get("promises"), list) else []:
-        task = zt.clean((p or {}).get("task") if isinstance(p, dict) else p, 160)
-        if task and not zc.MONEY.search(task):
-            promises.append({"task": task, "due": _date_ok(p.get("due") if isinstance(p, dict) else "", start)})
+        p = p if isinstance(p, dict) else {"task": p}
+        task = zt.clean(p.get("task"), 160)
+        said = zt.clean(p.get("said"), 300)
+        if not task or zc.MONEY.search(task):
+            continue
+        if transcript is not None and not (said and heard(said, transcript)):
+            continue                                   # no words of Gerrit's behind it: not a promise
+        if any(task.lower() == q["task"].lower() for q in promises):
+            continue
+        lead = str(p.get("lead") or "").strip().lower()
+        promises.append({"task": task, "due": _date_ok(p.get("due"), start), "said": said,
+                         "after": zt.clean(p.get("after"), 160), "lead": lead if lead in LEADS else "",
+                         "next": []})
+    promises = nest_steps(promises[:10])
     drafts = [d for d in (str(x or "").strip() for x in (j.get("drafts") or [] if isinstance(j.get("drafts"), list)
                                                          else []))
               if 0 < len(d) <= 600 and not zc.MONEY.search(d)][:DRAFTS_MAX]
@@ -740,7 +819,7 @@ class PlaudPickup:
         try:
             raw = self.ask_val(prompt)
             raw, sid = raw if isinstance(raw, tuple) else (raw, "")
-            ans = parse_visit(raw, start)
+            ans = parse_visit(raw, start, transcript=text)
         except Exception as e:
             rec["tries"] = rec.get("tries", 0) + 1
             log(f"recording {fid[:8]}: Val's answer didn't work ({type(e).__name__}), try {rec['tries']}/{MAX_TRIES}")
@@ -870,8 +949,7 @@ class PlaudPickup:
             if ans["sale_stage"]:
                 out += ["## Where the sale is", ans["sale_stage"], ""]
             if ans["promises"]:
-                out += ["## Promises Gerrit made"] + [f"- {p['task']}" + (f" (due {p['due']})" if p["due"] else "")
-                                                      for p in ans["promises"]] + [""]
+                out += ["## Promises Gerrit made"] + promise_lines(ans["promises"]) + [""]
             if ans["salesforce_note"]:
                 out += ["## Note for Salesforce", ans["salesforce_note"]]
                 out += [f"Follow-up date: {ans['followup_date']}"] if ans["followup_date"] else []
@@ -903,7 +981,8 @@ class PlaudPickup:
             self._added.append(self.todo.add(p["task"], priority=promise_priority(p["due"], today), who=who,
                                              source="visit", ref=phone or f"plaud:{fid}", due=p["due"], why=why,
                                              customer=key, at=start, subject=f"Visit on {visit_day}",
-                                             said=ans.get("summary") or ""))
+                                             said=ans.get("summary") or "", lead=p.get("lead") or "",
+                                             next_steps=p.get("next") or []))
 
     def hand_drafts(self, ans: dict, fid: str, name: str, phone: str, key: str, tz_name: str) -> None:
         if not ans["drafts"] or not zc.digits10(phone):

@@ -242,7 +242,7 @@ when unsure), for 30 seconds before trying again.
   "items": [{ "id": "a1b2c3d4e5f6", "n": 1, "task": "Call back Pat about shutters", "who": "Pat Lee",
               "priority": "today", "source": "text", "replyBy": "2026-10-27T15:00:00+00:00", "due": null,
               "why": "", "link": "", "addedAt": "2026-10-26T15:00:00+00:00",
-              "receivedAt": "2026-10-26T15:00:00+00:00",
+              "receivedAt": "2026-10-26T15:00:00+00:00", "lead": "",
               "sources": [{ "kind": "text", "at": "2026-10-26T15:00:00+00:00", "from": "Pat Lee", "subject": "",
                             "text": "Can you come Tuesday?", "link": "" }] }],
   "done": [{ "id": "f6e5d4c3b2a1", "task": "Send the brochure", "who": "", "closedAt": "2026-10-26T16:00:00+00:00" }]
@@ -257,6 +257,9 @@ when unsure), for 30 seconds before trying again.
   Oct 23" for a visit), `text` (at most 600 characters: the email's start, the text, the voicemail, the visit
   summary, or Gerrit's own words), `link` (https only; Gmail links are fixed by the page to open the signed-in
   person's own inbox). Both are optional: a list without them gets one source made from the task.
+- `lead` (2026-10-28, optional): `buying` (the customer is ready to buy), `quote` (the customer waits on a quote) or
+  `""`. Inside each group both sides put `buying` first, then `quote`, then the rest (Gerrit's rule), so Telegram,
+  the To-do tab and the home screens' To-do card show the same order. Anything else counts as `""`.
 - `done`: tasks finished in the last 24 hours, at most 100. `id` lets the page's Undo put one back.
 - Never a task's `ref` (it can hold a phone number), never a price (amounts are taken out on the way in, message
   words too).

@@ -363,7 +363,9 @@ def build_prompt(text: dict, note_path: Optional[str], vault: str = VAULT, skill
         '"todo": {"action": "add" | "update" | "skip", "task": "starts with a verb, 12 words or less", '
         '"who": "name, short", "priority": "now" | "today" | "week" | "later", '
         '"due": "YYYY-MM-DD only if the text gives a date, else empty", "why": "one short line or empty", '
-        '"update_number": "for update: the open task number", "emergency": true | false}, '
+        '"update_number": "for update: the open task number", '
+        '"lead": "buying when the customer wants to buy or go ahead, quote when they wait on a quote or a price, '
+        'else empty", "emergency": true | false}, '
         + TEXT_FACTS + '}',
     ] if x)
 
@@ -463,6 +465,8 @@ class Pickup:
             done["calls"] = len(finished)
             done["retry"] += len(calls) - len(finished)
         self._save_tries(tries)
+        self.added += self.todo.released            # next steps of a task that closed when the reply went out
+        self.todo.released = []
         zt.announce(self.added, self.todo, self.notify, emergency=self.emergency)
         return done
 

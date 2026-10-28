@@ -77,6 +77,14 @@ SOURCE_WORDS = {"email": "email", "text": "text", "call": "call", "voicemail": "
 # Every message behind a task (his ask, 2026-10-26: open a task and see all the emails and texts it is about).
 MAX_SOURCES = 10
 SOURCE_TEXT = 600
+# Gerrit's rule (2026-10-28): inside each group, a customer ready to buy goes first, then a customer waiting on a
+# quote, then the rest. Val sets `lead` when she saves the task.
+LEADS = {"buying": 0, "quote": 1}
+LEAD_WORDS = {"buying": "ready to buy", "quote": "waiting on a quote"}
+MAX_NEXT = 5          # steps that wait on one task (a visit promise that can only start after another one)
+STAFF_FILE = next((p for p in ("/usr/local/lib/zingas/zingas_staff.json",
+                               os.path.join(os.path.dirname(os.path.abspath(__file__)), "zingas_staff.json"))
+                   if os.path.exists(p)), "/usr/local/lib/zingas/zingas_staff.json")
 
 
 def now_local() -> datetime:
@@ -168,6 +176,7 @@ class TodoList:
         self.folder = os.path.join(vault, "todo")
         self.path = os.path.join(self.folder, "todo.json")
         self.view = os.path.join(vault, "To-Do.md")
+        self.released: List[dict] = []   # next steps put on the list when a task was done; callers announce them
 
     @contextlib.contextmanager
     def _locked(self):
@@ -217,10 +226,14 @@ class TodoList:
     # writing
     def add(self, task: str, priority: str = "today", who: str = "", source: str = "val", ref: str = "",
             due: str = "", why: str = "", link: str = "", auto_done: str = "", received=None,
-            customer: str = "", subject: str = "", said: str = "", at=None) -> dict:
+            customer: str = "", subject: str = "", said: str = "", at=None, lead: str = "",
+            next_steps: Optional[List[dict]] = None) -> dict:
         """customer: the Prospect ID (or unmatched-<digits> key) of the customer file the task belongs to.
         subject, said: the message's subject and words (or Gerrit's own words), kept for the website's task view.
-        at: when it happened, for a task that isn't a message (a visit); a message uses received."""
+        at: when it happened, for a task that isn't a message (a visit); a message uses received.
+        lead: "buying" or "quote" (Gerrit's sort rule), else empty.
+        next_steps: [{"task", "due", "lead", "next"}]: steps that can only start after this task. They wait off the
+        list and each becomes its own task when this one is done (Gerrit's rule, 2026-10-28: never merged)."""
         task = clean(task, 160)
         if not task:
             raise ValueError("a task needs words")
@@ -233,9 +246,10 @@ class TodoList:
                 priority = "today"
         with self._locked() as box:
             # The number is set when the list is saved (renumber); the id never changes.
-            item = {"id": uuid.uuid4().hex[:12], "n": 0, "task": task, "priority": priority, "who": clean(who, 80),
-                    "source": source, "ref": clean(ref, 200), "reply_by": by,
-                    "due": due if _DATE.match(due or "") else "", "why": clean(why, 200),
+            item = {"id": uuid.uuid4().hex[:12], "n": 0, "task": task, "priority": priority,
+                    "who": staff_who(clean(who, 80)), "source": source, "ref": clean(ref, 200), "reply_by": by,
+                    "due": due if _DATE.match(due or "") else "", "why": names_not_numbers(clean(why, 200), box["items"]),
+                    "lead": lead if lead in LEADS else "", "next": clean_steps(next_steps),
                     "link": link if str(link).startswith("https://") else "", "auto_done": auto_done,
                     "status": "open", "added_at": stamp(), "closed_at": None,
                     "customer": customer if re.match(r"^[A-Za-z0-9][A-Za-z0-9_-]{2,60}$", customer or "") else ""}
@@ -266,7 +280,9 @@ class TodoList:
             if "due" in fields and fields["due"] is not None:
                 item["due"] = fields["due"] if _DATE.match(fields["due"]) else ""
             if fields.get("why"):
-                item["why"] = clean(fields["why"], 200)
+                item["why"] = names_not_numbers(clean(fields["why"], 200), box["items"])
+            if fields.get("lead") in LEADS:
+                item["lead"] = fields["lead"]
             if isinstance(fields.get("source"), dict):   # another message about the same task
                 _add_source(item, fields["source"])
                 if fields["source"].get("link"):
@@ -281,6 +297,7 @@ class TodoList:
                 if item:
                     item["status"], item["closed_at"] = status, stamp()
                     closed.append(dict(item))
+                    self._release(box, item)
         return closed
 
     def close_id(self, item_id: str, status: str = "done") -> Optional[dict]:
@@ -290,6 +307,7 @@ class TodoList:
             if not item:
                 return None
             item["status"], item["closed_at"] = status, stamp()
+            self._release(box, item)
         return dict(item)
 
     def reopen_id(self, item_id: str) -> Optional[dict]:
@@ -299,6 +317,7 @@ class TodoList:
             if not item:
                 return None
             item["status"], item["closed_at"] = "open", None
+            _take_back(box["items"], item)
         return dict(item)
 
     def reopen(self, n: int) -> Optional[dict]:
@@ -310,6 +329,7 @@ class TodoList:
                 return None
             item = max(gone, key=lambda i: i.get("closed_at") or "")
             item["status"], item["closed_at"] = "open", None
+            _take_back(box["items"], item)
         return dict(item)
 
     def close_auto(self, ref: str, when: str) -> List[dict]:
@@ -321,10 +341,29 @@ class TodoList:
                 if item["status"] == "open" and item.get("ref") == ref and item.get("auto_done") == when:
                     item["status"], item["closed_at"] = "done", stamp()
                     closed.append(dict(item))
+                    self._release(box, item)
         return closed
 
     def open_for(self, ref: str) -> List[dict]:
         return [i for i in self.open_items() if ref and i.get("ref") == ref]
+
+    def _release(self, box: dict, item: dict) -> None:
+        """A task is done: each step that waited on it becomes its own task now (Gerrit's rule, 2026-10-28).
+        A dropped task releases nothing: the steps after it are not needed either."""
+        if item["status"] != "done" or not item.get("next"):
+            return
+        today = now_local().date()
+        for step in item["next"]:
+            due = step.get("due") or ""
+            later = bool(due) and (datetime.strptime(due, "%Y-%m-%d").date() - today).days > 1
+            new = {"id": uuid.uuid4().hex[:12], "n": 0, "task": step["task"], "priority": "week" if later else "today",
+                   "who": item.get("who") or "", "source": item.get("source") or "val", "ref": item.get("ref") or "",
+                   "reply_by": "", "due": due, "why": clean(f"Next step after: {item['task']}.", 200),
+                   "link": item.get("link") or "", "auto_done": "", "status": "open", "added_at": stamp(),
+                   "closed_at": None, "customer": item.get("customer") or "", "lead": step.get("lead") or "",
+                   "next": step.get("next") or [], "after_id": item["id"], "sources": sources_of(item)}
+            box["items"].append(new)
+            self.released.append(dict(new))
 
 
 def renumber(items: List[dict]) -> None:
@@ -345,11 +384,158 @@ def clean(text, limit: int) -> str:
     return " ".join(str(text or "").split())[:limit]
 
 
+def clean_steps(steps, depth: int = 0) -> List[dict]:
+    """Steps that wait on a task, checked: words, a date or nothing, a lead, and their own next steps."""
+    out = []
+    for st in (steps if isinstance(steps, list) else [])[:MAX_NEXT]:
+        if not isinstance(st, dict) or not clean(st.get("task"), 160):
+            continue
+        due = str(st.get("due") or "")
+        out.append({"task": clean(st["task"], 160), "due": due if _DATE.match(due) else "",
+                    "lead": st.get("lead") if st.get("lead") in LEADS else "",
+                    "next": clean_steps(st.get("next"), depth + 1) if depth < 3 else []})
+    return out
+
+
+def _take_back(items: List[dict], parent: dict) -> None:
+    """Undo on a done task: the steps it put on the list go off again, if Gerrit has not touched them."""
+    for i in items:
+        if i.get("after_id") == parent.get("id") and i["status"] == "open":
+            i["status"], i["closed_at"] = "dropped", stamp()
+
+
+_NUMBER_REF = re.compile(r"\b(?:tasks?|items?|to-?dos?)\s*#?\s*(\d{1,3})\b", re.I)
+
+
+def names_not_numbers(text: str, items: List[dict]) -> str:
+    """Gerrit's rule (2026-10-28): a note never points at a task by its number, because the numbers change on every
+    re-sort. "the same issue as task 31" becomes "the same issue as the Tony Sulzer task"."""
+    if not text:
+        return text
+    def name_of(m):
+        n = int(m.group(1))
+        hit = _find_open(items, n)
+        if not hit:
+            return "another task"
+        name = (hit.get("who") or "").split(";")[0].split(",")[0].strip()
+        return f"the {name} task" if name else f'the task "{hit["task"]}"'
+    return _NUMBER_REF.sub(name_of, text)
+
+
+_STAFF: Optional[List[dict]] = None
+
+
+def staff(path: str = "") -> List[dict]:
+    """Zinga's office people and their jobs (a copy of the website's lists, zingas_staff.json)."""
+    global _STAFF
+    if _STAFF is None or path:
+        try:
+            with open(path or STAFF_FILE, encoding="utf-8") as fh:
+                people = json.load(fh).get("people") or []
+        except (OSError, ValueError, AttributeError):
+            people = []
+        found = [p for p in people if isinstance(p, dict) and p.get("name") and p.get("job")]
+        if path:
+            return found
+        _STAFF = found
+    return _STAFF
+
+
+def staff_lines() -> str:
+    """The staff list for Val's prompt: "- Andy Sitter: Quality Control"."""
+    return "\n".join(f"- {p['name']}: {p['job']}" for p in staff()) or "(the staff list is missing)"
+
+
+def staff_who(who: str, sender: str = "") -> str:
+    """Gerrit's rule (2026-10-28): an office person's job comes from the staff list, not from Val's guess.
+    "Andy Sitter, IT Representative" becomes "Andy Sitter, Quality Control". Only a full name or the person's own
+    email is matched, so a customer with the same first name is never changed. In a list of people ("Tony Sulzer,
+    customer; Heather M, Appointments team") only the office people change.
+    sender: the message's From line. When it is an office person's own email and `who` starts with their first
+    name ("Rebekah, Customer Success"), that person gets their full name and job too."""
+    if not who:
+        return who
+    sender = (sender or "").lower()
+    by_mail = next((p for p in staff() if p.get("email") and p["email"] in sender), None)
+    parts = []
+    for one in who.split(";"):
+        one = one.strip()
+        low = one.lower()
+        hit = next((p for p in staff() if low.startswith(p["name"].lower())
+                    or (p.get("email") and p["email"] in low)), None)
+        if not hit and by_mail and re.match(re.escape(by_mail["name"].split()[0].lower()) + r"\b", low):
+            hit = by_mail
+        parts.append(f"{hit['name']}, {hit['job']}" if hit else one)
+    return clean("; ".join(x for x in parts if x), 80)
+
+
+def _last_names(who: str) -> set:
+    """Customers' last names in a `who`. "Scheaffer, Mark" (last, first) and "Mark Scheaffer, customer" both give
+    "scheaffer". A first name alone ("Jessica, Customer Success") gives nothing: first names are too common.
+    Office people are left out (their names are on many tasks)."""
+    office = {w for p in staff() for w in p["name"].lower().split()}
+    out = set()
+    for part in (who or "").split(";"):
+        part = part.strip()
+        if not part or any(part.lower().startswith(p["name"].lower()) for p in staff()):
+            continue
+        name_part, _, rest = part.partition(",")
+        words, rest_words = name_part.split(), rest.split()
+        if len(words) == 1 and len(rest_words) == 1:
+            last = words[0]                     # "Scheaffer, Mark"
+        elif len(words) >= 2:
+            last = words[-1]                    # "Mark Scheaffer" or "Tony Sulzer, customer"
+        else:
+            continue
+        last = re.sub(r"[^a-z'-]", "", last.lower())
+        if len(last) >= 3 and last not in office:
+            out.add(last)
+    return out
+
+
+def related_open(todo: "TodoList", done: dict) -> List[dict]:
+    """Open tasks that may be about the same customer as a task Gerrit just marked done: the same customer file,
+    the same phone, or the customer's last name in the task. Val only asks; she closes nothing herself."""
+    names = _last_names(done.get("who") or "")
+    out = []
+    for i in todo.open_items():
+        if i["id"] == done.get("id") or i.get("after_id") == done.get("id"):
+            continue
+        same_file = bool(done.get("customer")) and i.get("customer") == done.get("customer")
+        same_phone = bool(re.match(r"^\+?\d{10,}$", done.get("ref") or "")) and i.get("ref") == done.get("ref")
+        words = set(re.findall(r"[a-z'-]+", " ".join((i.get("who") or "", i["task"], i.get("why") or "")).lower()))
+        if same_file or same_phone or names & words:
+            out.append(i)
+    return out
+
+
+def related_question(todo: "TodoList", done: List[dict]) -> str:
+    """Gerrit's rule (2026-10-28): after a Done, ask once if a task about the same customer is done too."""
+    rows, seen = [], set()
+    for d in done:
+        if d.get("status") != "done":
+            continue
+        for i in related_open(todo, d):
+            if i["id"] not in seen:
+                seen.add(i["id"])
+                rows.append((d, i))
+    if not rows:
+        return ""
+    out = ["❓ Is this task done too? It looks like it is about the same customer:" if len(rows) == 1
+           else "❓ Are these tasks done too? They look like they are about the same customer:"]
+    out += [line(i) + f"\n   (you finished: {d['task']})" for d, i in rows[:5]]
+    nums = " ".join(str(i["n"]) for _, i in rows[:5])
+    out.append(f'If yes, say "done {nums}" (or the numbers that are done). Val closes nothing by herself.')
+    return "\n".join(out)
+
+
 def sort_items(items: Iterable[dict], at: Optional[datetime] = None) -> List[dict]:
-    """Most important first: priority as shown (late messages count as Now), then the oldest
-    unanswered message, then the nearest due date, then the oldest."""
-    return sorted(items, key=lambda i: (PRIORITIES.get(shown_priority(i, at), (9,))[0], i.get("reply_by") or "9999",
-                                        i.get("due") or "9999-99-99", i.get("added_at") or ""))
+    """Most important first: priority as shown (late messages count as Now), then a customer ready to buy, then a
+    customer waiting on a quote (Gerrit's rule, 2026-10-28), then the oldest unanswered message, then the nearest
+    due date, then the oldest. The website sorts the same way (sortTodo)."""
+    return sorted(items, key=lambda i: (PRIORITIES.get(shown_priority(i, at), (9,))[0], LEADS.get(i.get("lead"), 9),
+                                        i.get("reply_by") or "9999", i.get("due") or "9999-99-99",
+                                        i.get("added_at") or ""))
 
 
 # ------------------------------------------------------------------ showing it
@@ -405,7 +591,8 @@ def line(item: dict, today=None) -> str:
     head = f"{PRIORITIES[shown_priority(item)][1]} {item['n']}. "
     body = (item["who"] + ": " if item.get("who") else "") + item["task"]
     origin = " ".join(x for x in (SOURCE_WORDS.get(item.get("source") or "", ""), _came_words(item, today)) if x)
-    extra = ", ".join(x for x in (origin, _reply_words(item), _due_words(item.get("due", ""), today)) if x)
+    extra = ", ".join(x for x in (LEAD_WORDS.get(item.get("lead") or "", ""), origin, _reply_words(item),
+                                  _due_words(item.get("due", ""), today)) if x)
     return head + body + (f" ({extra})" if extra else "")
 
 
@@ -562,7 +749,10 @@ def judge_prompt(things: List[dict], open_items: List[dict], skill_path: str = S
         "with priority today, and say why.",
         "Write each task and each why line in ASD-STE100 Simplified Technical English (Gerrit's rule): "
         "a command, simple common words, full sentences, no -ing forms, no contractions.",
-        "## Rules\n" + (_read(skill_path, 7000) or "(todo-list skill missing)"),
+        "In a why line, never point at another task by its number (the numbers change every time the list is "
+        "sorted). Use the person's name: \"This is the same quote as the Tony Sulzer task.\"",
+        "## Rules\n" + (_read(skill_path, 14000) or "(todo-list skill missing)"),
+        "## Zinga's office people and their jobs (use these jobs in who, never a guess)\n" + staff_lines(),
         "## Gerrit's open to-do list now\n" + listed,
         "## New items\n" + "\n\n".join(blocks),
         "## Answer with ONLY this JSON, nothing else:\n"
@@ -570,7 +760,9 @@ def judge_prompt(things: List[dict], open_items: List[dict], skill_path: str = S
         '"task": "starts with a verb, 12 words or less", "who": "name and role/company, short", '
         '"priority": "now" | "today" | "week" | "later", "due": "YYYY-MM-DD only if the item gives a date, '
         'else empty", "why": "one short line, only if the priority needs a reason, else empty", '
-        '"update_number": "for update: the open task number it belongs to", "emergency": true | false'
+        '"update_number": "for update: the open task number it belongs to", '
+        '"lead": "buying when a customer says they want to buy or go ahead, quote when a customer waits on a quote '
+        'or a price from Gerrit, else empty", "emergency": true | false'
         + (', "summary": "...", "facts": {...}' if any(t.get("customer") for t in things) else "") + '}]}',
     ] + ([FACTS_ASK] if any(t.get("customer") for t in things) else []))
 
@@ -599,6 +791,8 @@ def parse_judgement(raw: str, ids: Iterable[str]) -> dict:
         if action == "update" and not r["update_number"]:
             r["action"] = "add"
         r["emergency"] = r.get("emergency") is True and r["priority"] == "now"
+        lead = str(r.get("lead") or "").strip().lower()
+        r["lead"] = lead if lead in LEADS else ""
         out[str(r["id"])] = r
     return out
 
@@ -620,8 +814,11 @@ def apply_judgement(todo: TodoList, thing: dict, r: dict, source: str, ref: str 
         if current:
             better = min((current["priority"], r["priority"]), key=lambda p: PRIORITIES[p][0])
             return todo.update_id(current["id"], priority=better, task=r["task"],
-                                  due=r["due"] or current.get("due") or "", why=r.get("why") or "", source=src)
-    return todo.add(r["task"], priority=r["priority"], who=r.get("who") or thing.get("from", ""),
+                                  due=r["due"] or current.get("due") or "", why=r.get("why") or "", source=src,
+                                  lead=r.get("lead") or "")
+    return todo.add(r["task"], priority=r["priority"],
+                    who=staff_who(r.get("who") or thing.get("from", ""), thing.get("sender") or thing.get("from", "")),
+                    lead=r.get("lead") or "",
                     source=source, ref=ref, due=r["due"], why=r.get("why") or "", link=link,
                     auto_done=auto_done, received=received, subject=thing.get("subject", ""),
                     said=thing.get("text", ""))
@@ -649,6 +846,7 @@ def website_list(todo: "TodoList", at: Optional[datetime] = None) -> dict:
              "priority": i.get("priority") if i.get("priority") in PRIORITIES else "today",
              "source": i.get("source") or "", "replyBy": i.get("reply_by") or None, "due": i.get("due") or None,
              "why": i.get("why") or "", "link": i.get("link") or "", "addedAt": i.get("added_at") or None,
+             "lead": i.get("lead") if i.get("lead") in LEADS else "",
              "receivedAt": sources_of(i)[0]["at"], "sources": sources_of(i)}
             for i in todo.open_items()]
     cutoff = (at - DONE_SHOWN).astimezone(timezone.utc).isoformat()
@@ -740,7 +938,21 @@ def report_changes(results: List[dict], settings=_website_settings, timeout: flo
     return _ask("POST", CHANGES_DOOR, {"results": results}, settings, timeout)[1]
 
 
-def apply_change(todo: "TodoList", change: dict) -> Tuple[bool, str]:
+def after_done(todo: "TodoList", closed: List[dict], notify: Callable[[str], None] = tell_gerrit) -> str:
+    """After tasks close: the next steps that waited on them go on the list and Gerrit is told (like every new
+    task), and Val asks once if a task about the same customer is done too. Returns that question ("" if none);
+    it is also sent with notify."""
+    released, todo.released = todo.released, []
+    if released:
+        fresh = {i["id"]: i for i in todo.open_items()}
+        announce([fresh.get(r["id"], r) for r in released], todo, notify)
+    question = related_question(todo, closed)
+    if question:
+        notify(question)
+    return question
+
+
+def apply_change(todo: "TodoList", change: dict, notify: Callable[[str], None] = tell_gerrit) -> Tuple[bool, str]:
     """Makes one click from the website on the list, with the same rules as Telegram. Plain code, no AI.
     The answer shows to Gerrit on the page when it didn't work; it never holds a phone number or a price."""
     action, item_id, value = change.get("action"), str(change.get("itemId") or ""), str(change.get("value") or "")
@@ -749,6 +961,8 @@ def apply_change(todo: "TodoList", change: dict) -> Tuple[bool, str]:
         return False, "The change had no task."
     if action in ("done", "drop"):
         item = todo.close_id(item_id, status="done" if action == "done" else "dropped")
+        if item:
+            after_done(todo, [item], notify)
         return (True, "Done." if action == "done" else "Removed.") if item else (False, gone)
     if action == "undo":
         item = todo.reopen_id(item_id)
@@ -779,8 +993,9 @@ class Changer:
     """Reads Gerrit's clicks from the website and makes them on the list. A click is made once even when the
     report back fails: its answer is kept and sent again next time."""
 
-    def __init__(self, todo: "TodoList", fetch=fetch_changes, report=report_changes):
-        self.todo, self.fetch, self.report = todo, fetch, report
+    def __init__(self, todo: "TodoList", fetch=fetch_changes, report=report_changes,
+                 notify: Callable[[str], None] = tell_gerrit):
+        self.todo, self.fetch, self.report, self.notify = todo, fetch, report, notify
         self.made: dict = {}   # change id -> (ok, message), until the website has the answer
 
     def step(self) -> Tuple[int, str]:
@@ -795,7 +1010,7 @@ class Changer:
                 continue
             if cid not in self.made:
                 try:
-                    self.made[cid] = apply_change(self.todo, c)
+                    self.made[cid] = apply_change(self.todo, c, self.notify)
                 except Exception as e:   # one bad click must not stop the rest
                     self.made[cid] = (False, f"Val couldn't make it ({type(e).__name__}).")
                 new += 1
@@ -1005,11 +1220,17 @@ def main(argv=None) -> int:
     elif args.cmd in ("done", "drop"):
         closed = todo.close(args.numbers, status="done" if args.cmd == "done" else "dropped")
         missing = sorted(set(args.numbers) - {c["n"] for c in closed})
+        released = [r["task"] for r in todo.released]
+        question = after_done(todo, closed, tell_gerrit)     # Gerrit gets the new steps and the question in Telegram
         for c in closed:
             print(("✅ Done: " if args.cmd == "done" else "Removed: ") + c["task"])
+        for r in released:
+            print("➡️ Next step on the list: " + r)
         if missing:
             print("There is no open task with the number " + ", ".join(map(str, missing)) + ".")
         print("\n" + render_list(todo.open_items()))
+        if question:
+            print("\n(Val already asked Gerrit if a task about the same customer is done too.)")
         return 0 if closed else 1
     elif args.cmd == "undo":
         item = todo.reopen(args.number)

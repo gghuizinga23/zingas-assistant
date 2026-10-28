@@ -374,9 +374,11 @@ class WebsiteClickTests(unittest.TestCase):
         self.todo = zt.TodoList(self.dir)
         self.msg = self.todo.add("Call back Pat", who="Pat Lee", source="text", ref="+13175550100")
         self.own = self.todo.add("Order samples", priority="week")
+        self.sent = []
 
     def click(self, item, action, value=""):
-        return zt.apply_change(self.todo, {"id": "c1", "itemId": item["id"], "action": action, "value": value})
+        return zt.apply_change(self.todo, {"id": "c1", "itemId": item["id"], "action": action, "value": value},
+                               self.sent.append)
 
     def get(self, item):
         return next(i for i in self.todo.all_items() if i["id"] == item["id"])
@@ -435,6 +437,154 @@ class WebsiteClickTests(unittest.TestCase):
     def test_no_key_means_no_clicks_read(self):
         self.assertEqual(zt.fetch_changes(settings=lambda: ("", ""))[0], [])
         self.assertIn("not set up", zt.fetch_changes(settings=lambda: ("", ""))[1])
+
+
+class NextStepsTests(unittest.TestCase):
+    """Gerrit's rule (2026-10-28): a step that can only start after another task waits off the list, and goes on it
+    as its own task when that task is done. Never merged into another task."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.todo = zt.TodoList(self.dir)
+        self.sent = []
+        self.first = self.todo.add("Call the manufacturer about a price", who="Michael Lopez", source="visit",
+                                   ref="+13176274967", customer="P-200", lead="quote",
+                                   next_steps=[{"task": "Call Mike with the answer", "lead": "quote",
+                                                "next": [{"task": "Send Mike the quote"}]}])
+
+    def test_only_the_first_step_is_on_the_list(self):
+        self.assertEqual([i["task"] for i in self.todo.open_items()], ["Call the manufacturer about a price"])
+        self.assertEqual(self.first["next"][0]["next"][0]["task"], "Send Mike the quote")
+
+    def test_done_on_the_website_puts_the_next_step_on_the_list_and_tells_gerrit(self):
+        ok, _ = zt.apply_change(self.todo, {"id": "c1", "itemId": self.first["id"], "action": "done"},
+                                self.sent.append)
+        self.assertTrue(ok)
+        step = self.todo.open_items()
+        self.assertEqual([(i["task"], i["who"], i["customer"], i["lead"]) for i in step],
+                         [("Call Mike with the answer", "Michael Lopez", "P-200", "quote")])
+        self.assertEqual(step[0]["why"], "Next step after: Call the manufacturer about a price.")
+        self.assertIn("📝 New task on your to-do list:", self.sent[0])
+        self.assertEqual(self.todo.released, [])                       # told once, then cleared
+        # its own next step waits on it in turn
+        self.todo.close([1])
+        self.assertEqual([i["task"] for i in self.todo.open_items()], ["Send Mike the quote"])
+
+    def test_done_in_telegram_says_the_next_step(self):
+        with mock.patch.object(zt, "tell_gerrit", self.sent.append), \
+                mock.patch.object(zt, "TodoList", lambda: self.todo), \
+                mock.patch("builtins.print") as out:
+            zt.main(["done", "1"])
+        printed = "\n".join(str(c.args[0]) for c in out.call_args_list)
+        self.assertIn("✅ Done: Call the manufacturer about a price", printed)
+        self.assertIn("➡️ Next step on the list: Call Mike with the answer", printed)
+
+    def test_undo_and_drop(self):
+        self.todo.close([1])
+        self.todo.reopen(1)                                             # undo: the step goes off again
+        self.assertEqual([i["task"] for i in self.todo.open_items()], ["Call the manufacturer about a price"])
+        self.todo.close([1], status="dropped")                         # not needed: nothing after it either
+        self.assertEqual(self.todo.open_items(), [])
+
+
+class LeadSortTests(unittest.TestCase):
+    """Gerrit's rule (2026-10-28): in each group, a customer ready to buy first, then one waiting on a quote."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.todo = zt.TodoList(self.dir)
+
+    def test_ready_to_buy_then_quote_then_the_rest_inside_each_group(self):
+        self.todo.add("Answer HR", who="Amy Hyman, HR")
+        self.todo.add("Send Nancy her quote", who="Nancy Lacointe, customer", lead="quote")
+        self.todo.add("Reply to Cheryn: next steps", who="Cheryn Holmes, customer", lead="buying")
+        self.todo.add("Crew did not show", priority="now")
+        self.todo.add("Bad lead value", lead="maybe")
+        self.assertEqual([i["task"] for i in self.todo.open_items()],
+                         ["Crew did not show", "Reply to Cheryn: next steps", "Send Nancy her quote", "Answer HR",
+                          "Bad lead value"])
+        rows = {i["task"]: i for i in self.todo.open_items()}
+        self.assertEqual(rows["Bad lead value"]["lead"], "")
+        self.assertIn("(ready to buy, ", zt.line(rows["Reply to Cheryn: next steps"]))
+        self.assertIn("(waiting on a quote, ", zt.line(rows["Send Nancy her quote"]))
+        self.assertEqual(rows["Send Nancy her quote"]["n"], 3)
+
+    def test_the_website_gets_the_lead(self):
+        self.todo.add("Send Nancy her quote", lead="quote")
+        self.assertEqual(zt.website_list(self.todo)["items"][0]["lead"], "quote")
+
+    def test_val_s_judgement_carries_the_lead(self):
+        got = zt.parse_judgement(json.dumps({"results": [
+            {"id": "e1", "action": "add", "task": "Reply to Cheryn", "lead": "Buying"},
+            {"id": "e2", "action": "add", "task": "Answer HR", "lead": "soon"}]}), ["e1", "e2"])
+        self.assertEqual((got["e1"]["lead"], got["e2"]["lead"]), ("buying", ""))
+        item = zt.apply_judgement(self.todo, {"from": "Cheryn Holmes"}, got["e1"], "email")
+        self.assertEqual(item["lead"], "buying")
+        self.assertIn('"lead": "buying when a customer says', zt.judge_prompt([], []))
+
+
+class TidyWordsTests(unittest.TestCase):
+    """Gerrit's rules (2026-10-28): notes name the person, never a task number; office people's jobs come from the
+    staff list; after a Done, Val asks if a task about the same customer is done too (she closes nothing)."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.todo = zt.TodoList(self.dir)
+
+    def test_a_note_names_the_task_instead_of_its_number(self):
+        self.todo.add("Send Tony his quote", who="Tony Sulzer, customer")
+        b = self.todo.add("Tell Morgan if a quote went out", who="Morgan Booher",
+                          why="Morgan asks if a quote went out. This is the same issue as task 1.")
+        self.assertEqual(b["why"], "Morgan asks if a quote went out. This is the same issue as the Tony Sulzer task.")
+        c = self.todo.add("Something", why="Same as task 31, which is gone.")
+        self.assertEqual(c["why"], "Same as another task, which is gone.")
+        d = self.todo.add("Order the shade", why="The order is PO #123.")           # an order number stays
+        self.assertEqual(d["why"], "The order is PO #123.")
+
+    def test_office_jobs_come_from_the_staff_list(self):
+        self.assertEqual(zt.staff_who("Andy Sitter, IT Representative"), "Andy Sitter, Quality Control")
+        self.assertEqual(zt.staff_who("Morgan Booher"), "Morgan Booher, Market Manager")
+        self.assertEqual(zt.staff_who("Rebekah, Customer Success", "Rebekah Wright <rebekahwright@zingashome.com>"),
+                         "Rebekah Wright, Order Entry")
+        self.assertEqual(zt.staff_who("Rebekah, Customer Success"), "Rebekah, Customer Success")   # no proof: kept
+        self.assertEqual(zt.staff_who("Jessica Kapsalis, customer"), "Jessica Kapsalis, customer")
+        self.assertEqual(zt.staff_who("Tony Sulzer, customer; Andy Sitter, IT"),
+                         "Tony Sulzer, customer; Andy Sitter, Quality Control")
+        item = self.todo.add("Send Andy the URL", who="Andy Sitter, IT Representative")
+        self.assertEqual(item["who"], "Andy Sitter, Quality Control")
+        self.assertIn("- Andy Sitter: Quality Control", zt.judge_prompt([], []))
+
+    def test_after_a_done_val_asks_about_the_same_customer(self):
+        form = self.todo.add("Fill out the shutter form and upload it to the CRM", who="Jessica, Customer Success",
+                             source="email", why="Customer Success needs this form for the Scheaffer sale.")
+        self.todo.add("Answer HR", who="Amy Hyman, HR")
+        order = self.todo.add("Send Customer Success the order info", who="Scheaffer, Mark", source="issue")
+        sent = []
+        closed = self.todo.close([next(i["n"] for i in self.todo.open_items() if i["id"] == order["id"])])
+        q = zt.after_done(self.todo, closed, sent.append)
+        self.assertEqual(sent, [q])
+        self.assertIn("❓ Is this task done too?", q)
+        self.assertIn("Fill out the shutter form", q)
+        self.assertNotIn("Answer HR", q)
+        n = next(i["n"] for i in self.todo.open_items() if i["id"] == form["id"])
+        self.assertIn(f'say "done {n}"', q)
+        self.assertEqual(len(self.todo.open_items()), 2)               # nothing closed by itself
+
+    def test_no_question_for_a_drop_or_an_unrelated_task(self):
+        self.todo.add("Call back Pat", who="Pat Lee", ref="+13175550100")
+        self.todo.add("Send Nancy a quote", who="Nancy Lacointe, customer")
+        sent = []
+        closed = self.todo.close([1], status="dropped")
+        self.assertEqual(zt.after_done(self.todo, closed, sent.append), "")
+        closed = self.todo.close([1])
+        self.assertEqual(zt.after_done(self.todo, closed, sent.append), "")
+        self.assertEqual(sent, [])
+
+    def test_the_same_phone_counts_as_the_same_customer(self):
+        for t in ("Send Mike the quote", "Call the manufacturer"):
+            self.todo.add(t, who="Michael Lopez", ref="+13176274967")
+        closed = self.todo.close([1])
+        self.assertIn("❓ Is this task done too?", zt.related_question(self.todo, closed))
 
 
 class SourcesTests(unittest.TestCase):
@@ -543,7 +693,7 @@ class IssueSyncTests(unittest.TestCase):
         self.assertEqual(item["sources"][0]["text"], "10/25/26 Need the color; KJC")
         self.assertEqual(item["link"], "https://os.example.com/issues?open=s1")
         self.assertIn("📝 New task on your to-do list:", self.sent[0])
-        self.assertIn("(issue today", self.sent[0])
+        self.assertIn("(issue ", self.sent[0])        # "today", "Mon"...: it depends on the real date
         # Not done within 24 hours: Now.
         self.assertEqual(zt.shown_priority(item, at=self.now + zt.timedelta(hours=25)), "now")
         self.assertIn("do by", zt._reply_words(item, at=self.now))

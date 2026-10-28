@@ -114,9 +114,18 @@ Then give back:
 - `summary`: 1 to 3 short lines in ASD-STE100: what happened.
 - `sale_stage`: one line: where the sale is now ("Quote sent. They will decide after the weekend.").
 - `facts`: as in Step 3.
-- `promises`: **every** thing Gerrit promised that you cannot do yourself ("I'll bring fabric samples Friday",
-  "I'll ask the office about install dates"). Task starts with a verb, 12 words or less. `due` only when Gerrit
-  said a day (turn "Friday" into the date). Each one goes on Gerrit's to-do list right away, with an alert.
+- `promises`: each thing Gerrit **said he will do** and has not done yet, that you cannot do yourself ("I'll bring
+  fabric samples Friday", "I'll ask the office about install dates"). Task starts with a verb, 12 words or less.
+  `due` only when Gerrit said a day (turn "Friday" into the date). Gerrit's rule (2026-10-28), after one visit put
+  4 tasks on his list for one thing he said:
+  - `said`: copy his own words from the transcript. No words of his, no promise: the program drops it.
+  - Leave out what was done at the visit (he measured, explained, offered a color visit and they said yes).
+  - One thing he said is one promise. Never split it into small steps or add steps he did not say.
+  - `after`: when a promise can only start after another one (call the customer with the manufacturer's answer,
+    after the call to the manufacturer), put that other promise's task words here. It waits off the list and goes
+    on it as its own task when the first one is done. Never merge two promises into one task.
+  - `lead`: `buying` when the customer wants to buy or go ahead, `quote` when they wait on a quote or price.
+  Only the promises with no `after` go on the to-do list right away, with an alert.
 - `drafts`: a same-day "great to meet you" text in Gerrit's voice, and at most one more text you can do for him
   (for example the care guide he promised). Never say the quote was emailed. They wait 2 hours: if Gerrit emails
   the estimate in that time, the thank-you that says so (`zingas-thanks`, from this visit) replaces them; if not,

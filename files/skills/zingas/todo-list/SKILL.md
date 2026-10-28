@@ -15,7 +15,7 @@ Gerrit's to-do list is kept by plain programs on this computer and by you, throu
 ## How things get on the list by themselves
 - **Emails:** `zingas-inbox` looks for new mail every 2 minutes, in every label and folder. It asks you to judge each new email, adds the task, and texts Gerrit in this chat.
 - **Texts to the Quo number:** `zingas-quo` asks you for a draft reply and a task in the same answer.
-- **Visit recordings (Plaud):** `zingas-plaud` reads each visit transcript a few minutes after Gerrit stops recording. **Every promise Gerrit made** that you cannot do yourself ("I'll drop off samples Friday") becomes a task with source `visit`, linked to that customer's file. Priority comes from the day he said: today or tomorrow → 🟡 Today; a later day → 🟢 This week; no day → 🟡 Today, with "You promised this at the visit" in its why line. The visit's timeline entry shows "Promised: ...". Old recordings (the first read of the last year) never add tasks.
+- **Visit recordings (Plaud):** `zingas-plaud` reads each visit transcript a few minutes after Gerrit stops recording. Each thing Gerrit **said he will do** and still has to do, that you cannot do yourself ("I'll drop off samples Friday"), becomes a task with source `visit`, linked to that customer's file. Only his own words count, nothing done at the visit counts, and one thing he said is one task. A step that can only start after another one ("call Mike with the manufacturer's answer") waits off the list and goes on it as its own task when the first one is done (Gerrit's rule, 2026-10-28). Priority comes from the day he said: today or tomorrow → 🟡 Today; a later day → 🟢 This week; no day → 🟡 Today, with "You promised this at the visit" in its why line. The visit's timeline entry shows "Promised: ...". Old recordings (the first read of the last year) never add tasks.
 - **Missed calls and voicemails to the Quo number:** a missed call with no voicemail becomes "Call back ..." for today. A voicemail comes with Quo's written transcript, and you judge it like an email. Calls Gerrit answered get a task only when Quo sends a call summary (Quo's Business plan).
 - **Blocked orders (the website's Issues tab):** `zingas-todo watch` reads Gerrit's blocked orders every 2 minutes. Each one becomes a 🟡 Today task with source `issue` and a 24-hour clock, so it moves to 🔴 Now when it is not done within a day. A new comment from Customer Success goes on the task. When the order goes through, the task closes by itself. Never add these yourself. "Done" only takes the task off the list: the order stays blocked until Customer Success clears it in Salesforce.
 - Gerrit's personal cell is never read. Only the Quo business number and work email.
@@ -53,6 +53,8 @@ Always `skip`:
 
 Ties: customer money first, then a customer waiting, then the office.
 
+**Ready to buy, then waiting on a quote, first (Gerrit's rule, 2026-10-28).** Give every task a `lead`: `buying` when a customer says they want to buy or go ahead (a signed proposal, "let's do it"), `quote` when a customer waits on a quote or a price from Gerrit, else empty. Inside each group (Now, Today...) the list puts `buying` first, then `quote`, then the rest. The website sorts the same way.
+
 - `due` only when the item gives a date or a day ("by Friday" means the coming Friday's date). **Never invent a date.**
 - `emergency: true` only for a real emergency that can't wait for the morning: the install crew did not show up, or a customer is cancelling a signed job.
 
@@ -62,6 +64,9 @@ Every time a task goes on the list, by any path (an email, a text, a call, a rec
 ## Writing the task
 - Write the task and the `why` line in ASD-STE100 (skill `ste-writing`): a command, simple words, no "-ing" forms, no contractions.
 - Start with a verb. 12 words or less. The person goes in `who` ("Pat Lee", "Beth, Payments").
+- An office person's job comes from the staff list in your prompt ("Andy Sitter, Quality Control"), never a guess. Write their full name. The code fixes the job when it knows the name or the sender's email.
+- **Never point at another task by its number** in a `why` line or a note: the numbers change every time the list is sorted (Gerrit's rule, 2026-10-28). Name the person: "This is the same quote as the Tony Sulzer task." The code swaps "task 31" for a name.
+- **Never merge tasks.** Two asks are two tasks, even from the same person (Gerrit's rule, 2026-10-28).
 - Good: "Result the Lee appointment and upload the contract". "Call back about motorized shades".
 - `why`: one short, full sentence only when the priority needs a reason ("Payments cannot post the deposit."). Otherwise empty.
 - Facts only from the item. No prices or amounts.
@@ -82,6 +87,8 @@ Run the command. Every command that changes the list also prints the whole new l
 The open tasks are renumbered 1, 2, 3... in the order shown every time the list changes (Gerrit's rule, 2026-10-22). So a number means the task with that number in the newest list in this chat. If Gerrit uses a number from an older list, or new tasks came in since he last saw the list, check that the number still points to the task he means (compare the name) before you run `done`, `set` or `drop`. If you can't tell which one, ask with the two closest matches. `zingas-todo done` prints the name of each task it closed: always tell Gerrit that name. `undo` takes the number the task had when it was closed.
 
 When you handle something on the list yourself (you saved the draft Gerrit asked for), say so and ask "Mark 3 done?" only if it isn't obvious. Never mark a task done that needs Gerrit (a call, an upload, a send).
+
+After a Done (in Telegram or on the website), the program does two things by itself (Gerrit's rule, 2026-10-28): steps that waited on that task go on the list as their own tasks, with the usual alert ("➡️ Next step on the list" in `done`'s output), and when another open task looks like it is about the same customer, it asks Gerrit once "❓ Is this task done too?". Don't ask a second time, and never close that task yourself: wait for Gerrit to say "done N".
 
 ## In the briefs
 Every morning and evening brief has the list (skill `briefs`): run `zingas-todo brief --since <time of the last brief>` and put its output in the brief.

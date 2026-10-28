@@ -1,0 +1,285 @@
+{
+ "_about": "Zinga's office people and their jobs, for Val's to-do list (who did what). A copy of the website's app/src/config/staff-roles.ts and app/src/config/managers.ts (origin/main 4bdbea3, 2026-10-28). When someone joins, leaves or changes job there, change this file too.",
+ "people": [
+  {
+   "name": "Adrian Brown",
+   "email": "adrianbrown@zingashome.com",
+   "job": "Manager"
+  },
+  {
+   "name": "Allen Cole",
+   "email": "allencole@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Alyssa Striby",
+   "email": "alyssastriby@zingashome.com",
+   "job": "Manager"
+  },
+  {
+   "name": "Amber Childs",
+   "email": "amberchilds@zingashome.com",
+   "job": "Quality Control"
+  },
+  {
+   "name": "Amber Russell",
+   "email": "amberrussell@zingashome.com",
+   "job": "Order Entry"
+  },
+  {
+   "name": "Andrew Friedel",
+   "email": "andrewfriedel@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Andy Sitter",
+   "email": "andysitter@zingashome.com",
+   "job": "Quality Control"
+  },
+  {
+   "name": "Bailey Belden",
+   "email": "baileybelden@zingashome.com",
+   "job": "Quality Control"
+  },
+  {
+   "name": "Bree Devine",
+   "email": "briannadevine@zingashome.com",
+   "job": "Order Entry"
+  },
+  {
+   "name": "Breno Oliveira",
+   "email": "brenooliveira@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "CJ Bormann",
+   "email": "christianbormann@zingashome.com",
+   "job": "Manager"
+  },
+  {
+   "name": "Chris Harrod",
+   "email": "chrisharrod@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Corey Woods",
+   "email": "coreywoods@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Cory Moreno",
+   "email": "corymoreno@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Craig Brudner",
+   "email": "craigbrudner@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Daniel Stainton",
+   "email": "danielstainton@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Darren Doran",
+   "email": "darrendoran@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Dillion Funderburg",
+   "email": "dillionfunderburg@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Doug Kuertz",
+   "email": "3dbrentwood@gmail.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Fred Jacobi",
+   "email": "fredjacobi@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Gary Crandall",
+   "email": "garycrandall@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Jennifer Munn",
+   "email": "jennifermunn@zingashome.com",
+   "job": "Order Entry"
+  },
+  {
+   "name": "Jeremy Clodfelter",
+   "email": "jeremyclodfelter@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Jessica Auten",
+   "email": "jessicaauten@zingashome.com",
+   "job": "Order Entry"
+  },
+  {
+   "name": "Jonathan Chappell",
+   "email": "jonathanchappell@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Josef Bolin",
+   "email": "josefbolin@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Juan Ayala",
+   "email": "ayala.constructioncllc@gmail.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Justin Williams",
+   "email": "justinwilliams@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Kiersten Branco",
+   "email": "kierstenbranco@zingashome.com",
+   "job": "Order Entry"
+  },
+  {
+   "name": "Kim Czap",
+   "email": "kimczap@zingashome.com",
+   "job": "Order Entry"
+  },
+  {
+   "name": "Kyle Harmon",
+   "email": "kyleharmon@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Liz Wheatley",
+   "email": "elizabethwheatly@zingashome.com",
+   "job": "Order Entry"
+  },
+  {
+   "name": "Luis Tapia",
+   "email": "luistapia@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Marissa Gieseking",
+   "email": "marissagieseking@zingashome.com",
+   "job": "Order Entry"
+  },
+  {
+   "name": "Marquis Sanders",
+   "email": "",
+   "job": "Installer"
+  },
+  {
+   "name": "Matt Wooten",
+   "email": "mattwooten@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Misty Halcomb",
+   "email": "mistyhalcomb@zingashome.com",
+   "job": "Order Entry"
+  },
+  {
+   "name": "Morgan Booher",
+   "email": "morganbooher@zingashome.com",
+   "job": "Market Manager"
+  },
+  {
+   "name": "Nate Williams",
+   "email": "nate@sunsolutionsfl.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Nolan Pniewski",
+   "email": "nolanpniewski@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Patrick Brown",
+   "email": "patrickbrown@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Peyton Vallee",
+   "email": "peytonvallee@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Phillip Wagoner",
+   "email": "phillipwagoner@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Quality Control",
+   "email": "qualitycontrol@zingashome.com",
+   "job": "Quality Control"
+  },
+  {
+   "name": "Rebekah Wright",
+   "email": "rebekahwright@zingashome.com",
+   "job": "Order Entry"
+  },
+  {
+   "name": "Ricardo Valderrama",
+   "email": "ricardovalederrama@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Rob Hall",
+   "email": "robhall@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Shelby Wagoner",
+   "email": "shelbywagoner@zingashome.com",
+   "job": "Order Entry"
+  },
+  {
+   "name": "Terry Henton",
+   "email": "terryhenton@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Tiffany Johnson",
+   "email": "tiffanyjohnson@zingashome.com",
+   "job": "Quality Control"
+  },
+  {
+   "name": "Tim Miller",
+   "email": "timmiller@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Todd Fancher",
+   "email": "toddfancher@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Tracy Lewis",
+   "email": "tracylewis@zingashome.com",
+   "job": "Order Entry"
+  },
+  {
+   "name": "Tyler Freed",
+   "email": "tylerfreed@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Tyler Moreno",
+   "email": "tylermoreno@zingashome.com",
+   "job": "Installer"
+  },
+  {
+   "name": "Zachery Lallemand",
+   "email": "zachlallemand@zingashome.com",
+   "job": "Installer"
+  }
+ ]
+}

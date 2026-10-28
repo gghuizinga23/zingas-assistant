@@ -352,8 +352,8 @@ class Inbox:
                 except Exception as e:
                     log(f"customer file: {type(e).__name__}")
             before = {i["id"] for i in self.todo.open_items()}
-            item = zt.apply_judgement(self.todo, {"from": name_of(t["from"]), "subject": t["subject"],
-                                                  "text": t["text"]}, r, "email",
+            item = zt.apply_judgement(self.todo, {"from": name_of(t["from"]), "sender": t["from"],
+                                                  "subject": t["subject"], "text": t["text"]}, r, "email",
                                       ref="gmail:" + str(m.get("threadId") or ""),
                                       link=str(m.get("display_url") or ""),
                                       received=m.get("messageTimestamp"), listed=listed)

@@ -395,6 +395,23 @@ estimate. One installer (`files/install-thanks.sh`), nothing on the website.
 | T2 | **Preview first:** `START=0 bash files/install-thanks.sh` copies the files and prints who would get a thank-you now with Val's words (nothing sent). Then `bash files/install-thanks.sh` starts it | Gerrit says go, I run both and check | 5 min |
 | T3 | Check: your next emailed estimate gets a thank-you card within about 20 minutes (or 2 hours with no recording) | I check | |
 
+## A tidier to-do list (built 2026-10-28)
+
+Gerrit's rules after one visit (Michael Lopez, Oct 27) put 4 tasks on his list for one thing he said:
+- A visit adds only what Gerrit **said** he will do and still has to do: Val copies his words (`said`) and the
+  program drops a promise whose words are not in the transcript. A step that can only start after another one
+  (`after`) waits off the list and goes on it as its own task when that one is done (Telegram or website). Undo
+  takes it off again. Tasks are never merged.
+- Inside each group: customers ready to buy first, then customers waiting on a quote (`lead`; the website sorts the
+  same way, docs/CONNECTIONS.md).
+- Notes name the person, never a task number. Office people's jobs come from `files/zingas_staff.json`, a copy of
+  the website's staff and manager lists (change it when those change).
+- After a Done, Val asks once in Telegram if a task about the same customer is done too. She closes nothing herself.
+
+To put it on Val's computer (only after Gerrit's yes): `bash files/install-todo-tidy.sh` on the laptop. It keeps the
+old files in `/root/.hermes/backups/pre-todo-tidy-<time>/`, restarts every program that uses the list, and sends
+the list to the website once. `DRY_RUN=1` shows what it would do.
+
 ## Money tracker (planned 2026-10-23; cost count built 2026-10-24)
 Val keeps a running total of everything you pay for: her own costs and your own AI and tool sign-ups. She
 counts her use every hour, reads the receipts herself, and checks her numbers against them each month. You
