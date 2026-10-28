@@ -215,7 +215,7 @@ def worth_a_look(msg: dict) -> bool:
 
 class Inbox:
     def __init__(self, gmail, todo: Optional[zt.TodoList] = None, ask_val: Callable[[str], str] = zt.run_val,
-                 notify: Callable[[str], None] = zt.tell_gerrit, state_path: str = STATE,
+                 notify: Callable[[str], None] = zt.teller("new_task"), state_path: str = STATE,
                  clock: Callable[[], float] = time.time, skill_path: str = zt.SKILL, vault: str = ""):
         self.gmail, self.todo = gmail, todo or zt.TodoList()
         self.ask_val, self.notify, self.state_path, self.clock = ask_val, notify, state_path, clock
@@ -386,6 +386,9 @@ def main(argv=None) -> int:
     inbox = None
     while True:
         try:
+            if not zt.program_on("inbox"):   # switched off in Assistant > Settings
+                time.sleep(EVERY)
+                continue
             inbox = inbox or Inbox(connect())
             done = inbox.once()
             if any(done.values()):

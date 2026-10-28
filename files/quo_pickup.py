@@ -230,7 +230,13 @@ def run_val(prompt: str, timeout: int = 240) -> str:
 
 
 def tell_gerrit(text: str) -> None:
-    """A note in Val's own Telegram chat with Gerrit. No AI, no customer."""
+    """A note to Gerrit. No AI, no customer. Copied to the website (From Val); Telegram unless he chose otherwise
+    in Assistant > Settings > Alerts."""
+    desk = zt._desk()
+    if desk is not None:
+        desk.note("note", text)
+        if not desk.telegram_ok("note"):
+            return
     try:
         subprocess.run(["hermes", "send", "--to", "telegram", "--quiet", "--file", "-"],
                        input=text, text=True, capture_output=True, timeout=60)
@@ -582,6 +588,8 @@ class Pickup:
         """The missed-call text-back (F2): one draft to Val Approvals. Returns the line for the "Call back"
         task ("The text says that you call back today around 2:30pm."), or "" when no draft was made.
         Never stops the call from reaching the to-do list."""
+        if not zt.program_on("missed_call", self.vault):   # switched off in Assistant > Settings
+            return ""
         now = self.clock()
         try:
             when = mc.slot_words(mc.callback_slot(now, self.calendar), now)

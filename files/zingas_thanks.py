@@ -60,6 +60,7 @@ EVERY = 120                          # seconds between looks
 FRESH = timedelta(hours=24)          # an estimate email this recent can get a thank-you
 VISIT_DAYS = 3                       # a recording up to this many days before the estimate email is this visit
 PLAUD_WAIT = timedelta(hours=2)      # wait this long after the estimate email for the recording
+                                     # (Gerrit changes it in Assistant > Settings > Timing: plaud_wait)
 HOLD = timedelta(hours=2)            # Plaud's own draft waits this long for an estimate email
 TRIES = 2                            # Val runs per customer before the plain fallback
 MAX_CHARS = 600
@@ -93,6 +94,17 @@ Hope the move into the new office goes smoothly this week haha!
 
 Thanks!
 Gerrit"""
+
+
+def plaud_wait(vault: Optional[str] = None) -> timedelta:
+    """How long the thank-you waits for the visit's recording: Settings > Timing, else PLAUD_WAIT."""
+    try:
+        import zingas_desk as zd
+        if os.path.exists(zd.paths(vault)["settings"]):
+            return zd.recording_wait(vault)
+    except Exception:
+        pass
+    return PLAUD_WAIT
 
 
 def log(msg: str) -> None:
@@ -405,7 +417,7 @@ class Thanks:
                 if not file_text and key not in asks:
                     self._ask(c, asks)           # "No recording yet": Draft now / Wait for recording
                 draft_now = (asks.get(key) or {}).get("status") == "draft_now"
-                if not file_text and not draft_now and now - parse_iso(c["est_sent_at"]) < PLAUD_WAIT:
+                if not file_text and not draft_now and now - parse_iso(c["est_sent_at"]) < plaud_wait(self.vault):
                     n["waiting"] += 1
                     continue                     # the recording may still be on its way
                 text = self.words(c, file_text, st, now)
@@ -547,6 +559,9 @@ def main(argv=None) -> int:
     log("zingas-thanks started")
     while True:
         try:
+            if not zt.program_on("thanks"):   # switched off in Assistant > Settings
+                _time.sleep(EVERY)
+                continue
             n = th.once()
             if n["thanked"] or n["plaud_sent"] or n["plaud_dropped"]:
                 log(f"thanks: {n['thanked']} thank-you, {n['plaud_sent']} Plaud drafts handed over, "

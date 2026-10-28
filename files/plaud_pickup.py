@@ -686,7 +686,7 @@ def bridge_from_settings():
 
 class PlaudPickup:
     def __init__(self, cli, vault: str = VAULT, ask_val: Callable[[str], str] = run_val,
-                 notify: Callable[[str], None] = zt.tell_gerrit, todo: Optional[zt.TodoList] = None,
+                 notify: Callable[[str], None] = zt.teller("note"), todo: Optional[zt.TodoList] = None,
                  bridge=None, lookup: Callable[[str], Optional[dict]] = website_match,
                  clock: Callable[[], datetime] = lambda: datetime.now(TZ), skill_path: str = SKILL,
                  flag_path: str = BROKEN_FLAG, calendar: Callable[[date], List[dict]] = calendar_day,
@@ -1179,6 +1179,9 @@ def main(argv=None) -> int:
     pickup.bridge = bridge_from_settings()
     while True:
         try:
+            if not zt.program_on("plaud"):   # switched off in Assistant > Settings
+                time.sleep(EVERY)
+                continue
             done = pickup.once()
             if any(done.values()):
                 log(f"done {done}")

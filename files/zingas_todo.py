@@ -509,8 +509,8 @@ def related_open(todo: "TodoList", done: dict) -> List[dict]:
     return out
 
 
-def related_question(todo: "TodoList", done: List[dict]) -> str:
-    """Gerrit's rule (2026-10-28): after a Done, ask once if a task about the same customer is done too."""
+def related_rows(todo: "TodoList", done: List[dict]) -> List[Tuple[dict, dict]]:
+    """(the task Gerrit finished, an open task that looks like the same customer), at most 5."""
     rows, seen = [], set()
     for d in done:
         if d.get("status") != "done":
@@ -519,6 +519,12 @@ def related_question(todo: "TodoList", done: List[dict]) -> str:
             if i["id"] not in seen:
                 seen.add(i["id"])
                 rows.append((d, i))
+    return rows[:5]
+
+
+def related_question(todo: "TodoList", done: List[dict]) -> str:
+    """Gerrit's rule (2026-10-28): after a Done, ask once if a task about the same customer is done too."""
+    rows = related_rows(todo, done)
     if not rows:
         return ""
     out = ["❓ Is this task done too? It looks like it is about the same customer:" if len(rows) == 1
@@ -660,13 +666,50 @@ def render_markdown(items: List[dict]) -> str:
 
 # ------------------------------------------------------- telling Gerrit
 
-def tell_gerrit(text: str) -> None:
-    """A note in Val's own Telegram chat with Gerrit. No AI."""
+def _desk():
+    """Val's desk on the website (zingas_desk), or None when it isn't installed. Never stops a note."""
+    try:
+        import zingas_desk
+        return zingas_desk
+    except Exception:
+        return None
+
+
+def tell_gerrit(text: str, kind: str = "note") -> None:
+    """A note to Gerrit. No AI. It is copied to the website (Assistant > From Val, with an iPad alert when
+    Settings > Alerts says so) and goes to Val's Telegram chat unless he chose iPad only or neither for its kind
+    (question, new_task, hot_lead, problem, watchdog, brief, note)."""
+    desk = _desk()
+    if desk is not None:
+        desk.note(kind, text)
+    if desk is not None and not desk.telegram_ok(kind):
+        return
     try:
         subprocess.run(["hermes", "send", "--to", "telegram", "--quiet", "--file", "-"],
                        input=text, text=True, capture_output=True, timeout=60)
     except (OSError, subprocess.TimeoutExpired):
         pass
+
+
+_REAL_TELL = tell_gerrit   # tests swap tell_gerrit for a list; only the real one takes a kind
+
+
+def program_on(name: str, vault: Optional[str] = None) -> bool:
+    """Is this program switched on in Assistant > Settings? On when the desk or its settings aren't there."""
+    desk = _desk()
+    return True if desk is None else desk.program_on(name, vault)
+
+
+def teller(kind: str) -> Callable[[str], None]:
+    """tell_gerrit for one kind of note, for programs that take a notify(text)."""
+    return lambda text: tell_gerrit(text, kind)
+
+
+def _tell(notify: Callable[[str], None], text: str, kind: str) -> None:
+    if notify is _REAL_TELL:
+        _REAL_TELL(text, kind)
+    else:
+        notify(text)
 
 
 def announce(added: List[dict], todo: TodoList, notify: Callable[[str], None] = tell_gerrit,
@@ -687,7 +730,7 @@ def announce(added: List[dict], todo: TodoList, notify: Callable[[str], None] = 
         rows.append(row)
     top = [a for a in added if where.get(a["n"]) == 1]
     tail = ("This task is at the top.\n" if top and len(added) == 1 else "") + render_list(items)
-    notify(head + "\n" + "\n".join(rows) + "\n\n" + tail)
+    _tell(notify, head + "\n" + "\n".join(rows) + "\n\n" + tail, "new_task")
     return True
 
 
@@ -948,8 +991,34 @@ def after_done(todo: "TodoList", closed: List[dict], notify: Callable[[str], Non
         announce([fresh.get(r["id"], r) for r in released], todo, notify)
     question = related_question(todo, closed)
     if question:
-        notify(question)
+        if notify is _REAL_TELL:
+            ask_related(todo, closed, question)
+        else:
+            notify(question)
     return question
+
+
+def ask_related(todo: "TodoList", closed: List[dict], text: str) -> None:
+    """The same question as a card on the website (Assistant > Needs you) with Yes and No, and in Telegram
+    unless Gerrit chose iPad only for questions. Either answer counts; the card closes when the tasks do."""
+    rows = related_rows(todo, closed)
+    desk = _desk()
+    if desk is not None and rows:
+        ids = [i["id"] for _, i in rows]
+        words = ("Is this task done too? It looks like it is about the same customer:" if len(rows) == 1
+                 else "Are these tasks done too? They look like they are about the same customer:")
+        words += "\n" + "\n".join(f"- {i['task']} (you finished: {d['task']})" for d, i in rows)
+        desk.ask(desk.question_id("related_done", ",".join(sorted(ids))), "related_done", words,
+                 [{"key": "yes", "label": "Yes, done" if len(rows) == 1 else "Yes, all done"},
+                  {"key": "no", "label": "No, keep open"}], meta={"ids": ids}, link="/assistant/todo",
+                 vault=os.path.dirname(todo.folder))
+        if not desk.telegram_ok("question"):
+            return
+    try:
+        subprocess.run(["hermes", "send", "--to", "telegram", "--quiet", "--file", "-"],
+                       input=text, text=True, capture_output=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
 
 
 def apply_change(todo: "TodoList", change: dict, notify: Callable[[str], None] = tell_gerrit) -> Tuple[bool, str]:

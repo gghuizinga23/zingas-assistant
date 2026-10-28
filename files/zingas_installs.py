@@ -483,7 +483,7 @@ class Installs:
     def __init__(self, gmail, bridge=None, vault: Optional[str] = None, ask_val: Callable[[str], str] = run_val,
                  lookup: Optional[Callable[[str], Optional[dict]]] = None,
                  clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
-                 notify: Callable[[str], None] = zt.tell_gerrit):
+                 notify: Callable[[str], None] = zt.teller("problem")):
         self.gmail, self.bridge, self.vault, self.ask_val = gmail, bridge, vault or VAULT, ask_val
         self.lookup = lookup or _website_lookup
         self.clock, self.notify = clock, notify
@@ -775,6 +775,9 @@ def main(argv=None) -> int:
     log("zingas-installs started")
     while True:
         try:
+            if not zt.program_on("installs"):   # switched off in Assistant > Settings
+                _time.sleep(EVERY)
+                continue
             got = inst.once()
             if got["new_installs"] or got["cards"]:
                 log(f"installs: {got}")

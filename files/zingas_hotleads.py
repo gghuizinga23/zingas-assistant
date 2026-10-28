@@ -160,7 +160,7 @@ def judge(e: dict, st: dict, now: datetime) -> Optional[dict]:
 # ---------------------------------------------------------------- the program
 
 class HotLeads:
-    def __init__(self, site, vault: Optional[str] = None, notify: Callable[[str], None] = zt.tell_gerrit,
+    def __init__(self, site, vault: Optional[str] = None, notify: Callable[[str], None] = zt.teller("hot_lead"),
                  todo: Optional[zt.TodoList] = None, bridge=None,
                  clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
                  quiet: Callable[[datetime], bool] = zt.quiet_hours):
@@ -236,6 +236,9 @@ def main(argv=None) -> int:
     log("zingas-hotleads started")
     while True:
         try:
+            if not zt.program_on("hotleads"):   # switched off in Assistant > Settings
+                _time.sleep(EVERY)
+                continue
             got = hl.once()
             if got["alerts"]:
                 log(f"hotleads: {got}")

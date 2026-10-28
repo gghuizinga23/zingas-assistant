@@ -71,6 +71,9 @@ OFFSETS = [("48 hours", timedelta(hours=48)), ("7 days", timedelta(days=7))] + \
           [(f"day {n}", timedelta(days=n)) for n in (14, 21, 28, 42, 56, 70, 84, 90)]
 SILENCE = timedelta(days=3)
 PLAN_AT, SUBMIT_AT = time(7, 40), time(8, 1)
+# Gerrit changes these on the website (Assistant > Follow-up rules, Gerrit's ask 2026-10-28): each touch's day, on or
+# off, text and email or only one; the quiet days after a reply; the list time. Val's desk (zingas_desk) keeps them.
+# Until he saves them there, the values above stand.
 SCAN_EVERY, REPLY_EVERY, LOOP_SLEEP = timedelta(minutes=15), timedelta(minutes=60), 120
 # Between full scans, one quick look for a new estimate email: when one went out, scan now, so the thank-you text
 # (zingas-thanks) starts within minutes of the estimate going out (Gerrit, 2026-10-28).
@@ -580,7 +583,7 @@ class Followups:
                     self._pause_at_bridge(c, "They wrote back.")
             elif c["status"] == "paused":
                 quiet_since = max([x for x in (newest_any, parse_iso(c.get("paused_at"))) if x] or [now])
-                if now - quiet_since >= SILENCE:
+                if now - quiet_since >= self.silence():
                     self.resume(c, now)
 
     def resume(self, c: dict, now: datetime) -> None:
@@ -593,7 +596,7 @@ class Followups:
                 t["state"] = "skipped"
         c["touches"][label] = {"due": iso(due), "state": "planned"}
         c.update(status="active", why="", mode="conversation", resumed_at=iso(now))
-        self.event(c, "started again after 3 quiet days", label)
+        self.event(c, f"started again after {self.silence().days} quiet days", label)
 
     def _pause_at_bridge(self, c: dict, why: str) -> None:
         try:
@@ -606,6 +609,53 @@ class Followups:
     def list_days(day: date) -> List[date]:
         """The days one weekday's list covers: Friday's has the weekend too."""
         return [day + timedelta(days=k) for k in range(3 if day.weekday() == 4 else 1)]
+
+    def rules(self) -> Optional[dict]:
+        """The website's follow-up rules (zingas_desk.followup_rules), or None until Gerrit saved any."""
+        try:
+            import zingas_desk as zd
+            if os.path.exists(zd.paths(self.vault)["settings"]):
+                return zd.followup_rules(self.vault)
+        except Exception as e:
+            log(f"follow-up rules not read ({type(e).__name__}); today's rules stand")
+        return None
+
+    def silence(self) -> timedelta:
+        r = self.rules()
+        return r["quiet"] if r else SILENCE
+
+    def sync_rules(self) -> int:
+        """Moves each planned touch to the day the rules say (counted from the appointment, as always), and marks
+        the touches he turned off (they come back when he turns them on). Returns how many changed."""
+        r = self.rules()
+        if not r:
+            return 0
+        on = {key: off for key, off, _ in r["touches"]}
+        changed = 0
+        for c in self.st["customers"].values():
+            at = parse_iso(c.get("appt_at") or "")
+            if not at or c.get("status") not in ("active", "paused"):
+                continue
+            for label, _ in OFFSETS:
+                t = c["touches"].get(label)
+                if not t or t.get("state") != "planned":
+                    continue
+                off = label not in on
+                due = t["due"] if off else iso(window(at + on[label], c["time_zone"]))
+                if bool(t.get("off")) != off or t["due"] != due:
+                    t["due"] = due
+                    if off:
+                        t["off"] = True
+                    else:
+                        t.pop("off", None)
+                    changed += 1
+        return changed
+
+    def channels(self, label: str, phone: str) -> str:
+        """both, text or email for this touch (a text-only touch to a customer with no phone goes by email)."""
+        r = self.rules()
+        send = (r or {}).get("send", {}).get(label, "both")
+        return "email" if send == "text" and not phone else send
 
     @staticmethod
     def choose(c: dict, planned: Iterable[Tuple[str, dict]], day: date, catch_up: datetime) -> Tuple[list, list]:
@@ -634,7 +684,7 @@ class Followups:
                 continue
             if c["status"] != "active":
                 continue
-            planned = [(lbl, t) for lbl, t in c["touches"].items() if t["state"] == "planned"]
+            planned = [(lbl, t) for lbl, t in c["touches"].items() if t["state"] == "planned" and not t.get("off")]
             chosen, skipped = self.choose(c, planned, today, catch_up)
             for lbl in skipped:
                 c["touches"][lbl]["state"] = "skipped"
@@ -649,9 +699,12 @@ class Followups:
                     break
                 if not c.get("phone"):
                     notes["no_phone"].append(c["name"])
+                send = self.channels(label, c.get("phone") or "")
                 items.append({"customer_key": c["email"], "customer_name": c["name"], "touch": label,
-                              "phone": c.get("phone") or "", "email": c["email"], "text": words["text"],
-                              "email_subject": words["email_subject"], "email_body": words["email_body"],
+                              "phone": c.get("phone") or "", "email": c["email"],
+                              "text": words["text"] if send != "email" else "",
+                              "email_subject": words["email_subject"] if send != "text" else "",
+                              "email_body": words["email_body"] if send != "text" else "",
                               "email_thread_id": c.get("est_thread") or "", "time_zone": c["time_zone"],
                               "due_at": due})
         plan = {"day": today.isoformat(), "made_at": iso(now), "items": items, "notes": notes, "submitted_at": ""}
@@ -704,7 +757,8 @@ class Followups:
         active = sorted((c for c in self.st["customers"].values() if c["status"] == "active"),
                         key=lambda c: c.get("name") or "")
         left = {c["email"]: [(lbl, t) for lbl, t in c["touches"].items()
-                             if t["state"] == "planned" and (c["email"], lbl) not in in_plan] for c in active}
+                             if t["state"] == "planned" and not t.get("off") and (c["email"], lbl) not in in_plan]
+                for c in active}
         items, keep = [], set()
         day = today if (today.weekday() < 5 and not on_today) else today + timedelta(days=1)
         while day <= today + timedelta(days=days_ahead):
@@ -720,6 +774,10 @@ class Followups:
                         note = ("Val couldn't write this one yet; she tries again shortly." if words is None else
                                 f"Val would close this one: {words['stop']}" if words.get("stop") else "")
                         ok = words is not None and not words.get("stop")
+                        send = self.channels(label, c.get("phone") or "")
+                        if ok and send != "both":
+                            words = dict(words, **({"text": ""} if send == "email" else
+                                                   {"email_subject": "", "email_body": ""}))
                         items.append({"list_day": day.isoformat(), "send_at": due, "customer_name": c.get("name") or "",
                                       "touch": label, "written_by": "val" if c.get("mode") == "conversation" else "fixed",
                                       "text": words["text"] if ok else "", "email_subject": words["email_subject"] if ok else "",
@@ -734,7 +792,7 @@ class Followups:
                 continue
             quiet = max([x for x in (parse_iso(c.get("last_any")), parse_iso(c.get("paused_at"))) if x] or [now])
             held.append({"customer_name": c.get("name") or "", "why": c.get("why") or "",
-                         "back_on": (quiet + SILENCE).astimezone(TZ).date().isoformat()})
+                         "back_on": (quiet + self.silence()).astimezone(TZ).date().isoformat()})
         return {"made_at": iso(now), "days_ahead": days_ahead, "items": items, "held": held}
 
     def post_upcoming(self) -> int:
@@ -887,7 +945,11 @@ class Followups:
         if not self.st.get("last_scan") or now - parse_iso(self.st["last_scan"]) >= SCAN_EVERY or self.new_estimate(now):
             did["scan"] = self.scan()
         weekday = local.weekday() < 5
-        plan_due = weekday and local.time() >= PLAN_AT and (self.st.get("plan") or {}).get("day") != local.date().isoformat()
+        rules = self.rules()
+        plan_at, submit_at = (rules["plan_at"], rules["list_at"]) if rules else (PLAN_AT, SUBMIT_AT)
+        if self.sync_rules():
+            did["rules"] = True
+        plan_due = weekday and local.time() >= plan_at and (self.st.get("plan") or {}).get("day") != local.date().isoformat()
         last_reply = parse_iso(self.st.get("last_reply_check"))
         if plan_due or not last_reply or now - last_reply >= REPLY_EVERY:
             self.reply_check()
@@ -896,7 +958,7 @@ class Followups:
             did["plan"] = len(self.make_plan()["items"])
         plan = self.st.get("plan") or {}
         if self.live():
-            if weekday and local.time() >= SUBMIT_AT and plan.get("day") == local.date().isoformat() \
+            if weekday and local.time() >= submit_at and plan.get("day") == local.date().isoformat() \
                     and not plan.get("submitted_at"):
                 did["submitted"] = self.submit()
             did["outcomes"] = self.outcomes()

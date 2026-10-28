@@ -280,6 +280,14 @@ def run_val(prompt: str, timeout: int = 300) -> str:
 
 
 def tell_gerrit(text: str) -> None:
+    """A note to Gerrit, copied to the website (From Val); Telegram unless he chose otherwise in Settings."""
+    try:
+        import zingas_desk as desk
+        desk.note("note", text)
+        if not desk.telegram_ok("note"):
+            return
+    except Exception:
+        pass
     try:
         subprocess.run(["hermes", "send", "--to", "telegram", "--quiet", "--file", "-"],
                        input=text, text=True, capture_output=True, timeout=60)

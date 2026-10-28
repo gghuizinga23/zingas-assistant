@@ -68,21 +68,35 @@ def send_day(now: datetime) -> date:
     return local.date() + timedelta(days=1) if local.time() >= SEND_END else local.date()
 
 
+def work_hours():
+    """(first call-back, last call-back, work days): Assistant > Settings > Timing once Gerrit saved it there,
+    else the hours above."""
+    try:
+        import os
+        import zingas_desk as zd
+        if os.path.exists(zd.paths()["settings"]):
+            return zd.callback_hours()
+    except Exception:
+        pass
+    return WORK_START, WORK_END, WORK_DAYS
+
+
 def callback_slot(now: datetime, read_day: Callable[[date], Optional[dict]]) -> Optional[datetime]:
     """Gerrit's first free 15 minutes from now (at least 20 minutes away) in his working hours. read_day(day)
     gives the website's answer for one day ({connected, appointments}), or None when it can't be asked.
     None when the calendar isn't there: then Val doesn't promise a time."""
     local = now.astimezone(TZ)
     first = send_day(now)
+    work_start, work_end, work_days = work_hours()
     for i in range(DAYS_AHEAD + 2):
         day = first + timedelta(days=i)
-        if day.weekday() not in WORK_DAYS:
+        if day.weekday() not in work_days:
             continue
         answer = read_day(day)
         if not answer or not answer.get("connected"):
             return None
-        start = datetime.combine(day, WORK_START, TZ)
-        end = datetime.combine(day, WORK_END, TZ)
+        start = datetime.combine(day, work_start, TZ)
+        end = datetime.combine(day, work_end, TZ)
         if day == local.date():
             start = max(start, local + LEAD)
         if day == first and day != local.date():
