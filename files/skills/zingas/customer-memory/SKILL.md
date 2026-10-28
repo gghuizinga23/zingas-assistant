@@ -118,8 +118,9 @@ Then give back:
   "I'll ask the office about install dates"). Task starts with a verb, 12 words or less. `due` only when Gerrit
   said a day (turn "Friday" into the date). Each one goes on Gerrit's to-do list right away, with an alert.
 - `drafts`: a same-day "great to meet you" text in Gerrit's voice, and at most one more text you can do for him
-  (for example "the quote is in your inbox"). They go to the normal Approve card. No prices. Never quote the
-  recording.
+  (for example the care guide he promised). Never say the quote was emailed. They wait 2 hours: if Gerrit emails
+  the estimate in that time, the thank-you that says so (`zingas-thanks`, from this visit) replaces them; if not,
+  they go to the normal Approve card. No prices. Never quote the recording.
 - `salesforce_note`: the follow-up note in the house format, `10/23/26 - what happened, the next step; GH`,
   plus `followup_date` and `spouse_name`. Gerrit pastes them into Salesforce from the evening brief (write
   access is on hold).

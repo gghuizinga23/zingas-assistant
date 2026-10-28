@@ -113,7 +113,8 @@ class Base(unittest.TestCase):
         self.pickup = pp.PlaudPickup(self.cli, vault=self.vault, ask_val=self.val, notify=self.notes.append,
                                      todo=self.todo, bridge=self.bridge, lookup=lambda phone: None,
                                      clock=lambda: self.now, skill_path="/nope", flag_path=self.flag,
-                                     calendar=lambda day: list(self.events), forget=self.forgotten.append)
+                                     calendar=lambda day: list(self.events), forget=self.forgotten.append,
+                                     hold=None)
         self.events = []
 
     def write_appts(self):
@@ -243,6 +244,28 @@ class Visits(Base):
         self.pickup.once()
         self.assertEqual(len(self.prompts), 1)                                # never read twice
         self.assertEqual(self.cli.asked_days[-1], 3)
+
+    def test_the_draft_waits_with_the_thank_you_program(self):
+        import zingas_thanks as th
+        self.pickup.hold = th.hold_plaud_drafts
+        self.pickup.once()
+        self.assertEqual(self.bridge.drafts, [])                              # not on the card yet
+        held = list(th.read_state(self.vault)["held"].values())
+        self.assertEqual(len(held), 1)
+        self.assertEqual((held[0]["phone"], held[0]["key"], held[0]["first"]), (PHONE[-10:], "P-100", "Pat"))
+        self.assertEqual(len(held[0]["drafts"]), 1)
+
+    def test_a_broken_hold_hands_the_draft_over_at_once(self):
+        def broken(*a, **k):
+            raise OSError("disk")
+        self.pickup.hold = broken
+        self.pickup.once()
+        self.assertEqual(len(self.bridge.drafts), 1)
+
+    def test_first_name(self):
+        self.assertEqual(pp.first_name("Testcase, Pat"), "Pat")
+        self.assertEqual(pp.first_name("Pat and Chris Testcase"), "Pat")
+        self.assertEqual(pp.first_name("Unmatched number (317) 555-0123"), "")
 
     def test_to_do_alert_goes_out_on_a_saturday_night(self):
         self.now = datetime(2026, 10, 24, 21, 30, tzinfo=TZ)

@@ -13,8 +13,9 @@ For each new recording with a finished transcript (Plaud AutoFlow), this program
      and the calendar), because Gerrit's visits move earlier or later; a sure guess files it, an unsure one
      goes to the morning brief with Val's best guess; else a phone or email said in the recording,
   4. writes the files itself: the visit file with the transcript, a timeline entry, tagged facts in the
-     profile, a to-do with an alert for every promise Gerrit made, the thank-you draft on the normal Approve
-     card, and the Salesforce note for the evening brief.
+     profile, a to-do with an alert for every promise Gerrit made, the thank-you draft (held 2 hours by
+     zingas-thanks: an estimate email in that time gets the thank-you that says so instead; else this one
+     goes on the normal Approve card), and the Salesforce note for the evening brief.
 A recording no appointment fits is not filed under anyone. It shows once in the morning brief, and Val
 files it when Gerrit says whose it is (`zingas-plaud match`).
 
@@ -409,7 +410,8 @@ def visit_prompt(transcript: str, start: datetime, minutes: int, cands: List[dic
         '"promises": [{"task": "a thing Gerrit promised that Val cannot do herself, starts with a verb, '
         '12 words or less", "due": "YYYY-MM-DD only if Gerrit said a day, else empty"}], '
         '"drafts": ["a same-day great-to-meet-you text, and at most one more text Val can do for Gerrit '
-        '(for example: the quote is in your inbox)"], '
+        '(for example: the care guide or photo he promised). Never say the quote was emailed: the thank-you '
+        'after his estimate email says that"], '
         '"salesforce_note": "the follow-up note in the house format: M/D/YY - what happened, next step; GH", '
         '"followup_date": "YYYY-MM-DD or empty", "spouse_name": "or empty", '
         '"conflicts": ["a fact here that disagrees with the customer file, in one line"]}',
@@ -568,6 +570,25 @@ def brief_block(now: datetime, vault: str = VAULT, flag_path: str = BROKEN_FLAG)
 
 # ------------------------------------------------------------- the pickup
 
+def _hold_default():
+    """The thank-you program (zingas_thanks) holds the great-to-meet-you draft for 2 hours: if Gerrit emails an
+    estimate in that time, its thank-you (which says so) replaces it. None on an install without it."""
+    try:
+        import zingas_thanks
+        return zingas_thanks.hold_plaud_drafts
+    except ImportError:
+        return None
+
+
+def first_name(name: str) -> str:
+    """ "Pat Lee" -> "Pat". Salesforce writes "Lee, Pat" (and "Dennin, Jeff & Erika"): the part after the comma."""
+    if not name or re.search(r"\d|@", name) or name.lower().startswith("unmatched"):
+        return ""
+    last, comma, rest = name.strip().partition(",")
+    words = (rest if comma and rest.strip() else last).split()
+    return words[0].strip(",") if words else ""
+
+
 def bridge_from_settings():
     """quo-bridge's drafts door, for the thank-you text. None until the Quo part is set up."""
     try:
@@ -584,11 +605,12 @@ class PlaudPickup:
                  bridge=None, lookup: Callable[[str], Optional[dict]] = website_match,
                  clock: Callable[[], datetime] = lambda: datetime.now(TZ), skill_path: str = SKILL,
                  flag_path: str = BROKEN_FLAG, calendar: Callable[[date], List[dict]] = calendar_day,
-                 forget: Callable[[str], None] = forget_session):
+                 forget: Callable[[str], None] = forget_session, hold="default"):
         self.cli, self.vault, self.ask_val, self.notify = cli, vault, ask_val, notify
         self.todo = todo or zt.TodoList(vault)
         self.bridge, self.lookup, self.clock, self.skill_path = bridge, lookup, clock, skill_path
         self.flag_path, self.calendar, self.forget = flag_path, calendar, forget
+        self.hold = _hold_default() if hold == "default" else hold   # None: hand drafts over at once (old way)
         self.p = plaud_paths(vault)
         self._added: List[dict] = []         # new to-dos of this pass, told to Gerrit at its end
         self._st: dict = {"recordings": {}}  # this pass's state, for "already matched" hints
@@ -886,10 +908,16 @@ class PlaudPickup:
     def hand_drafts(self, ans: dict, fid: str, name: str, phone: str, key: str, tz_name: str) -> None:
         if not ans["drafts"] or not zc.digits10(phone):
             return
+        first = first_name(name)
+        if self.hold is not None:
+            try:
+                if self.hold(list(ans["drafts"]), phone, first, key, tz_name, fid, vault=self.vault, now=self.clock()):
+                    return                   # zingas-thanks hands it over in 2 hours, or its thank-you replaces it
+            except Exception as e:
+                log(f"recording {fid[:8]}: draft not held ({type(e).__name__}); handing it over now")
         bridge = self.bridge if self.bridge is not None else bridge_from_settings()
         if bridge is None:
             return
-        first = (name.split() or [""])[0] if not name.lower().startswith("unmatched") else ""
         for k, text in enumerate(ans["drafts"]):
             try:
                 bridge.draft({"to": "+1" + zc.digits10(phone), "text": text, "category": "reply",

@@ -99,7 +99,8 @@ healthchecks.io ◄── ping every 10 min└───────────�
   - the follow-up date
   - the spouse name
   - rapport details
-  - a same-day "great to meet you, the quote's in your inbox" draft
+  - a same-day "great to meet you" draft; when Gerrit emails the estimate, the thank-you text from
+    `zingas-thanks` replaces it ("I just ... emailed them over to you", shaped like Mike's Oct 27 text; built 2026-10-28)
   - a to-do for every promise Gerrit made that Val can't do herself, with an alert right away
 - *On hold:* until write access is approved, Val saves the note in the vault and lists it in the evening brief for Gerrit to paste.
 - Once approved: Gerrit approves once in Telegram. Then the assistant writes to Salesforce through the approved Connected App, reusing the estimator's `sfRequest()` pattern, and logs the write in Supabase.

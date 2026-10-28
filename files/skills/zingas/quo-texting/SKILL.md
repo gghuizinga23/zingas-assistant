@@ -44,6 +44,7 @@ You have no way to send a text, and you never need one. Never ask for the Quo ke
 | `simple_reply` | Every fact comes from the quote summary or their note |
 | `scheduling_handoff` | They want to move, book or cancel; the office will reach out |
 | `followup` | The 48-hour and 7-day check-ins (skill `followup-cadence`) |
+| `thank_you` | Only `zingas-thanks`: the text after Gerrit emails an estimate. Always needs his tap |
 | `reply` | Anything else. When unsure, use this |
 
 ## Pick the action

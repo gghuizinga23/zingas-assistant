@@ -102,8 +102,13 @@ if os.path.exists(f"{SRC}/plaud_pickup.py"):
     # Plaud memory and the customer file (docs/VAL-BRAIN.md Parts 1-4). The pickups import these from the lib folder.
     import subprocess
     os.makedirs("/usr/local/lib/zingas", exist_ok=True)
-    for name in ("zingas_customer.py", "zingas_todo.py", "zingas_inbox.py", "quo_pickup.py", "plaud_pickup.py"):
+    for name in ("zingas_customer.py", "zingas_todo.py", "zingas_inbox.py", "quo_pickup.py", "plaud_pickup.py",
+                 "zingas_thanks.py"):
         shutil.copy2(f"{SRC}/{name}", f"/usr/local/lib/zingas/{name}")
+    # The thank-you after an estimate email; it also holds the Plaud pickup's great-to-meet-you draft for 2 hours.
+    shutil.copy2(f"{SRC}/zingas_thanks.py", "/usr/local/bin/zingas-thanks")
+    os.chmod("/usr/local/bin/zingas-thanks", 0o755)
+    shutil.copy2(f"{SRC}/zingas-thanks.supervisor.conf", "/etc/supervisor/conf.d/zingas-thanks.conf")
     shutil.copy2(f"{SRC}/plaud_pickup.py", "/usr/local/bin/zingas-plaud")
     os.chmod("/usr/local/bin/zingas-plaud", 0o755)
     shutil.copy2(f"{SRC}/zingas-plaud.supervisor.conf", "/etc/supervisor/conf.d/zingas-plaud.conf")

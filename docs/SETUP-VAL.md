@@ -369,6 +369,32 @@ Why: Gerrit picked these four next. One installer puts all four on Val's compute
 | W4 | **Your Google review link** (Google Business Profile → **Ask for reviews** → copy the link) and, if there is one, the **referral reward** in words (no dollar amount, for example "a gift card as a thank-you"). Text both to Val | Gerrit | 3 min |
 | W5 | Check: the first evening brief has the wrap-up; the next Completed email gets its day-3 card 3 days later; a proposal you open 3 times from a test customer sends "Call now" | I check | |
 
+## Thank-you text after an estimate email (built 2026-10-28)
+Why: Gerrit wants every customer to get a text like the one Mike got on Oct 27 right after he emails their
+estimate. One installer (`files/install-thanks.sh`), nothing on the website.
+
+- **When:** Val sees the estimate email in your Sent mail (a PDF one, or the new estimator's "Your proposal from
+  Zinga's"; your Gmail must be connected in the estimator, which it is). The follow-ups (F0) now see the
+  estimator's emails too.
+- **What:** one text in the shape of Mike's: "Hey Pat! This is Gerrit Huizinga with Zinga's!" / thanks + one real
+  thing from the visit / "I just finished putting together your quotes for <what you quoted> and emailed them over
+  to you." / an offer if something is still open / a friendly send-off / "Thanks! Gerrit". Never a price.
+- **From what:** the option names on the estimate and the visit's Plaud recording. Val waits up to 2 hours for the
+  recording; with none, she writes it from the estimate alone. If her answer breaks a rule twice, a plain version
+  goes on the card instead.
+- **Approval:** always a card in Val Approvals (kind `thank_you`): Approve, Edit or Skip. quo-bridge checks
+  do-not-contact and 8 AM to 8 PM before it sends.
+- **No double thank-you:** the Plaud pickup's own "great to meet you" draft now waits 2 hours. An estimate email in
+  that time replaces it; with none (Sign now, sold on the spot) it goes on the card as before.
+- **Cost:** one small Val run per estimate.
+- **Mike's text as the example:** it goes into Val's vault `VOICE.md` on install (customer words stay out of git).
+
+| Step | What to do | Who | Time |
+|---|---|---|---|
+| T1 | Say go to merge the assistant branch `val-thanks` into `main` | Gerrit says go, I do the rest | 2 min |
+| T2 | **Preview first:** `START=0 bash files/install-thanks.sh` copies the files and prints who would get a thank-you now with Val's words (nothing sent). Then `bash files/install-thanks.sh` starts it | Gerrit says go, I run both and check | 5 min |
+| T3 | Check: your next emailed estimate gets a thank-you card within about 20 minutes (or 2 hours with no recording) | I check | |
+
 ## Money tracker (planned 2026-10-23; cost count built 2026-10-24)
 Val keeps a running total of everything you pay for: her own costs and your own AI and tool sign-ups. She
 counts her use every hour, reads the receipts herself, and checks her numbers against them each month. You

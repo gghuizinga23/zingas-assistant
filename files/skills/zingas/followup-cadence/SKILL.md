@@ -13,7 +13,7 @@ metadata:
 Gerrit set this on 2026-10-22. It replaces the old two-touch cadence. The program `zingas-followups` does the work by itself. You do not pick customers, count days or send anything. Gerrit does no new work: never ask him "Sold, Quoted or Lost?".
 
 ## Who gets them
-Every customer who got an estimate email from Gerrit (Sent mail, PDF attached, sent to the customer) and did not buy. The program skips:
+Every customer who got an estimate email from Gerrit (Sent mail, sent to the customer: a PDF attached, or the new estimator's "Your proposal from Zinga's" email with a link) and did not buy. The program skips:
 - **Sold:** a "Zinga's Payment Link" email, a contract email to payments@, insidesalessupport@ or customersuccess@ that names them, or the Gmail label Completed.
 - **Do not contact**, and anyone Gerrit tapped "No more follow-ups for them" on.
 - **Appointment not found:** no follow-ups until the program finds their "Appt on ..." email. The morning brief names them.
@@ -42,3 +42,10 @@ The touches **pause**. The customer's message gets a reply draft the normal way.
 
 ## Questions from Gerrit
 "Who is getting follow-ups?" or "Why did Pat not get one?": run `zingas-followups status` for counts. The details are in `followups/state.json` in the vault. Answer in a few plain words (ASD-STE100, skill `ste-writing`). Never change that file.
+
+## The thank-you text (same day, before the follow-ups)
+When Gerrit emails an estimate, `zingas-thanks` drafts one text right away, in the shape of the text Mike got on
+Oct 27 (greeting; thanks + one real thing from the visit; "I just finished putting together your quotes for ...
+and emailed them over to you"; an offer if something is still open; a friendly send-off; "Thanks!\nGerrit"). It
+waits up to 2 hours for the visit's Plaud recording, never names a price, and goes on the Approve card as kind
+`thank_you`. One per customer and estimate. The 48-hour touch above comes after it.
