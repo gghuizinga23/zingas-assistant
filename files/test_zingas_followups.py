@@ -39,6 +39,7 @@ def appt_msg(mid, when, names, phone="(317) 555-0142", city="Carmel, IN 46032", 
 class FakeGmail:
     def __init__(self):
         self.appts, self.estimates, self.attach = [], [], {}
+        self.proposals, self.bodies = [], {}
         self.payment, self.contracts, self.completed = [], [], []
         self.inbox, self.sent = [], []
         self.queries = []
@@ -48,15 +49,27 @@ class FakeGmail:
                                "messageTimestamp": z(when)})
         self.attach[mid] = [{"filename": pdf, "mimeType": "application/pdf"}]
 
+    def add_proposal(self, mid, to, when, first="Pat", options=("Track screens", "Cable-guided screens"),
+                     thread="p" + "1" * 8, subject="Your proposal from Zinga's"):
+        """The new estimator's email (app proposalEmail): a link, no PDF, each option with its price."""
+        self.proposals.append({"messageId": mid, "threadId": thread, "to": to, "subject": subject,
+                               "messageTimestamp": z(when)})
+        lines = "\n".join(f"{o}: $89/mo with Test Bank, or $4,250 total" for o in options)
+        self.bodies[mid] = (f"Hi {first},\n\nYour Zinga's proposal is ready:\nhttps://example.com/p/abc\n\n{lines}\n\n"
+                            "Pricing is held until Nov 30.\n\nGerrit Huizinga\nZinga's · 317-555-0100")
+
     def call(self, tool, args):
         if tool == "GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID":
-            return {"attachmentList": self.attach.get(args["message_id"], [])}
+            return {"attachmentList": self.attach.get(args["message_id"], []),
+                    "messageText": self.bodies.get(args["message_id"], "")}
         q = args["query"]
         self.queries.append(q)
         if q.startswith("from:appointments@"):
             msgs = self.appts
         elif q.startswith("in:sent subject:estimate"):
             msgs = self.estimates
+        elif q.startswith('in:sent subject:"your proposal from"'):
+            msgs = self.proposals
         elif "payment link" in q:
             msgs = self.payment
         elif q.startswith("in:sent to:(payments@"):
@@ -224,6 +237,44 @@ class FollowupTests(unittest.TestCase):
         c = self.customer(f)
         self.assertEqual((c["status"], c["phone"], c["first"]), ("active", "+13175550142", "Pat"))
         self.assertEqual(c["product"], "screens")
+
+    def test_estimator_proposal_is_found_and_matched_without_a_pdf(self):
+        self.g.estimates.clear()
+        self.g.appts.append(appt_msg("a2", at(2026, 10, 20, 9), "Kim Example", phone="(317) 555-0177"))
+        self.g.add_proposal("p1", "Kim <kimberly.e@example.com>", at(2026, 10, 20, 10, 30), first="Kim")
+        f = self.make()
+        found = f.scan()
+        self.assertEqual(found["new_customers"], 1)
+        c = f.st["customers"]["kimberly.e@example.com"]
+        self.assertEqual(c["status"], "active")
+        self.assertEqual(c["est_kind"], "proposal")
+        self.assertEqual(c["first"], "Kim")
+        self.assertEqual(c["phone"], "+13175550177")
+        self.assertEqual(c["quoted"], ["Track screens", "Cable-guided screens"])
+        self.assertEqual(c["product"], "screens")          # from the appointment's interest
+        self.assertNotIn("$", json.dumps(c))
+        self.assertEqual(f.scan()["new_customers"], 0)      # seen once
+
+    def test_proposal_first_name_alone_needs_the_same_day(self):
+        self.g.estimates.clear()
+        self.g.appts.append(appt_msg("a2", at(2026, 10, 14, 9), "Kim Example"))
+        self.g.add_proposal("p1", "kim@example.com", at(2026, 10, 20, 10), first="Kim")
+        f = self.make()
+        f.scan()
+        self.assertEqual(f.st["customers"]["kim@example.com"]["status"], "no_appointment")
+
+    def test_other_your_proposal_subjects_do_not_count(self):
+        self.g.estimates.clear()
+        self.g.add_proposal("p1", "pat.testerson@example.com", at(2026, 10, 20, 10),
+                            subject="Re: your proposal from the roofer")
+        f = self.make()
+        self.assertEqual(f.scan()["estimates"], 0)
+
+    def test_read_proposal_keeps_names_never_prices(self):
+        hello, names = zf.read_proposal("Hi Pat,\n\nlink\n\nGood: $4,250 total\nBetter Plus: $99/mo with X, or "
+                                        "$5,100 total\n$3,000 deal: $3,000 total\n\nPricing is held until Nov 30.")
+        self.assertEqual(hello, "Pat")
+        self.assertEqual(names, ["Good", "Better Plus"])
 
     def test_estimate_to_the_office_only_does_not_count(self):
         self.g.add_estimate("e2", "insidesalessupport@zingashome.com", at(2026, 10, 20, 12), "X.pdf")

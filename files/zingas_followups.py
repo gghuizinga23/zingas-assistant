@@ -83,6 +83,11 @@ STATE_TZ = {"IN": "America/Indiana/Indianapolis", "OH": "America/New_York", "KY"
             "NC": "America/New_York", "SC": "America/New_York", "PA": "America/New_York", "AZ": "America/Phoenix"}
 PLURALS = {"blinds", "shades", "screens", "shutters", "awnings", "pergolas", "drapes", "curtains"}
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+# The new estimator's email (app src/lib/email/templates.ts proposalEmail): sent from Gerrit's own Gmail, with a link
+# instead of a PDF. Its plain text lists each option as "<name>: ... total".
+PROPOSAL_SUBJECT = re.compile(r"^\s*your proposal from zinga[’'`]?s\b", re.I)
+PROPOSAL_SAME_DAY = timedelta(hours=12)
+MONEY_RE = re.compile(r"\$|\b\d+\s*(%|percent)|\b\d{1,3}(,\d{3})+\b|\bdollars?\b|/mo\b", re.I)
 
 
 def log(msg: str) -> None:
@@ -214,9 +219,27 @@ def external_emails(to_field: str) -> List[str]:
     return out
 
 
+def read_proposal(text: str) -> Tuple[str, List[str]]:
+    """The new estimator's email: ("Pat", ["Track screens", "Cable-guided screens"]). Option names only: the price
+    after each name is never kept, and a name that itself looks like money is dropped."""
+    text = str(text or "")
+    m = re.search(r"^\s*Hi\s+([^,\n]{1,40}),", text, re.M)
+    hello = m.group(1).strip() if m else ""
+    names: List[str] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not re.search(r"\btotal\s*$", line, re.I) or ":" not in line:
+            continue
+        name = " ".join(line.split(":", 1)[0].split())[:60]
+        if name and not MONEY_RE.search(name) and name not in names:
+            names.append(name)
+    return hello, names[:4]
+
+
 def match_appointment(est: dict, appts: Iterable[dict]) -> Optional[dict]:
     """The appointment for an estimate: the name is in the PDF's name or the email
-    address, and the visit was up to 10 days before the estimate email."""
+    address (or, for the estimator's email, its "Hi <first name>," on the visit's own day),
+    and the visit was up to 10 days before the estimate email."""
     sent = parse_iso(est["sent_at"])
     pdf = letters(" ".join(re.sub(r"(?i)estimates?|\.pdf$", " ", n) for n in est.get("pdfs") or []))
     local = letters(est["email"].split("@")[0])
@@ -234,6 +257,10 @@ def match_appointment(est: dict, appts: Iterable[dict]) -> Optional[dict]:
         for first in a["firsts"]:
             if len(first) >= 3 and (first in pdf or first in local):
                 score += 1
+        hello = letters(est.get("hello") or "")
+        if hello and hello in a["firsts"]:    # the estimator's "Hi Pat," (it has no PDF name to go by)
+            same_day = timedelta(0) <= sent - at <= PROPOSAL_SAME_DAY
+            score += 2 if same_day else 0 if hello in local else 1   # a first name alone: only on the visit's day
         if score < 2:
             continue
         key = (score, str(a.get("received") or ""), a["at"])
@@ -242,7 +269,9 @@ def match_appointment(est: dict, appts: Iterable[dict]) -> Optional[dict]:
     return best
 
 
-def first_name(appt: dict, email: str) -> str:
+def first_name(appt: dict, email: str, hello: str = "") -> str:
+    if letters(hello) and letters(hello) in appt["firsts"]:
+        return letters(hello).capitalize()
     local = letters(email.split("@")[0])
     for f in appt["firsts"]:
         if len(f) >= 3 and f in local:
@@ -263,14 +292,15 @@ def window(dt: datetime, tz_name: str) -> datetime:
 def new_customer(est: dict, appt: Optional[dict], now: datetime) -> dict:
     c = {"email": est["email"], "est_msg": est["msg_id"], "est_thread": est.get("thread_id") or "",
          "est_subject": est.get("subject") or "", "est_sent_at": est["sent_at"], "product": est.get("product") or "",
-         "pdfs": list(est.get("pdfs") or [])[:4],
+         "pdfs": list(est.get("pdfs") or [])[:4], "est_kind": est.get("kind") or "pdf",
+         "quoted": list(est.get("quoted") or [])[:4], "hello": est.get("hello") or "",
          "created_at": iso(now), "status": "active", "why": "", "mode": "fixed", "touches": {},
          "replies": 0, "last_in": "", "last_any": ""}
     if not appt:
         c.update(status="no_appointment", why="appointment not found", name=est["email"], first="",
                  phone="", time_zone="America/Indiana/Indianapolis", appt_at="", firsts=[], lasts=[])
         return c
-    c.update(name=appt["name"], first=first_name(appt, est["email"]), phone=appt["phone"],
+    c.update(name=appt["name"], first=first_name(appt, est["email"], est.get("hello") or ""), phone=appt["phone"],
              time_zone=appt["time_zone"], appt_at=appt["at"], appt_msg=appt["msg_id"],
              firsts=appt["firsts"], lasts=appt["lasts"])
     if not c["product"]:
@@ -356,7 +386,8 @@ class Followups:
                 self.st["appointments"][m["messageId"]] = a
         appts = list(self.st["appointments"].values())
         seen = set(self.st["seen_estimates"])
-        for m in search(self.gmail, f"in:sent subject:estimate has:attachment after:{epoch(since - timedelta(days=1))}"):
+        after = epoch(since - timedelta(days=1))
+        for m in search(self.gmail, f"in:sent subject:estimate has:attachment after:{after}"):
             mid = m.get("messageId")
             if not mid or mid in seen:
                 continue
@@ -373,34 +404,35 @@ class Followups:
             if not pdfs:
                 self.st["seen_estimates"].append(mid)
                 continue
-            found["estimates"] += 1
-            est = {"msg_id": mid, "thread_id": m.get("threadId") or "", "sent_at": m.get("messageTimestamp") or iso(now),
-                   "subject": m.get("subject") or "", "product": product_of(m.get("subject") or ""),
-                   "email": emails[0], "pdfs": pdfs}
-            c = self.st["customers"].get(est["email"])
-            if c:                              # a re-sent or updated estimate: reply in the newest thread
-                c.update(est_thread=est["thread_id"] or c.get("est_thread", ""), est_msg=mid)
-                if c["status"] == "no_appointment":
-                    appt = match_appointment(est, appts)
-                    if appt:
-                        fresh = new_customer(est, appt, now)
-                        fresh["est_sent_at"] = c["est_sent_at"]
-                        self.st["customers"][est["email"]] = fresh
-                        self.event(fresh, "appointment found")
-            else:
-                appt = match_appointment(est, appts)
-                c = new_customer(est, appt, now)
-                self.st["customers"][est["email"]] = c
-                found["new_customers"] += 1
-                found["no_appointment"] += 0 if appt else 1
-                self.event(c, "added" if appt else "appointment not found")
-            self.st["seen_estimates"].append(mid)
+            self._take({"msg_id": mid, "thread_id": m.get("threadId") or "", "kind": "pdf",
+                        "sent_at": m.get("messageTimestamp") or iso(now), "subject": m.get("subject") or "",
+                        "product": product_of(m.get("subject") or ""), "email": emails[0], "pdfs": pdfs},
+                       appts, now, found)
+        # the new estimator's email: from Gerrit's own Gmail, a link and no PDF (Gerrit, 2026-10-28)
+        for m in search(self.gmail, f'in:sent subject:"your proposal from" after:{after}'):
+            mid = m.get("messageId")
+            if not mid or mid in seen:
+                continue
+            emails = external_emails(m.get("to"))
+            if not emails or not PROPOSAL_SUBJECT.search(str(m.get("subject") or "")):
+                self.st["seen_estimates"].append(mid)
+                continue
+            try:
+                detail = self.gmail.call("GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID", {"message_id": mid, "format": "full"})
+            except Exception:
+                continue                       # try again next scan
+            hello, quoted = read_proposal(detail.get("messageText") or m.get("messageText") or "")
+            self._take({"msg_id": mid, "thread_id": m.get("threadId") or "", "kind": "proposal",
+                        "sent_at": m.get("messageTimestamp") or iso(now), "subject": m.get("subject") or "",
+                        "product": "", "email": emails[0], "pdfs": [], "hello": hello, "quoted": quoted},
+                       appts, now, found)
         # an appointment email can arrive after its estimate: try the missing ones again
         for c in self.st["customers"].values():
             if c["status"] == "no_appointment":
                 est = {"email": c["email"], "sent_at": c["est_sent_at"], "pdfs": c.get("pdfs") or [],
                        "msg_id": c["est_msg"], "thread_id": c.get("est_thread"), "subject": c.get("est_subject"),
-                       "product": c.get("product")}
+                       "product": c.get("product"), "kind": c.get("est_kind") or "pdf",
+                       "hello": c.get("hello") or "", "quoted": c.get("quoted") or []}
                 appt = match_appointment(est, appts)
                 if appt:
                     fresh = new_customer(est, appt, now)
@@ -409,6 +441,30 @@ class Followups:
         self.sold_check()
         self.st["last_scan"] = iso(now)
         return found
+
+    def _take(self, est: dict, appts: List[dict], now: datetime, found: dict) -> None:
+        """One estimate email (a PDF one or the estimator's): a new customer, or a re-sent estimate."""
+        found["estimates"] += 1
+        c = self.st["customers"].get(est["email"])
+        if c:                              # a re-sent or updated estimate: reply in the newest thread
+            c.update(est_thread=est["thread_id"] or c.get("est_thread", ""), est_msg=est["msg_id"])
+            if est.get("quoted") and not c.get("quoted"):
+                c["quoted"] = list(est["quoted"])[:4]
+            if c["status"] == "no_appointment":
+                appt = match_appointment(est, appts)
+                if appt:
+                    fresh = new_customer(est, appt, now)
+                    fresh["est_sent_at"] = c["est_sent_at"]
+                    self.st["customers"][est["email"]] = fresh
+                    self.event(fresh, "appointment found")
+        else:
+            appt = match_appointment(est, appts)
+            c = new_customer(est, appt, now)
+            self.st["customers"][est["email"]] = c
+            found["new_customers"] += 1
+            found["no_appointment"] += 0 if appt else 1
+            self.event(c, "added" if appt else "appointment not found")
+        self.st["seen_estimates"].append(est["msg_id"])
 
     # 2. sold ----------------------------------------------------------
     def sold_check(self) -> int:
