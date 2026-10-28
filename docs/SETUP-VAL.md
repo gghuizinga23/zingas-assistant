@@ -419,6 +419,25 @@ To put it on Val's computer (only after Gerrit's yes): `bash files/install-todo-
 old files in `/root/.hermes/backups/pre-todo-tidy-<time>/`, restarts every program that uses the list, and sends
 the list to the website once. `DRY_RUN=1` shows what it would do.
 
+## Val's desk on the website (built 2026-10-28)
+
+Gerrit's rule: everything he does with Val in Telegram he can also do on the website (Assistant > Needs you, Talk to
+Val, From Val, Activity, Settings, Follow-up rules), from an iPad or a computer. Telegram stays as it is.
+- `zingas-desk` (always on, `files/zingas_desk.py`) asks the website every 10 seconds: his answers to Val's question
+  cards, his Talk to Val messages (run in her own Telegram conversation; her answer goes to both), and the settings.
+  It copies her Telegram turns, briefs and her programs' health to the website.
+- Every note Val sends (`zingas_todo.tell_gerrit`, the pickup and sheet notes) is copied to From Val, and goes to
+  Telegram unless Gerrit chose iPad only or neither for its kind. "Is this task done too?" is also a Yes / No card.
+- Each program stops while it is switched off in Settings. The thank-you's recording wait, the call-back hours and
+  the follow-up rules (days, on/off, text or email, quiet days, list time) come from Settings once Gerrit saves
+  them there; until then everything runs as before.
+- Pause all customer texts is quo-bridge's (it reads it from the website and holds every text while it is on).
+
+To put it on Val's computer (only after Gerrit's yes, and after the website's desk tables exist and quo-bridge is
+redeployed): rebase this branch on `main`, then `bash files/install-desk.sh` on the laptop. It keeps the old files in
+`/root/.hermes/backups/pre-desk-<time>/`, restarts the programs it changed, starts `zingas-desk` and runs
+`zingas-desk check`. `DRY_RUN=1` shows what it would do.
+
 ## Money tracker (planned 2026-10-23; cost count built 2026-10-24)
 Val keeps a running total of everything you pay for: her own costs and your own AI and tool sign-ups. She
 counts her use every hour, reads the receipts herself, and checks her numbers against them each month. You

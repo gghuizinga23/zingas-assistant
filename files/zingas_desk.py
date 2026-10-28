@@ -59,6 +59,7 @@ SLOW_EVERY = timedelta(minutes=2)            # briefs and health
 OUTBOX_MAX = 500                             # lines kept when the website is away (oldest notes go first)
 FIRST_MIRROR = 40                            # turns copied the first time a conversation is seen
 WEB_MARK = "[From the website] "             # how Val knows a turn came from the website
+COPY_MARK = "💻 On the website you said:"       # the Telegram copy of a website turn (not copied back)
 CHAT_TIMEOUT = 420
 
 # ------------------------------------------------------------------ settings (the website's DEFAULT_SETTINGS)
@@ -654,7 +655,7 @@ class Desk:
             return None
         self.st["injected"].append(short_hash(reply))
         try:
-            self.hermes.send(f"💻 On the website you said: {shown}\n\n{reply}")
+            self.hermes.send(f"{COPY_MARK} {shown}\n\n{reply}")
         except Exception as e:
             log(f"desk: Telegram copy not sent ({type(e).__name__})")
         now = iso(self.clock())
@@ -698,7 +699,7 @@ class Desk:
                 fresh = fresh[-FIRST_MIRROR:]
             for m in fresh:
                 text = content_of(m)
-                if not text or text.startswith(WEB_MARK) or short_hash(text) in injected:
+                if not text or text.startswith((WEB_MARK, COPY_MARK)) or short_hash(text) in injected:
                     continue
                 turns.append({"id": f"tg:{sid}:{m['id']}"[:80], "author": "gerrit" if m["role"] == "user" else "val",
                               "channel": "telegram", "text": text[:4000], "at": _at(m.get("timestamp"))})

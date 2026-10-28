@@ -375,3 +375,63 @@ refused whole with a 400 and the reason, so it never replaces a good one. Dollar
 - `note`: why there's no text yet, or that Val would close the customer instead. Each item needs a text or a note.
 - `held`: customers paused because they wrote back; follow-ups start again after 3 quiet days (`back_on`).
 - At most 300 items and 200 held.
+
+## Val's desk on the website (`/api/assistant/desk`) (2026-10-28)
+
+Gerrit's ask: everything he does with Val in Telegram he can also do on the website (Assistant > Needs you, Talk to
+Val, From Val, Activity, Settings, Follow-up rules). Telegram stays as it is. Tables:
+`supabase/migrations/20261029000000_assistant_desk.sql` (row security on, no policies). Code: website
+`src/modules/assistant/desk.ts`, `deskStore.ts`, `deskActions.ts`, `push.ts`, `src/app/api/assistant/desk/route.ts`;
+Val `files/zingas_desk.py` (program `zingas-desk`, always on).
+
+Val's program asks every 10 seconds, with Val's key (`ASSISTANT_API_TOKEN`):
+
+`GET /api/assistant/desk` → `{ settings, version, answers: [{ id, kind, answer, label, at }], messages: [{ id, text, at }] }`:
+the newest settings, Gerrit's answers to her questions not yet taken, his Talk to Val messages waiting.
+
+`POST /api/assistant/desk` `{ op, ... }`:
+
+| op | Body | What it does |
+|---|---|---|
+| `ask` | `question: { id, kind, question, options?: [{ key, label }] (≤ 4), allowText?, customer?, link? }` | A question card on Needs you (the same id twice makes one card) |
+| `close` | `id, note?` | Val is done with it ("Marked done.", "Done in Telegram.") |
+| `taken` | `answers?: [id], messages?: [id]` | Val read them |
+| `replied` | `results: [{ id, ok, message? }]` | How each website message went; her answer comes as a turn |
+| `turns` | `turns: [{ id, author: gerrit\|val, channel: web\|telegram, text, at }]` (≤ 200) | The Telegram conversation, copied in (ids `tg:<session>:<n>`) |
+| `note` | `notes: [{ id?, kind, text, link?, at? }]` (≤ 50) | What she told Gerrit (kinds `question new_task hot_lead problem watchdog brief note`), and an iPad alert when Settings sends that kind there |
+| `brief` | `brief: { id?, kind: morning\|evening, day, text, at? }` | Her brief, for From Val > Briefs |
+| `health` | `health: { at, programs: [{ name, state }], note? }` | Her programs (every 2 minutes), for Activity |
+| `seed` | `answers?, links?` | First sync only: her own saved answers and links fill the website's empty ones |
+
+quo-bridge's key (`QUO_BRIDGE_TOKEN`) may use only `note` (its watchdog). 503 until the tables exist. Dollar amounts
+are taken out of everything a page shows (`scrub`).
+
+**Settings** (`settings` above; one row, `version` goes up on each save; history in `assistant_settings_log`):
+`paused`, `autoSend`, `programs` (followups, thanks, installs, missed_call, hotleads, plaud, inbox: on/off),
+`answers` (Val's value-answers topics), `links` (`reviewLink` https only, `referralReward` no amounts), `timing`
+(`recordingWaitMinutes` 0 to 240, `callbackFrom` / `callbackTo` hours, `callbackSaturday`), `alerts` (each kind:
+`both`, `telegram`, `ipad`, `none`), `followups` (`touches`: `[{ key, days, on, send: both|text|email }]` for the 10
+touches "48 hours" to "day 90", days always going up; `quietDays` 1 to 14; `listAt` "06:00" to "11:59"). Val keeps a
+copy in her vault (`desk/settings.json`); with none saved yet, everything runs as before. Her answers and links are
+written into her own files when they change on the website (a Telegram change to another topic is kept).
+
+**Pause and auto-send are quo-bridge's.** `GET /api/assistant/contact?controls=1` (quo-bridge's key) →
+`{ paused, autoSend }`; quo-bridge asks every 15 seconds and treats "can't tell" as paused. Paused: every text and
+follow-up is held (follow-ups as `held`, tried again each minute) until it's off. Auto-send needs quo-bridge's own
+`AUTO_SEND_ENABLED` and the website's switch both on.
+
+**quo-bridge's door for the website, new (same `QUO_BRIDGE_TOKEN`):**
+- `GET {QUO_BRIDGE_URL}/api/os/autosend` → `{ envOn, websiteOn, delayMinutes, kinds: [{ category, streak, enabled, unlockAt }], never }`.
+- `POST {QUO_BRIDGE_URL}/api/os/autosend` `{ category, enabled: false }`: turns one kind off (its streak starts at 0). Only off: a kind earns auto-send by itself.
+- `GET {QUO_BRIDGE_URL}/api/os/activity?hours=24` (1 to 168) → `{ hours, events: [{ at, kind, detail }], checkin }`, newest first, phone numbers and emails masked.
+- `POST /api/os/drafts/action` also takes `"action": "stop"` (a text in its 5-minute auto-send window; the same as Telegram's Stop) and `"stop_customer"` (no more follow-ups for that customer).
+
+**Talk to Val.** A website message runs in Val's newest Telegram conversation (`hermes chat --resume`), marked
+`[From the website]`; her answer goes to Telegram (as "💻 On the website you said: …") and back as a `web` turn.
+The program skips those when it copies Telegram turns in.
+
+**Ask Val about them** (customer card): `GET`/`POST /api/assistant/ask-about` (signed-in, `ASSISTANT_USERS` only,
+404 for everyone else) puts `About my customer <name> (Salesforce Prospect ID <id>): <question>` on Talk to Val.
+
+**iPad alerts.** `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (and optional `VAPID_SUBJECT`) on the website; a device
+signs up on Settings (table `assistant_push`); the website's service worker (`public/estimator-sw.js`) shows them.
