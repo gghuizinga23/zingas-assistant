@@ -146,6 +146,11 @@ class Parsing(unittest.TestCase):
         self.assertEqual(pp.start_of(info), datetime(2026, 10, 23, 14, 10, tzinfo=TZ))
         self.assertEqual(pp.start_of({"start_at": "-", "created_at": "2026-10-23T18:45:00Z"}).hour, 14)
         self.assertEqual((pp.minutes_of("45s"), pp.minutes_of("weird")), (1, 0))
+        # What Plaud really prints (Oct 28): no zone, UTC. 16:15:40 is 12:15 PM in Indianapolis.
+        real = pp.start_of({"start_at": "2026-10-28T16:15:40", "created_at": "2026-10-28T16:15:40"})
+        self.assertEqual((real.hour, real.minute, real.utcoffset()), (12, 15, timedelta(hours=-4)))
+        self.assertEqual(pp.start_of({"start_at": "2026-10-28T16:15"}).hour, 12)
+        self.assertEqual(pp.start_of({}, "2026-10-28").date().isoformat(), "2026-10-28")   # a bare date stays that day
 
     def test_answer_is_checked(self):
         start = datetime(2026, 10, 23, 14, 10, tzinfo=TZ)

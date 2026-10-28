@@ -66,6 +66,8 @@ class FakeGmail:
         self.queries.append(q)
         if q.startswith("from:appointments@"):
             msgs = self.appts
+        elif q.startswith("in:sent {(subject:estimate"):          # the quick look between scans
+            msgs = self.estimates + self.proposals
         elif q.startswith("in:sent subject:estimate"):
             msgs = self.estimates
         elif q.startswith('in:sent subject:"your proposal from"'):
@@ -275,6 +277,34 @@ class FollowupTests(unittest.TestCase):
         f = self.make()
         f.scan()
         self.assertEqual(f.st["customers"]["kim@example.com"]["status"], "no_appointment")
+
+    def test_estimate_before_a_visit_listed_later_that_day_is_matched(self):
+        # Gina Willis, Oct 28: listed for 5 PM, estimate emailed 3:57 PM (the visit was moved up).
+        self.g.estimates.clear()
+        self.g.appts.append(appt_msg("a2", at(2026, 10, 20, 17), "Gina and David Willis", phone="(317) 555-0177"))
+        self.g.add_proposal("p1", "ginaraewillis@example.com", at(2026, 10, 20, 15, 57), first="Gina")
+        self.g.add_proposal("p2", "kim@example.com", at(2026, 10, 20, 15, 58), first="Gina")   # first name only
+        self.now = at(2026, 10, 20, 16)
+        f = self.make()
+        f.scan()
+        c = f.st["customers"]["ginaraewillis@example.com"]
+        self.assertEqual((c["status"], c["phone"], c["first"]), ("active", "+13175550177", "Gina"))
+        self.assertEqual(f.st["customers"]["kim@example.com"]["status"], "active")   # "Hi Gina," on the visit's day
+
+    def test_quick_look_scans_as_soon_as_an_estimate_goes_out(self):
+        f = self.make()
+        f.step()                                           # the full scan
+        self.now += timedelta(minutes=4)
+        self.assertNotIn("scan", f.step())                 # nothing new: no scan before 15 minutes
+        self.g.add_proposal("p9", "lee.newcustomer@example.com", self.now, first="Lee")
+        self.now += timedelta(minutes=1)
+        self.assertNotIn("scan", f.step())                 # the quick look waits 3 minutes between looks
+        self.now += timedelta(minutes=3)
+        did = f.step()
+        self.assertIn("scan", did)                         # a new estimate email: scanned at once
+        self.assertIn("lee.newcustomer@example.com", f.st["customers"])
+        self.now += timedelta(minutes=4)
+        self.assertNotIn("scan", f.step())                 # seen now: no extra scans
 
     def test_other_your_proposal_subjects_do_not_count(self):
         self.g.estimates.clear()

@@ -375,7 +375,12 @@ estimate. One installer (`files/install-thanks.sh`), nothing on the website.
 
 - **When:** Val sees the estimate email in your Sent mail (a PDF one, or the new estimator's "Your proposal from
   Zinga's"; your Gmail must be connected in the estimator, which it is). The follow-ups (F0) now see the
-  estimator's emails too.
+  estimator's emails too. **The estimate email going out is the trigger, never the appointment's time**
+  (Gerrit, 2026-10-28: visits get moved up, back or around). Val takes a quick look at your Sent mail every
+  3 minutes, so the card shows up within about 5 minutes when the recording is already in. The appointment is only
+  used to know who the customer is and their phone number.
+- **Plaud's clock (fixed 2026-10-28):** Plaud gives recording times in UTC with no zone; Val used to read them as
+  Indianapolis time, 4 hours late, so visits didn't match their appointment.
 - **What:** one text in the shape of Mike's: "Hey Pat! This is Gerrit Huizinga with Zinga's!" / thanks + one real
   thing from the visit / "I just finished putting together your quotes for <what you quoted> and emailed them over
   to you." / an offer if something is still open / a friendly send-off / "Thanks! Gerrit". Never a price.
@@ -393,7 +398,7 @@ estimate. One installer (`files/install-thanks.sh`), nothing on the website.
 |---|---|---|---|
 | T1 | Say go to merge the assistant branch `val-thanks` into `main` | Gerrit says go, I do the rest | 2 min |
 | T2 | **Preview first:** `START=0 bash files/install-thanks.sh` copies the files and prints who would get a thank-you now with Val's words (nothing sent). Then `bash files/install-thanks.sh` starts it | Gerrit says go, I run both and check | 5 min |
-| T3 | Check: your next emailed estimate gets a thank-you card within about 20 minutes (or 2 hours with no recording) | I check | |
+| T3 | Check: your next emailed estimate gets a thank-you card within about 5 minutes (or 2 hours with no recording) | I check | |
 
 ## A tidier to-do list (built 2026-10-28)
 

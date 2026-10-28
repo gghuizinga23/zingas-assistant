@@ -142,9 +142,36 @@ class ThanksTests(unittest.TestCase):
         t.once()
         self.assertEqual(len(self.bridge.drafts), 1)
 
-    def test_old_estimates_and_far_visits_are_left_alone(self):
+    def test_estimate_before_the_listed_time_on_the_visit_day(self):
+        # Gina Willis, Oct 28: Salesforce said 5 PM, the estimate went out at 3:57 PM.
+        self.customers.clear()
+        self.add_customer(appt=at(27, 17), sent=at(27, 15, 57))
+        self.add_visit()
+        self.now = at(27, 16)
+        self.assertEqual(self.make().once()["thanked"], 1)
+
+    def test_the_estimate_email_is_the_trigger_whatever_the_listed_visit(self):
+        # Gerrit (Oct 28): visits get moved up, back or around; the estimate going out is what counts.
+        self.customers.clear()
+        self.add_customer(appt=at(28, 10), sent=at(27, 15))      # still listed for tomorrow
+        self.add_visit()                                          # recorded today
+        self.now = at(27, 15, 2)
+        self.assertEqual(self.make().once()["thanked"], 1)
+        self.assertIn("say 'today'", self.prompts[0])
+
+    def test_recording_days_follow_the_estimate_email(self):
+        c = {"est_sent_at": z(at(27, 15)), "appt_at": z(at(30, 10))}
+        self.assertEqual(th.visit_days(c)[:5], ["2026-10-24", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-29"])
+
+    def test_wording_day_without_a_recording(self):
+        late = {"est_sent_at": z(at(27, 15)), "appt_at": z(at(23, 10)), "quoted": []}
+        self.assertIn("say 'on Friday'", th.write_prompt(late, "", "", at(27, 15)))
+        moved_up = {"est_sent_at": z(at(27, 15)), "appt_at": z(at(28, 10)), "quoted": []}
+        self.assertIn("say 'today'", th.write_prompt(moved_up, "", "", at(27, 15)))
+
+    def test_old_estimates_no_phone_or_sold_are_left_alone(self):
         self.add_customer(email="old@example.com", phone="+13175550101", sent=at(27, 5))    # before install
-        self.add_customer(email="late@example.com", phone="+13175550102", appt=at(20, 12), sent=at(27, 9))
+        self.add_customer(email="late@example.com", phone="+13175550102", appt=at(20, 12), sent=at(26, 9))  # a day old
         self.add_customer(email="nophone@example.com", phone="", sent=at(27, 9))
         self.add_customer(email="sold@example.com", phone="+13175550103", status="sold", sent=at(27, 9))
         self.now = at(27, 18)

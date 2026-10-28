@@ -44,8 +44,10 @@ The touches **pause**. The customer's message gets a reply draft the normal way.
 "Who is getting follow-ups?" or "Why did Pat not get one?": run `zingas-followups status` for counts. The details are in `followups/state.json` in the vault. Answer in a few plain words (ASD-STE100, skill `ste-writing`). Never change that file.
 
 ## The thank-you text (same day, before the follow-ups)
-When Gerrit emails an estimate, `zingas-thanks` drafts one text right away, in the shape of the text Mike got on
+When Gerrit emails an estimate, `zingas-thanks` drafts one text right away (the email going out is the trigger,
+never the appointment's time: visits get moved), in the shape of the text Mike got on
 Oct 27 (greeting; thanks + one real thing from the visit; "I just finished putting together your quotes for ...
 and emailed them over to you"; an offer if something is still open; a friendly send-off; "Thanks!\nGerrit"). It
 waits up to 2 hours for the visit's Plaud recording, never names a price, and goes on the Approve card as kind
-`thank_you`. One per customer and estimate. The 48-hour touch above comes after it.
+`thank_you`. One per customer and estimate. The 48-hour touch above comes after it. The 48-hour, 7-day and later
+touches stay timed from the appointment's set time (Gerrit, 2026-10-28); only the thank-you goes by the estimate email.

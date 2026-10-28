@@ -7,7 +7,9 @@ model is the text Mike got on Oct 27 (shape in THE_SHAPE below; Mike's own words
 
 Every 2 minutes:
   1. reads the quote follow-up customers (F0, followups/state.json, never written here): an estimate email they got
-     in the last day (a PDF one or the new estimator's "Your proposal from Zinga's"), within 3 days of the visit;
+     in the last day (a PDF one or the new estimator's "Your proposal from Zinga's"). The estimate email going out is
+     the trigger; the appointment's time never holds it back, since visits get moved up, back or around (Gerrit,
+     2026-10-28);
   2. waits for the visit's Plaud recording to be filed, up to 2 hours after the estimate email;
   3. asks Val once for the text, in the six-part shape, from the estimate (what was quoted, never a price) and the
      customer file (the visit's summary); checks it; with no good answer after 2 tries uses a plain fallback;
@@ -54,7 +56,7 @@ VAULT = os.environ.get("ZINGAS_VAULT", "/root/Documents/ZingasVault")
 
 EVERY = 120                          # seconds between looks
 FRESH = timedelta(hours=24)          # an estimate email this recent can get a thank-you
-NEAR_VISIT = timedelta(days=3)       # ... when the visit was at most this long before it
+VISIT_DAYS = 3                       # a recording up to this many days before the estimate email is this visit
 PLAUD_WAIT = timedelta(hours=2)      # wait this long after the estimate email for the recording
 HOLD = timedelta(hours=2)            # Plaud's own draft waits this long for an estimate email
 TRIES = 2                            # Val runs per customer before the plain fallback
@@ -213,20 +215,41 @@ def hold_plaud_drafts(drafts: List[str], phone: str, first: str, key: str, tz_na
 
 # ---------------------------------------------------------------- what Val knows about the visit
 
-def visit_file(c: dict, vault: Optional[str] = None) -> str:
-    """The customer file with the newest visit, when a recording of THIS visit is filed; else ""."""
+def visit_days(c: dict) -> List[str]:
+    """The days a recording of this visit can be from: the estimate email's day and the few days before it, plus
+    the listed appointment's day. Never only the listed time: visits get moved (Gerrit, 2026-10-28)."""
+    days = set()
+    sent, at = parse_iso(c.get("est_sent_at")), parse_iso(c.get("appt_at"))
+    if sent:
+        days |= {(sent - timedelta(days=k)).astimezone(TZ).strftime("%Y-%m-%d") for k in range(VISIT_DAYS + 1)}
+    if at:
+        days |= {(at + timedelta(days=k)).astimezone(TZ).strftime("%Y-%m-%d") for k in (-1, 0, 1)}
+    return sorted(days)
+
+
+def visit_day(c: dict, vault: Optional[str] = None) -> str:
+    """The day of this visit's newest filed recording (YYYY-MM-DD), or ""."""
     if zc is None:
         return ""
     try:
         key = zc.key_for(phone=c.get("phone") or "", email=c.get("email") or "", vault=vault or VAULT)
         if not key:
             return ""
-        at = parse_iso(c.get("appt_at"))
         folder = zc.paths(key, vault or VAULT)["visits"]
         names = sorted(n for n in os.listdir(folder) if n.endswith(".md")) if os.path.isdir(folder) else []
-        days = {(at + timedelta(days=k)).astimezone(TZ).strftime("%Y-%m-%d") for k in (-1, 0, 1)} if at else set()
-        if not any(n[:10] in days for n in names):
-            return ""
+        days = set(visit_days(c))
+        hits = [n[:10] for n in names if n[:10] in days]
+        return hits[-1] if hits else ""
+    except Exception:
+        return ""
+
+
+def visit_file(c: dict, vault: Optional[str] = None) -> str:
+    """The customer file with the newest visit, when a recording of THIS visit is filed; else ""."""
+    if not visit_day(c, vault):
+        return ""
+    try:
+        key = zc.key_for(phone=c.get("phone") or "", email=c.get("email") or "", vault=vault or VAULT)
         return zc.context(key, vault or VAULT, max_chars=7000)
     except Exception:
         return ""
@@ -235,10 +258,16 @@ def visit_file(c: dict, vault: Optional[str] = None) -> str:
 # ---------------------------------------------------------------- the words
 
 def write_prompt(c: dict, file_text: str, voice: str, now: datetime) -> str:
-    at = parse_iso(c.get("appt_at"))
-    when = at.astimezone(TZ).strftime("%A %b %-d, %-I:%M %p") if at else "unknown"
-    today = "today" if at and at.astimezone(TZ).date() == now.astimezone(TZ).date() else \
-        f"on {at.astimezone(TZ):%A}" if at else "today"
+    # The visit's day, for the wording only: its recording's day; else the listed visit's day when that was before
+    # the estimate email; else the email's day (a visit moved up: Gerrit emails the estimate after it).
+    sent, at = parse_iso(c.get("est_sent_at")), parse_iso(c.get("appt_at"))
+    try:
+        vd = datetime.strptime(c.get("visit_day") or "", "%Y-%m-%d").date()
+    except ValueError:
+        vd = at.astimezone(TZ).date() if at and sent and at <= sent else sent.astimezone(TZ).date() if sent else None
+    when = f"{vd:%A %b %-d}" if vd else "unknown"
+    today = "today" if not vd or vd == now.astimezone(TZ).date() else \
+        "yesterday" if vd == now.astimezone(TZ).date() - timedelta(days=1) else f"on {vd:%A}"
     name = first_of(c) or 'unknown (then start "Hey there!")'
     return "\n\n".join(x for x in [
         "You are Val, Gerrit's assistant at Zinga's (window treatments, screens, shutters). Gerrit visited this "
@@ -330,16 +359,15 @@ class Thanks:
         self.bridge, self.vault, self.ask_val, self.clock = bridge, vault or VAULT, ask_val, clock
 
     def due(self, st: dict, now: datetime) -> List[dict]:
-        """F0 customers with a fresh estimate email, a phone, the visit close to it, and no thank-you yet."""
+        """F0 customers with a fresh estimate email, a phone and no thank-you yet. The appointment's time doesn't
+        count: F0 already tied the email to its customer."""
         out = []
         start = parse_iso(st.get("since"))
         for c in f0_customers(self.vault):
-            sent, at = parse_iso(c.get("est_sent_at")), parse_iso(c.get("appt_at"))
-            if not sent or not at or done_key(c) in st["done"] or c.get("status") not in ("active", "paused"):
+            sent = parse_iso(c.get("est_sent_at"))
+            if not sent or done_key(c) in st["done"] or c.get("status") not in ("active", "paused"):
                 continue
             if not digits10(c.get("phone")) or now - sent > FRESH or (start and sent < start):
-                continue
-            if not (timedelta(0) <= sent - at <= NEAR_VISIT):
                 continue
             out.append(c)
         return out
@@ -368,6 +396,7 @@ class Thanks:
                                                "what": "skipped: Plaud's thank-you already went to Gerrit"}
                     continue                     # the estimate came after the hold: never two thank-yous
                 file_text = visit_file(c, self.vault)
+                c = dict(c, visit_day=visit_day(c, self.vault))
                 if not file_text and now - parse_iso(c["est_sent_at"]) < PLAUD_WAIT:
                     n["waiting"] += 1
                     continue                     # the recording may still be on its way
@@ -465,6 +494,7 @@ def main(argv=None) -> int:
             st.pop("since", None)          # preview looks at the last day, even before the first run
             for c in th.due(st, now):
                 file_text = visit_file(c)
+                c = dict(c, visit_day=visit_day(c))
                 print(f"--- {c.get('name') or '?'} | estimate {str(c.get('est_sent_at'))[:16]} | "
                       f"{'recording found' if file_text else 'no recording yet'}")
                 print(th.words(c, file_text, {"tries": {done_key(c): TRIES}}, now) or "(no words)")

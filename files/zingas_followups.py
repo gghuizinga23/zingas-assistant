@@ -65,12 +65,17 @@ BRIDGE_ENV = os.path.join(HERMES_HOME, "quo-bridge.env")
 
 START = datetime(2026, 10, 19, 0, 0, tzinfo=TZ)      # Gerrit: start with this week's estimates
 APPT_BEFORE = timedelta(days=10)                     # an appointment up to 10 days before its estimate
-APPT_AFTER = timedelta(hours=2)
+APPT_AFTER = timedelta(days=1)       # ... or listed up to a day after it: visits get moved up, back or around, so
+                                     # the estimate can go out before the time Salesforce still shows (Gerrit, 2026-10-28)
 OFFSETS = [("48 hours", timedelta(hours=48)), ("7 days", timedelta(days=7))] + \
           [(f"day {n}", timedelta(days=n)) for n in (14, 21, 28, 42, 56, 70, 84, 90)]
 SILENCE = timedelta(days=3)
 PLAN_AT, SUBMIT_AT = time(7, 40), time(8, 1)
 SCAN_EVERY, REPLY_EVERY, LOOP_SLEEP = timedelta(minutes=15), timedelta(minutes=60), 120
+# Between full scans, one quick look for a new estimate email: when one went out, scan now, so the thank-you text
+# (zingas-thanks) starts within minutes of the estimate going out (Gerrit, 2026-10-28).
+QUICK_EVERY = timedelta(minutes=3)
+QUICK_QUERY = 'in:sent {(subject:estimate has:attachment) subject:"your proposal from"}'   # the scan's two searches
 UPCOMING_DAYS = 14          # how far ahead the Drafts tab shows the coming lists
 INTERNAL = ("zingashome.com", "zingas.com")
 # The installers' "job complete" emails sit under the Gmail label "Customers/Completed".
@@ -259,7 +264,8 @@ def match_appointment(est: dict, appts: Iterable[dict]) -> Optional[dict]:
                 score += 1
         hello = letters(est.get("hello") or "")
         if hello and hello in a["firsts"]:    # the estimator's "Hi Pat," (it has no PDF name to go by)
-            same_day = timedelta(0) <= sent - at <= PROPOSAL_SAME_DAY
+            same_day = timedelta(0) <= sent - at <= PROPOSAL_SAME_DAY or \
+                sent.astimezone(TZ).date() == at.astimezone(TZ).date()     # sent before a visit listed later that day
             score += 2 if same_day else 0 if hello in local else 1   # a first name alone: only on the visit's day
         if score < 2:
             continue
@@ -373,6 +379,19 @@ class Followups:
                                   "touch": touch, "what": what})
 
     # 1. estimates and appointments ------------------------------------
+    def new_estimate(self, now: datetime) -> bool:
+        """The quick look between scans: is there a sent estimate email the last scan hasn't seen?"""
+        last = parse_iso(self.st.get("last_quick"))
+        if last and now - last < QUICK_EVERY:
+            return False
+        self.st["last_quick"] = iso(now)
+        try:
+            msgs = search(self.gmail, f"{QUICK_QUERY} after:{epoch(now - timedelta(days=1))}", cap=50)
+        except Exception:
+            return False                       # the next full scan looks anyway
+        seen = set(self.st["seen_estimates"])
+        return any(m.get("messageId") and m["messageId"] not in seen for m in msgs)
+
     def scan(self) -> dict:
         now = self.clock()
         since = parse_iso(self.st.get("last_scan")) or START
@@ -865,7 +884,7 @@ class Followups:
         now = self.clock()
         local = now.astimezone(TZ)
         did = {}
-        if not self.st.get("last_scan") or now - parse_iso(self.st["last_scan"]) >= SCAN_EVERY:
+        if not self.st.get("last_scan") or now - parse_iso(self.st["last_scan"]) >= SCAN_EVERY or self.new_estimate(now):
             did["scan"] = self.scan()
         weekday = local.weekday() < 5
         plan_due = weekday and local.time() >= PLAN_AT and (self.st.get("plan") or {}).get("day") != local.date().isoformat()

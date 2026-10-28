@@ -195,9 +195,15 @@ def minutes_of(duration: str) -> int:
 
 
 def start_of(info: dict, fallback: str = "") -> Optional[datetime]:
+    """When the recording started. Plaud prints its times with no zone ("2026-10-28T16:15:40"); they are UTC
+    (that one started at 12:15 PM in Indianapolis). Read as local time they were 4 hours late, so visits stopped
+    matching their appointment (found 2026-10-28)."""
     for value in (info.get("start_at"), info.get("created_at"), fallback):
         if value and value != "-":
-            t = zt.when(value)
+            v = str(value).strip()
+            if re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$", v):
+                v += "+00:00"            # a time with no zone: Plaud's UTC
+            t = zt.when(v)
             if t:
                 return t.astimezone(TZ)
     return None
