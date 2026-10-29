@@ -197,6 +197,36 @@ install step below.
 If the Plaud sign-in stops working later, Val tells you once (not at night), the morning brief says so, and
 healthchecks.io sends its warning. Then do P2 again.
 
+## Team Plaud: Heather's to-do list from her recordings (built 2026-10-29)
+Heather Lofgren (marketing director: realtors, builders, partners) has her own Plaud. Every recording she makes
+puts the things she said she would do, or was asked to do, on **her own** to-do list on the website (her To-do
+section), about 5 minutes after the Plaud app syncs and the transcript is ready. Each task says whom it is for
+(realtor, builder, partner), the due date if one was said, and her words from the recording.
+
+What is kept apart from yours:
+- **Her Plaud sign-in.** The Plaud program keeps its sign-in in `<home folder>/.plaud/tokens.json` and has no other
+  setting for it (checked in @plaud-ai/cli 0.3.15). So every Plaud call for Heather runs with the home folder
+  `/root/people/heather`; yours stays in `/root`. If her folder is ever signed in to another Plaud account (yours,
+  say), Val reads nothing and tells you once.
+- **Her list.** `people/heather/todo.json` in Val's vault, sent to the website with `"owner": "heather"`. Her tasks
+  never go to your Telegram, your desk or your list, and yours never go to hers.
+- **Nothing else is kept.** No customer file, no draft, no calendar or Salesforce matching; the transcript is not
+  saved anywhere (Val's copy of the run is deleted).
+
+Program: `zingas-team-plaud` (`files/team_plaud.py`), driven by the person file `people/heather.json` in the vault.
+With no person file, nothing runs. Checks: `zingas-team-plaud check`. Her list by hand:
+`zingas-todo --owner heather list`.
+
+| Step | What to do | Who | Time |
+|---|---|---|---|
+| T0 | **Website first.** Heather's To-do section must be live on the website (the `app/` side, Settings > People, To-do ticked for Heather), or her list can't be sent. | Gerrit's yes, then Claude | — |
+| T1 | **After your yes.** I run `HEATHER_EMAIL=<her work email> bash files/install-team-plaud.sh` from the laptop (add `HEATHER_PLAUD_EMAIL=...` if her Plaud account uses another email). It saves a copy of every old file, puts the new program on, makes her sign-in folder and her person file, restarts `zingas-plaud` and `zingas-todo-post` (they work as before), and checks that all three are RUNNING. | Claude | 5 min |
+| T2 | **Heather's Plaud sign-in, on Val's own screen. Heather does this herself.** Gerrit opens Val's computer in the Orgo dashboard (the screen view) with Heather beside him, or shares that screen with her. I start `HOME=/root/people/heather plaud login` there and open the sign-in page in a **private (Incognito) window**, so your own Plaud sign-in in that browser is not used. Heather types **her own** Plaud email and password and clicks **Authorize**, within 2 minutes. No key to copy. Then I run `zingas-team-plaud check`: it must say "Plaud sign-in: works (her email)". | Heather (with Gerrit) | 5 min |
+| T3 | **In Heather's Plaud phone app:** turn on **AutoFlow** (automatic transcripts) and speaker labels. Without a transcript Val can't read a recording. | Heather | 2 min |
+| T4 | **Test.** Heather records a short note: "Remind me to send Jane the referral cards by Friday." About 5 minutes after the app syncs, the task shows on her To-do page, due Friday. | Heather | 10 min |
+
+If her sign-in stops working later, Val tells you once (not at night, no task words in it). Then do T2 again.
+
 ## Nightly backup (built 2026-10-23)
 Every night at 2:30 AM, Val's computer packs her vault (customer notes, to-do list, voice), her settings,
 skills, brief schedules, chat history and our programs into one file (about 3 MB today). It locks the file

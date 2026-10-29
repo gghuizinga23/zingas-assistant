@@ -104,13 +104,18 @@ class PlaudError(RuntimeError):
 
 
 class PlaudCLI:
-    """The official Plaud command-line program (@plaud-ai/cli). Read-only by design."""
+    """The official Plaud command-line program (@plaud-ai/cli). Read-only by design.
+    home: whose Plaud sign-in. The program keeps its sign-in in <home>/.plaud/tokens.json (it uses the HOME folder;
+    it has no other setting for it, checked in 0.3.15), so a team member's calls run with HOME set to their own
+    folder (/root/people/<name>) and never see Gerrit's sign-in in /root. None: Gerrit's, as always."""
 
-    def __init__(self, binary: str = PLAUD_BIN, timeout: int = 180):
-        self.binary, self.timeout = binary, timeout
+    def __init__(self, binary: str = PLAUD_BIN, timeout: int = 180, home: Optional[str] = None):
+        self.binary, self.timeout, self.home = binary, timeout, home
 
     def _run(self, args: List[str]) -> str:
         env = dict(os.environ, NO_COLOR="1", FORCE_COLOR="0", PLAUD_NO_UPDATE_NOTIFIER="1")
+        if self.home:
+            env["HOME"] = self.home
         try:
             out = subprocess.run([self.binary] + args, capture_output=True, text=True, timeout=self.timeout,
                                  env=env)
@@ -207,6 +212,33 @@ def start_of(info: dict, fallback: str = "") -> Optional[datetime]:
             if t:
                 return t.astimezone(TZ)
     return None
+
+
+# ------------------------------------------------------------- what was seen already
+
+def load_state(path: str) -> dict:
+    """The recordings already seen (state.json), or an empty record."""
+    try:
+        with open(path) as fh:
+            st = json.load(fh)
+    except (OSError, ValueError):
+        st = {}
+    if not isinstance(st, dict):
+        st = {}
+    st.setdefault("recordings", {})
+    return st
+
+
+def note_new(st: dict, recs: List[dict], backfill: bool) -> int:
+    """Adds each listed recording that wasn't seen before, as "new". Returns how many were added."""
+    added = 0
+    for r in recs:
+        if r["id"] not in st["recordings"]:
+            st["recordings"][r["id"]] = {"status": "new", "seen_at": zt.stamp(), "date": r["date"],
+                                         "minutes": r["minutes"], "backfill": backfill, "tries": 0,
+                                         "title": zc.one_line(r.get("name"), 160)}
+            added += 1
+    return added
 
 
 # ------------------------------------------------------------- matching
@@ -703,13 +735,7 @@ class PlaudPickup:
 
     # state -------------------------------------------------------------
     def load(self) -> dict:
-        try:
-            with open(self.p["state"]) as fh:
-                st = json.load(fh)
-        except (OSError, ValueError):
-            st = {}
-        st.setdefault("recordings", {})
-        return st
+        return load_state(self.p["state"])
 
     def save(self, st: dict) -> None:
         _save_json(self.p["state"], st)
@@ -765,12 +791,7 @@ class PlaudPickup:
                 raise
             self.login_ok(st)
             now = self.clock()
-            for r in recs:
-                if r["id"] not in st["recordings"]:
-                    st["recordings"][r["id"]] = {"status": "new", "seen_at": zt.stamp(), "date": r["date"],
-                                                 "minutes": r["minutes"], "backfill": first or backfill, "tries": 0,
-                                                 "title": zc.one_line(r.get("name"), 160)}
-                    done["listed"] += 1
+            done["listed"] += note_new(st, recs, first or backfill)
             st["listed_first"] = True
             self.save(st)
             open_ = [(fid, rec) for fid, rec in st["recordings"].items() if rec["status"] in ("new", "waiting")]

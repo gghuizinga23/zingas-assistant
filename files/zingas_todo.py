@@ -12,7 +12,8 @@ Every new task alerts Gerrit in Telegram right away, any hour, any day, with the
 re-sorted list (Gerrit's rule, 2026-10-23). All other Val messages keep quiet hours.
 
 The list lives in the vault: todo/todo.json (the record) and To-Do.md (a view
-to read, rebuilt on every change). Open tasks are renumbered 1, 2, 3... in the order
+to read, rebuilt on every change). Other people's lists (Heather's, 2026-10-30: owner="heather", written by
+zingas-team-plaud from her Plaud recordings) live in people/<owner>/ and never reach Gerrit's Telegram. Open tasks are renumbered 1, 2, 3... in the order
 Gerrit sees them on every change (his rule, 2026-10-22). Each task also has a fixed
 id, so code that read the list a moment ago still changes the right task.
 
@@ -26,6 +27,7 @@ id, so code that read the list a moment ago still changes the right task.
   zingas-todo drop 3             not needed after all (kept in the record)
   zingas-todo post               send the list to the website's To-do tab once
   zingas-todo watch              keep sending it: on every change, and every 10 minutes (supervisord)
+  zingas-todo --owner heather list   the same commands for someone else's list (Gerrit is never told)
 """
 
 from __future__ import annotations
@@ -59,7 +61,9 @@ PRIORITIES = {
     "week": (2, "🟢", "This week"),
     "later": (3, "⚪", "Later"),
 }
-SOURCES = ("email", "text", "call", "voicemail", "visit", "issue", "gerrit", "val")
+# "recording": a Plaud recording that isn't a customer visit (Heather's meetings with partners, 2026-10-30). The website
+# takes the same list (src/modules/assistant/todo.ts, SOURCES).
+SOURCES = ("email", "text", "call", "voicemail", "visit", "recording", "issue", "gerrit", "val")
 # Gerrit's hard rule (2026-10-21): every email, text, call and voicemail gets an
 # answer within 24 hours of coming in. Tasks from them carry a reply_by time and
 # never sit lower than "today".
@@ -73,7 +77,7 @@ _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # Where a task came from, in Gerrit's words (his ask, 2026-10-26: every list says if it is from a text, an email,
 # an appointment or him). A visit is an appointment Plaud recorded.
 SOURCE_WORDS = {"email": "email", "text": "text", "call": "call", "voicemail": "voicemail",
-                "visit": "appointment", "issue": "issue", "gerrit": "you asked", "val": "Val added"}
+                "visit": "appointment", "recording": "recording", "issue": "issue", "gerrit": "you asked", "val": "Val added"}
 # Every message behind a task (his ask, 2026-10-26: open a task and see all the emails and texts it is about).
 MAX_SOURCES = 10
 SOURCE_TEXT = 600
@@ -82,6 +86,11 @@ SOURCE_TEXT = 600
 LEADS = {"buying": 0, "quote": 1}
 LEAD_WORDS = {"buying": "ready to buy", "quote": "waiting on a quote"}
 MAX_NEXT = 5          # steps that wait on one task (a visit promise that can only start after another one)
+# Whose list (Heather's, 2026-10-30). Gerrit's list stays where it always was (todo/todo.json, To-Do.md); anyone
+# else's lives in people/<owner>/ and only ever goes to the website with "owner": "<owner>". Their tasks never reach
+# Gerrit's Telegram or his desk. The website allows the same names (assistant_todo id: ^[a-z]{1,30}$).
+GERRIT = "gerrit"
+OWNER_RE = re.compile(r"^[a-z]{1,30}$")
 STAFF_FILE = next((p for p in ("/usr/local/lib/zingas/zingas_staff.json",
                                os.path.join(os.path.dirname(os.path.abspath(__file__)), "zingas_staff.json"))
                    if os.path.exists(p)), "/usr/local/lib/zingas/zingas_staff.json")
@@ -171,11 +180,24 @@ def quiet_hours(at: Optional[datetime] = None) -> bool:
 
 # ------------------------------------------------------------------ the list
 
+def owner_ok(owner: str) -> str:
+    """The owner name, checked. Raises ValueError for anything that is not a short lower-case name."""
+    owner = str(owner or "")
+    if not OWNER_RE.match(owner):
+        raise ValueError("a list owner is a short lower-case name, like heather")
+    return owner
+
+
 class TodoList:
-    def __init__(self, vault: str = VAULT):
-        self.folder = os.path.join(vault, "todo")
+    def __init__(self, vault: str = VAULT, owner: str = GERRIT):
+        self.owner = owner_ok(owner)
+        if self.owner == GERRIT:
+            self.folder = os.path.join(vault, "todo")
+            self.view = os.path.join(vault, "To-Do.md")
+        else:
+            self.folder = os.path.join(vault, "people", self.owner)
+            self.view = os.path.join(self.folder, "To-Do.md")
         self.path = os.path.join(self.folder, "todo.json")
-        self.view = os.path.join(vault, "To-Do.md")
         self.released: List[dict] = []   # next steps put on the list when a task was done; callers announce them
 
     @contextlib.contextmanager
@@ -211,7 +233,7 @@ class TodoList:
         os.chmod(tmp, 0o600)
         os.replace(tmp, self.path)
         with open(self.view + ".tmp", "w", encoding="utf-8") as fh:
-            fh.write(render_markdown(items))
+            fh.write(render_markdown(items, self.owner))
         os.replace(self.view + ".tmp", self.view)
 
     # reading
@@ -645,10 +667,14 @@ def render_brief(todo: TodoList, since: Optional[str] = None, today=None) -> str
     return "\n".join(out)
 
 
-def render_markdown(items: List[dict]) -> str:
+def render_markdown(items: List[dict], owner: str = GERRIT) -> str:
     open_ = sort_items(i for i in items if i["status"] == "open")
-    out = ["# Gerrit's to-do list", "",
-           "_Kept by Val. Change it by texting Val (\"done 3\", \"add ...\"), not by editing this page._", ""]
+    if owner == GERRIT:
+        out = ["# Gerrit's to-do list", "",
+               "_Kept by Val. Change it by texting Val (\"done 3\", \"add ...\"), not by editing this page._", ""]
+    else:
+        out = [f"# {owner.capitalize()}'s to-do list", "",
+               "_Kept by Val from her Plaud recordings. Change it on the website (To-do), not by editing this page._", ""]
     for p, (_, mark, head) in PRIORITIES.items():
         group = [i for i in open_ if shown_priority(i) == p]
         if group:
@@ -694,6 +720,11 @@ def tell_gerrit(text: str, kind: str = "note") -> None:
 _REAL_TELL = tell_gerrit   # tests swap tell_gerrit for a list; only the real one takes a kind
 
 
+def nobody(text: str) -> None:
+    """notify for someone else's list: Val tells no one (the website shows the list)."""
+    return None
+
+
 def program_on(name: str, vault: Optional[str] = None) -> bool:
     """Is this program switched on in Assistant > Settings? On when the desk or its settings aren't there."""
     desk = _desk()
@@ -719,6 +750,8 @@ def announce(added: List[dict], todo: TodoList, notify: Callable[[str], None] = 
     (emergency and at are kept so older callers still work; they no longer change anything.)"""
     if not added:
         return False
+    if getattr(todo, "owner", GERRIT) != GERRIT and notify is _REAL_TELL:
+        return False       # someone else's tasks never go to Gerrit's Telegram or desk
     items = todo.open_items()
     where = {i["n"]: k + 1 for k, i in enumerate(items)}
     head = "📝 New tasks on your to-do list:" if len(added) > 1 else "📝 New task on your to-do list:"
@@ -895,9 +928,19 @@ def website_list(todo: "TodoList", at: Optional[datetime] = None) -> dict:
     cutoff = (at - DONE_SHOWN).astimezone(timezone.utc).isoformat()
     done = sorted((i for i in todo.all_items() if i["status"] == "done" and (i.get("closed_at") or "") >= cutoff),
                   key=lambda i: i.get("closed_at") or "", reverse=True)[:30]
-    return {"madeAt": at.astimezone(timezone.utc).isoformat(timespec="seconds"), "items": rows,
+    body = {"madeAt": at.astimezone(timezone.utc).isoformat(timespec="seconds"), "items": rows,
             "done": [{"id": i["id"], "task": i["task"], "who": i.get("who") or "",
                       "closedAt": i.get("closed_at")} for i in done]}
+    owner = getattr(todo, "owner", GERRIT)
+    if owner != GERRIT:
+        body["owner"] = owner          # no owner means Gerrit's list (the website's rule too)
+    return body
+
+
+def owner_query(owner: str = GERRIT) -> str:
+    """"" for Gerrit (the website reads no owner as his), else "?owner=<name>"."""
+    owner = owner_ok(owner)
+    return "" if owner == GERRIT else f"?owner={owner}"
 
 
 def _website_settings():
@@ -967,18 +1010,19 @@ def _ask(method: str, path: str, body: Optional[dict], settings, timeout: float)
         return None, f"no answer from the website ({type(e).__name__})"
 
 
-def fetch_changes(settings=_website_settings, timeout: float = 20):
-    """Gerrit's clicks Val hasn't made yet, oldest first. Returns (changes, "") or ([], reason)."""
-    answer, problem = _ask("GET", CHANGES_DOOR, None, settings, timeout)
+def fetch_changes(settings=_website_settings, timeout: float = 20, owner: str = GERRIT):
+    """Clicks on one person's list (Gerrit's unless owner says) that Val hasn't made yet, oldest first.
+    Returns (changes, "") or ([], reason)."""
+    answer, problem = _ask("GET", CHANGES_DOOR + owner_query(owner), None, settings, timeout)
     if problem:
         return [], problem
     changes = answer.get("changes") if isinstance(answer, dict) else None
     return ([c for c in changes if isinstance(c, dict)] if isinstance(changes, list) else []), ""
 
 
-def report_changes(results: List[dict], settings=_website_settings, timeout: float = 20) -> str:
+def report_changes(results: List[dict], settings=_website_settings, timeout: float = 20, owner: str = GERRIT) -> str:
     """Tells the website how each click went. Returns "" or the reason it failed."""
-    return _ask("POST", CHANGES_DOOR, {"results": results}, settings, timeout)[1]
+    return _ask("POST", CHANGES_DOOR + owner_query(owner), {"results": results}, settings, timeout)[1]
 
 
 def after_done(todo: "TodoList", closed: List[dict], notify: Callable[[str], None] = tell_gerrit) -> str:
@@ -991,6 +1035,8 @@ def after_done(todo: "TodoList", closed: List[dict], notify: Callable[[str], Non
         announce([fresh.get(r["id"], r) for r in released], todo, notify)
     question = related_question(todo, closed)
     if question:
+        if notify is _REAL_TELL and getattr(todo, "owner", GERRIT) != GERRIT:
+            return ""      # someone else's list: Gerrit is never asked about it
         if notify is _REAL_TELL:
             ask_related(todo, closed, question)
         else:
@@ -1062,9 +1108,14 @@ class Changer:
     """Reads Gerrit's clicks from the website and makes them on the list. A click is made once even when the
     report back fails: its answer is kept and sent again next time."""
 
-    def __init__(self, todo: "TodoList", fetch=fetch_changes, report=report_changes,
-                 notify: Callable[[str], None] = tell_gerrit):
-        self.todo, self.fetch, self.report, self.notify = todo, fetch, report, notify
+    def __init__(self, todo: "TodoList", fetch=None, report=None, notify: Optional[Callable[[str], None]] = None):
+        """Left out, fetch and report go to the list's own owner, and notify is Gerrit's Telegram for his own list
+        and nobody for anyone else's."""
+        owner = getattr(todo, "owner", GERRIT)
+        self.todo = todo
+        self.fetch = fetch or (lambda: fetch_changes(owner=owner))
+        self.report = report or (lambda results: report_changes(results, owner=owner))
+        self.notify = notify or (tell_gerrit if owner == GERRIT else nobody)
         self.made: dict = {}   # change id -> (ok, message), until the website has the answer
 
     def step(self) -> Tuple[int, str]:
@@ -1202,10 +1253,11 @@ class IssueSync:
 
 
 def watch(todo: "TodoList") -> None:   # pragma: no cover (a loop; Changer.step and Poster.step are tested)
-    poster, changer, issues = Poster(todo), Changer(todo), IssueSync(todo)
+    poster, changer = Poster(todo), Changer(todo)
+    issues = IssueSync(todo) if todo.owner == GERRIT else None     # the Issues tab is Gerrit's
     while True:
         try:
-            added, problem = issues.step()
+            added, problem = issues.step() if issues else ([], "")
             if added:
                 print(f"{stamp()} added {len(added)} blocked order(s) from the Issues tab", flush=True)
             if problem:
@@ -1235,6 +1287,7 @@ def watch(todo: "TodoList") -> None:   # pragma: no cover (a loop; Changer.step 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="zingas-todo", description="Gerrit's running to-do list.")
+    ap.add_argument("--owner", default=GERRIT, help="whose list (default gerrit); e.g. heather")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list")
     sub.add_parser("post")
@@ -1263,7 +1316,13 @@ def main(argv=None) -> int:
     s.add_argument("--due", help="YYYY-MM-DD, or '' to clear")
     s.add_argument("--task")
     args = ap.parse_args(argv)
-    todo = TodoList()
+    try:
+        todo = TodoList() if args.owner == GERRIT else TodoList(owner=args.owner)
+    except ValueError as e:
+        print(f"No such list: {e}")
+        return 1
+    mine = getattr(todo, "owner", GERRIT) == GERRIT
+    tell = tell_gerrit if mine else nobody     # someone else's list never goes to Gerrit
 
     if args.cmd == "post":
         problem = post_list(website_list(todo))
@@ -1285,12 +1344,12 @@ def main(argv=None) -> int:
             print(f"I did not add the task: {e}")
             return 1
         print("Added: " + line(item) + "\n\n" + render_list(todo.open_items()))
-        announce([item], todo, tell_gerrit)     # every path that adds a task alerts the same way
+        announce([item], todo, tell)     # every path that adds a task alerts the same way
     elif args.cmd in ("done", "drop"):
         closed = todo.close(args.numbers, status="done" if args.cmd == "done" else "dropped")
         missing = sorted(set(args.numbers) - {c["n"] for c in closed})
         released = [r["task"] for r in todo.released]
-        question = after_done(todo, closed, tell_gerrit)     # Gerrit gets the new steps and the question in Telegram
+        question = after_done(todo, closed, tell)     # Gerrit gets the new steps and the question in Telegram
         for c in closed:
             print(("✅ Done: " if args.cmd == "done" else "Removed: ") + c["task"])
         for r in released:
@@ -1298,7 +1357,7 @@ def main(argv=None) -> int:
         if missing:
             print("There is no open task with the number " + ", ".join(map(str, missing)) + ".")
         print("\n" + render_list(todo.open_items()))
-        if question:
+        if question and mine:
             print("\n(Val already asked Gerrit if a task about the same customer is done too.)")
         return 0 if closed else 1
     elif args.cmd == "undo":
