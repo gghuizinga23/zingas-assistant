@@ -8,7 +8,7 @@
 #   quo_pickup.py         -> /usr/local/bin/zingas-quo           (adds the Salesforce record to each draft)
 #   zingas_customer.py    -> /usr/local/lib/zingas/zingas_customer.py (the customer file; zingas-quo needs it)
 #   zingas_brief_data.py  -> /root/.hermes/scripts/              (Monday numbers, and the calendar in every brief)
-#   skills briefs, customer-memory, quo-texting, scheduling-handoff, followup-sheet -> /root/.hermes/skills/zingas/
+#   skills briefs, customer-memory, quo-texting, scheduling-handoff, followup-sheet, daily-schedule -> /root/.hermes/skills/zingas/
 # Then restarts the text pickup and Val, and asks the website once (prints only whether it worked).
 # No keys are copied: Val already reads hers from 1Password.
 set -euo pipefail
@@ -28,6 +28,7 @@ FILES=(
   "skills/zingas/quo-texting/SKILL.md|/root/.hermes/skills/zingas/quo-texting/SKILL.md|644"
   "skills/zingas/scheduling-handoff/SKILL.md|/root/.hermes/skills/zingas/scheduling-handoff/SKILL.md|644"
   "skills/zingas/followup-sheet/SKILL.md|/root/.hermes/skills/zingas/followup-sheet/SKILL.md|644"
+  "skills/zingas/daily-schedule/SKILL.md|/root/.hermes/skills/zingas/daily-schedule/SKILL.md|644"
 )
 
 remote() {
